@@ -199,6 +199,11 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
       usage: world.step.usage,
     }
   })
+  on('state.set', (_$, e, next) => {
+    if (world.stateSetThrows) return { deny: 'cannot write' } as never
+    return next(e)
+  })
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', (_$, e) => {
     if (world.toolMode === 'deny') return { deny: 'blocked' }
@@ -276,4 +281,14 @@ export const runCommand = ($: Engine, command: string) =>
     args: '',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 80 },
+  })
+
+type BandProps = { hasSurvey?: boolean }
+
+export const mountBand = ($: Engine, { hasSurvey = false }: BandProps = {}) =>
+  $.ui.mount({
+    plugin: 'handoff',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   })

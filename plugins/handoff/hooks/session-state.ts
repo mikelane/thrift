@@ -19,6 +19,7 @@ export type SessionState = Settings & {
   backoffFrom: number | null
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
+  hasBand: boolean
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -35,6 +36,7 @@ export const createState = (settings: Settings): SessionState => ({
   backoffFrom: null,
   pending: null,
   heldPrompt: null,
+  hasBand: false,
 })
 
 export const resetForNewSession = (state: SessionState): void => {

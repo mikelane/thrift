@@ -1,11 +1,30 @@
-import { atom, update } from 'claude-code'
-import type { EngineInterface, Register, ToolCallInput, ToolCallResult, TurnCompleteInput } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type {
+  EngineInterface,
+  Register,
+  RenderInput,
+  ToolCallInput,
+  ToolCallResult,
+  TurnCompleteInput,
+} from 'claude-code'
 
+import type { Offer } from '../types'
+import { BAND_HINT, BUTTON_LABELS, bandMessage } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { HANDOFF_PROMPT, handoffMessage, joinPrompts, resumeCommand } from './handoff-note'
 import { createState, resetForNewSession, type SessionState } from './session-state'
-import { asMode, asThreshold, classify, contextFromStep, finishesTask, respond, type Signal } from './signals'
+import {
+  asMode,
+  asThreshold,
+  bandButtons,
+  classify,
+  contextFromStep,
+  finishesTask,
+  respond,
+  type Button,
+  type Signal,
+} from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
 const BACKOFF_TOKENS = 50_000
@@ -146,11 +165,30 @@ const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Tr
   })
 }
 
-const takeDownBand = async ($: EngineInterface) => {
+const takeDownBand = async ($: EngineInterface, state: SessionState) => {
+  if (!state.hasBand) return
   try {
     await update($, offerAtom, () => null)
+    state.hasBand = false
   } catch (error) {
     debug($, `could not take down the band: ${String(error)}`)
+  }
+}
+
+const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, heldPrompt: boolean) => {
+  const offer: Offer = {
+    signal: trigger.signal === 'strong' ? 'strong' : 'weak',
+    contextTokens: trigger.contextTokens,
+    heldPrompt,
+    isBusy: trigger.isBusy,
+  }
+  try {
+    await update($, offerAtom, () => offer)
+    state.hasBand = true
+    await writeRecord($, state, { ...trigger, action: 'advised' })
+  } catch (error) {
+    debug($, `could not show the band: ${String(error)}`)
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'band_failed' })
   }
 }
 
@@ -252,7 +290,7 @@ const continueInFreshSession = async (
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   try {
-    await takeDownBand($)
+    await takeDownBand($, state)
     $.ui.toast(WRITING_TOAST)
     const oldId = await $.session.id()
     const note = await writeNote($)
@@ -321,11 +359,39 @@ const evaluateTurnEnd = async (
     isUnattended: state.isTurnUnattended,
   })
   if (response.kind !== 'none' && signal === 'weak' && isBackedOff(state)) {
+    await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
   }
+  if (response.kind === 'advise') return offerBand($, state, trigger, response.holdsPrompt)
+  await takeDownBand($, state)
   if (response.kind === 'compact') return scheduleCompaction($, state, trigger)
   if (response.kind === 'handoff') return scheduleHandoff($, state, { trigger, isUnattended: state.isTurnUnattended })
   return writeRecord($, state, { ...trigger, action: 'none' })
+}
+
+const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer, button: Button) => {
+  if (state.pending !== null) return
+  const trigger = snapshot(state, 'button', offer.signal, offer.isBusy)
+  if (button === 'compact') scheduleCompaction($, state, trigger)
+  else if (button !== 'not-now') scheduleHandoff($, state, { trigger, isUnattended: false })
+  else state.backoffFrom = state.contextTokens
+  await takeDownBand($, state)
+  if (button === 'not-now') await writeRecord($, state, { ...trigger, action: 'none', reason: 'not_now' })
+}
+
+const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'AbovePrompt'>, offer: Offer) => {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  return (
+    <Box flexDirection="column">
+      <Text>{bandMessage(offer)}</Text>
+      <Box columnGap={1}>
+        {bandButtons(offer).map(button => (
+          <Button key={button} label={BUTTON_LABELS[button]} onPress={() => pressButton($, state, offer, button)} />
+        ))}
+      </Box>
+      <Text dimColor>{BAND_HINT}</Text>
+    </Box>
+  )
 }
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
@@ -392,6 +458,11 @@ export const register: Register = (on, options) => {
     state.hasFinishedTask = false
     if (e.agentId === undefined && e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     return result
+  }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const offer = await read($, offerAtom)
+    return e.props.hasSurvey || offer === null ? next(e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
