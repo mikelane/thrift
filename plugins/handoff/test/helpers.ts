@@ -32,6 +32,7 @@ export type World = {
   version: SessionVersion
   versionThrows: boolean
   branch: string | null
+  gitCalls: number
   agents: AgentInfo[]
   agentListThrows: boolean
   box: Box
@@ -92,6 +93,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     version: { version: '2.1.295', base: '2.1.295' },
     versionThrows: false,
     branch: null,
+    gitCalls: 0,
     agents: [],
     agentListThrows: false,
     box: { text: '', cursor: 0 },
@@ -175,6 +177,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   on('process.run', (_$, e) => {
     const [program, ...args] = e.argv
     const finished = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+    if (program === 'git') world.gitCalls += 1
     if (program === 'git') return ok({ ...finished, exitCode: world.branch === null ? 128 : 0, stdout: `${world.branch ?? ''}\n` })
     if (world.logWrite === 'throw') throw new Error('spawn failed')
     world.logTargets.push(args.slice(3))
@@ -292,3 +295,22 @@ export const mountBand = ($: Engine, { hasSurvey = false }: BandProps = {}) =>
     component: 'AbovePrompt',
     props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   })
+
+type PersonPrompt = {
+  kind?: 'composer' | 'bridge' | 'sdk' | 'scheduled-trigger' | 'peer'
+  turnId?: string
+  context?: readonly string[]
+  attachments?: readonly { type: 'image'; mediaType: string }[]
+}
+
+export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) =>
+  $.prompt.submit({
+    text,
+    wait: false,
+    origin: { kind } as never,
+    ...(turnId ? { turnId } : {}),
+    ...(context ? { context } : {}),
+    ...(attachments ? { attachments } : {}),
+  } as never)
+
+export const dropOf = (result: unknown): string | undefined => (result as { drop?: string }).drop

@@ -5,6 +5,7 @@ import type {
   RenderInput,
   ToolCallInput,
   ToolCallResult,
+  PromptSubmitInput,
   TurnCompleteInput,
 } from 'claude-code'
 
@@ -18,18 +19,26 @@ import {
   asMode,
   asThreshold,
   bandButtons,
+  branchTicketPrefix,
   classify,
   contextFromStep,
   finishesTask,
+  hasTicketShapedToken,
+  namesNewWork,
   respond,
+  ticketUrlPrefixes,
+  workRefs,
   type Button,
   type Signal,
 } from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
 const BACKOFF_TOKENS = 50_000
+const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_TOAST = 'Writing a handoff for a fresh session...'
+const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
+const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
@@ -284,6 +293,7 @@ const continueInFreshSession = async (
   $.ui.log(`handoff: the previous session is ${oldId}. Reopen it with ${resume}`)
   $.ui.toast(`Handoff written. Reopen ${oldId} with ${resume}`)
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
+  if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
   const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
   if (prompt !== undefined) await $.prompt.submit({ text: prompt })
 }
@@ -369,9 +379,105 @@ const evaluateTurnEnd = async (
   return writeRecord($, state, { ...trigger, action: 'none' })
 }
 
+const readBranch = async ($: EngineInterface): Promise<string> => {
+  try {
+    const ran = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: 5000 })
+    return ran.exitCode === 0 ? ran.stdout.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+const inspectPrompt = async ($: EngineInterface, state: SessionState, text: string): Promise<boolean> => {
+  for (const prefix of ticketUrlPrefixes(text)) state.urlPrefixes.add(prefix)
+  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefix(await readBranch($)) : []
+  const prefixes = [...state.urlPrefixes, ...branchPrefixes]
+  const isNewWork = namesNewWork(text, state.seenRefs, prefixes)
+  for (const ref of workRefs(text, prefixes)) state.seenRefs.add(ref)
+  return isNewWork
+}
+
+const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
+  try {
+    if ((await $.prompt.read()).text === text) await $.prompt.fill({ text: '', mode: 'replace' })
+  } catch (error) {
+    debug($, `could not empty the prompt box: ${String(error)}`)
+  }
+}
+
+const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {
+  try {
+    if (await refillBox($, text)) return
+  } catch (error) {
+    debug($, `could not refill the prompt box: ${String(error)}`)
+  }
+  if (state.heldPrompt !== text) return
+  state.heldPrompt = null
+  await takeDownBand($, state)
+  await $.prompt.submit({ text })
+}
+
+const holdPrompt = async ($: EngineInterface, state: SessionState, text: string, trigger: Trigger) => {
+  state.heldPrompt = text
+  $.clock.after(0, () => {
+    void refillHeldPrompt($, state, text)
+  })
+  await offerBand($, state, trigger, true)
+  return { drop: HELD_PROMPT }
+}
+
+const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
+  const isUnattended = e.origin.kind === 'scheduled-trigger'
+  const isHeldPromptAgain = state.heldPrompt === e.text
+  if (state.heldPrompt !== null) {
+    state.heldPrompt = null
+    await takeDownBand($, state)
+  }
+  state.isTurnUnattended = isUnattended
+  const isNewWork = await inspectPrompt($, state, e.text)
+  const canHold =
+    !isHeldPromptAgain &&
+    isNewWork &&
+    state.pending === null &&
+    e.turnId === undefined &&
+    (e.attachments?.length ?? 0) === 0 &&
+    (e.context?.length ?? 0) === 0
+  if (!canHold) return null
+  const isBusy = await isBackgroundBusy($, state)
+  const signal = classify({
+    contextTokens: state.contextTokens,
+    threshold: state.threshold,
+    isStoppingPoint: true,
+    isBackgroundBusy: isBusy,
+  })
+  const trigger = snapshot(state, 'prompt', signal, isBusy)
+  const response = respond({ mode: state.mode, signal, stoppingPoint: 'new-work', isBackgroundBusy: isBusy, isUnattended })
+  if (signal === 'strong' && response.kind === 'handoff') {
+    scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
+    return { drop: HANDING_OFF_FIRST }
+  }
+  if (signal === 'strong' && response.kind === 'advise') return holdPrompt($, state, e.text, trigger)
+  await writeRecord($, state, { ...trigger, action: 'none' })
+  return null
+}
+
+const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, trigger: Trigger, button: Button) => {
+  const held = state.heldPrompt
+  if (held === null) return
+  state.heldPrompt = null
+  await takeDownBand($, state)
+  await emptyBoxIfHolding($, held)
+  if (button === 'handoff-send') return scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })
+  await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
+  $.clock.after(0, () => {
+    void $.prompt.submit({ text: held })
+  })
+}
+
 const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer, button: Button) => {
   if (state.pending !== null) return
   const trigger = snapshot(state, 'button', offer.signal, offer.isBusy)
+  if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
   if (button === 'compact') scheduleCompaction($, state, trigger)
   else if (button !== 'not-now') scheduleHandoff($, state, { trigger, isUnattended: false })
   else state.backoffFrom = state.contextTokens
@@ -449,7 +555,8 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
     if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
-    return next(e)
+    const dropped = PERSON_ORIGINS.has(e.origin.kind) ? await decidePrompt($, state, e) : null
+    return dropped ?? next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
@@ -469,7 +576,8 @@ export const register: Register = (on, options) => {
     text: 'handoff: could not start a handoff.',
   }))
 
-  on('session.end', ($, e, next) => {
+  on('session.end', async ($, e, next) => {
+    await takeDownBand($, state)
     resetForNewSession(state)
     return next(e)
   }).catch(($, e, next) => next(e))
