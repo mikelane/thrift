@@ -47,6 +47,15 @@ test('It puts a held prompt back when the session id cannot be read', ACT, async
   expect(world.effects).toContain('fill:now ENG-2')
 })
 
+test('It puts the held prompt back above a draft that only contains its text inside a longer line', ACT, async ($, on) => {
+  const world = await ready($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  await submitPerson($, 'now ENG-2')
+  world.box = { text: 'know ENG-2', cursor: 0 }
+  await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2\nknow ENG-2')
+})
+
 test('It submits the held prompt when the box cannot be read to put it back', ACT, async ($, on) => {
   const world = await ready($, on)
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never

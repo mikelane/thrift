@@ -15,3 +15,5 @@ export const resumeCommand = (sessionId: string): string => `claude --resume ${s
 
 export const joinPrompts = (handoff: string, held: string | undefined): string =>
   held ? `${handoff}\n\n${held}` : handoff
+
+export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)

@@ -13,7 +13,7 @@ import type { Offer } from '../types'
 import { BAND_HINT, BUTTON_LABELS, bandMessage } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
-import { HANDOFF_PROMPT, handoffMessage, joinPrompts, resumeCommand } from './handoff-note'
+import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand } from './handoff-note'
 import { createState, resetForNewSession, type SessionState } from './session-state'
 import {
   asMode,
@@ -233,7 +233,7 @@ const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
 const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => {
   try {
     const draft = (await $.prompt.read()).text
-    if (draft.includes(text)) return true
+    if (holdsPrompt(draft, text)) return true
     const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
     return filled.isFilled
   } catch (error) {
