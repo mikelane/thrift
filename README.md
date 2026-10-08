@@ -45,8 +45,9 @@ claude plugin validate plugins/<name>             # what the engine would load o
 claude plugin test plugins/<name>                 # run its *.test.ts files
 ```
 
-See [CLAUDE.md](CLAUDE.md) for the conventions every plugin follows.
+See [CLAUDE.md](CLAUDE.md) for the conventions every plugin follows, and
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to propose a change.
 
 ## License
 
-To be decided.
+[MIT](LICENSE)

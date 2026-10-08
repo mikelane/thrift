@@ -1,0 +1,41 @@
+name: Feature or Plugin Request
+description: Suggest an improvement or a new token-saving plugin
+labels: ["feat", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Check existing issues first. Your idea may already be tracked.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Which token cost or context problem is this about, and when does it bite?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: measure
+    attributes:
+      label: How would we know it helped?
+      description: The figure that should move (cache-read tokens per turn, cost per session, ...) and what to compare it against.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a PR for this

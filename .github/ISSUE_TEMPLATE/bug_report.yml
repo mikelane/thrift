@@ -1,0 +1,67 @@
+name: Bug Report
+description: Something isn't working
+labels: ["fix", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please don't paste prompt text, secrets,
+        or private file contents. The decision log never holds them, so log lines are safe to share.
+
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - handoff
+        - other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you saw, and when.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start `claude --plugin-dir plugins/handoff` with handoffMode set to ask
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Decision log lines
+      description: The relevant lines from `$THRIFT_HOME/decisions.jsonl` (default `~/.claude/thrift/decisions.jsonl`).
+      render: json
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS: macOS 15
+        Surface: terminal / desktop / VS Code
