@@ -45,7 +45,7 @@ export type World = {
   stateSetThrows: boolean
   step: { usage: TurnUsage | null; advisorCalls: number }
   toolResult: unknown
-  toolIsError: boolean
+  toolMode: 'ok' | 'error' | 'deny'
   appended: string[]
 }
 
@@ -106,7 +106,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     stateSetThrows: false,
     step: { usage: null, advisorCalls: 0 },
     toolResult: {},
-    toolIsError: false,
+    toolMode: 'ok',
     appended: [],
   }
 
@@ -200,7 +200,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   })
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', (_$, e) => {
-    if (world.toolIsError) return { isError: true as const, result: 'failed', text: 'failed' }
+    if (world.toolMode === 'deny') return { deny: 'blocked' }
+    if (world.toolMode === 'error') return { isError: true as const, result: 'failed', text: 'failed' }
     return { result: world.toolResult, text: `ran ${e.tool}` } as never
   })
   return world
@@ -233,3 +234,37 @@ export const completeTurn = ($: Engine, { usage, reason = 'answer', agentId }: C
   })
 
 export const lastRecord = (world: World): LogRecord => world.records[world.records.length - 1] as LogRecord
+
+export const growTo200k = ($: Engine, world: World) => runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
+
+export const notify = ($: Engine, taskId: string) =>
+  $.prompt.submit({
+    text: `<task-notification><task-id>${taskId}</task-id><status>completed</status></task-notification>`,
+    wait: false,
+    origin: { kind: 'task-notification' },
+  })
+
+type ToolRun = { result?: unknown; mode?: World['toolMode']; agentId?: string }
+
+export const bash = (
+  $: Engine,
+  world: World,
+  command: string,
+  { result = {}, mode = 'ok', agentId }: ToolRun = {},
+) => {
+  world.toolResult = result
+  world.toolMode = mode
+  return $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) } as never)
+}
+
+export const tool = (
+  $: Engine,
+  world: World,
+  name: string,
+  input: Record<string, unknown>,
+  { result = {}, mode = 'ok' }: ToolRun = {},
+) => {
+  world.toolResult = result
+  world.toolMode = mode
+  return $.tool.call({ tool: name, ...input } as never)
+}

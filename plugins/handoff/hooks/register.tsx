@@ -1,9 +1,10 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
 
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { createState, resetForNewSession, type SessionState } from './session-state'
-import { asMode, asThreshold, classify, contextFromStep, type Signal } from './signals'
+import { asMode, asThreshold, classify, contextFromStep, finishesTask, type Signal } from './signals'
+import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 
@@ -72,6 +73,22 @@ const readVersion = async ($: EngineInterface) => {
   }
 }
 
+const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult) => {
+  const succeeded = ran.deny === undefined && ran.isError !== true
+  if (e.tool === 'Bash') {
+    const started = validTaskId(fieldOf(ran.result, 'backgroundTaskId'))
+    if (started !== null) state.backgroundTasks.add(started)
+    else if (succeeded && finishesTask(e.command)) state.hasFinishedTask = true
+  } else if (e.tool === 'Monitor') {
+    const started = validTaskId(fieldOf(ran.result, 'taskId'))
+    if (started !== null) state.backgroundTasks.add(started)
+  } else if (e.tool === 'TaskStop' || String(e.tool) === 'KillShell') {
+    const input: Readonly<Record<string, unknown>> = e
+    const stopped = validTaskId(input.task_id ?? input.shell_id)
+    if (stopped !== null) state.backgroundTasks.delete(stopped)
+  }
+}
+
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   const state = createState({
@@ -110,15 +127,29 @@ export const register: Register = (on, options) => {
     return yield* next(e)
   })
 
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    if (e.agentId === undefined) noteToolCall(state, e, ran)
+    return ran
+  }).catch(($, e, next) => next(e))
+
+  on('prompt.submit', async ($, e, next) => {
+    const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
+    if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    const hasFinishedTask = state.hasFinishedTask
+    state.hasFinishedTask = false
     if (e.agentId === undefined && e.reason === 'answer') {
       state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
       const isBusy = await isBackgroundBusy($, state)
       const signal = classify({
         contextTokens: state.contextTokens,
         threshold: state.threshold,
-        isStoppingPoint: false,
+        isStoppingPoint: hasFinishedTask,
         isBackgroundBusy: isBusy,
       })
       await writeRecord($, state, { action: 'none', point: 'turn-end', signal, isBusy })
