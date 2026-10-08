@@ -1,9 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
-import { completeTurn, install, lastRecord, runStep, startSession, usageOf } from './helpers'
+import { completeTurn, growTo200k, install, lastRecord, runStep, startSession, usageOf } from './helpers'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const ACT = { options: { handoffMode: 'act' } } as const
+
+test('It records a turn before session.start as shadow though the setting is act', ACT, async ($, on) => {
+  const world = install($, on)
+  await growTo200k($, world)
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+})
 
 test('It logs a shadow record with no signal for a turn under the threshold in off mode', async ($, on) => {
   const world = install($, on)
