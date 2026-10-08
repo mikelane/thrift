@@ -628,6 +628,7 @@ export const register: Register = (on, options) => {
     return e.props.hasSurvey || offer === null ? next(e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
+  // SAFETY: startHandoffCommand catches its own failures, so no test reaches this catch. Keep it: every hook must never break a turn.
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
     text: 'handoff: could not start a handoff.',
   }))
