@@ -178,7 +178,7 @@ const runCompaction = async ($: EngineInterface, state: SessionState, trigger: T
 const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger) => {
   state.pending = 'compact'
   $.clock.after(0, () => {
-    void runCompaction($, state, trigger)
+    void logFailure($, runCompaction($, state, trigger))
   })
 }
 
@@ -220,16 +220,24 @@ const registerHandoffCommand = async ($: EngineInterface) => {
   }
 }
 
+const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
+  work.catch(error => debug($, `background work failed: ${String(error)}`))
+
 const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => {
-  const draft = (await $.prompt.read()).text
-  if (draft.includes(text)) return true
-  const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
-  return filled.isFilled
+  try {
+    const draft = (await $.prompt.read()).text
+    if (draft.includes(text)) return true
+    const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
+    return filled.isFilled
+  } catch (error) {
+    debug($, `could not refill the prompt box: ${String(error)}`)
+    return false
+  }
 }
 
 const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
+  if (!isUnattended && (await refillBox($, text))) return
   try {
-    if (!isUnattended && (await refillBox($, text))) return
     await $.prompt.submit({ text })
   } catch (error) {
     debug($, `could not restore the held prompt: ${String(error)}`)
@@ -349,7 +357,7 @@ const runHandoff = async ($: EngineInterface, state: SessionState, request: Hand
 const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   state.pending = 'handoff'
   $.clock.after(0, () => {
-    void runHandoff($, state, request)
+    void logFailure($, runHandoff($, state, request))
   })
 }
 
@@ -414,11 +422,7 @@ const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
 }
 
 const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {
-  try {
-    if (await refillBox($, text)) return
-  } catch (error) {
-    debug($, `could not refill the prompt box: ${String(error)}`)
-  }
+  if (await refillBox($, text)) return
   if (state.heldPrompt !== text) return
   state.heldPrompt = null
   await takeDownBand($, state)
@@ -428,7 +432,7 @@ const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: s
 const holdPrompt = async ($: EngineInterface, state: SessionState, text: string, trigger: Trigger) => {
   state.heldPrompt = text
   $.clock.after(0, () => {
-    void refillHeldPrompt($, state, text)
+    void logFailure($, refillHeldPrompt($, state, text))
   })
   await offerBand($, state, trigger, true)
   return { drop: HELD_PROMPT }
@@ -478,7 +482,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   if (button === 'handoff-send') return scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void $.prompt.submit({ text: held })
+    void logFailure($, $.prompt.submit({ text: held }))
   })
 }
 
@@ -589,7 +593,7 @@ export const register: Register = (on, options) => {
     resetForNewSession(state)
     if (e.reason === 'clear') {
       $.clock.after(0, () => {
-        void registerHandoffCommand($)
+        void logFailure($, registerHandoffCommand($))
       })
     }
     return next(e)

@@ -46,6 +46,10 @@ export type World = {
   logWrite: 'ok' | 'exit' | 'throw'
   stateSetThrows: boolean
   usageDenied: boolean
+  boxReadDenied: boolean
+  sessionIdDenials: number
+  submitThrows: boolean
+  gitThrows: boolean
   step: { usage: TurnUsage | null; advisorCalls: number }
   toolResult: unknown
   toolMode: 'ok' | 'error' | 'deny'
@@ -74,7 +78,7 @@ const ok = <T,>(value: T) => ({ value })
 
 const noUsage = { startedAt: 0, rateLimits: [] }
 
-type Environment = { home?: string | null; thriftHome?: string }
+type Environment = { home?: string | null; thriftHome?: string; hasClock?: boolean }
 
 export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
@@ -108,6 +112,10 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     logWrite: 'ok',
     stateSetThrows: false,
     usageDenied: false,
+    boxReadDenied: false,
+    sessionIdDenials: 0,
+    submitThrows: false,
+    gitThrows: false,
     step: { usage: null, advisorCalls: 0 },
     toolResult: {},
     toolMode: 'ok',
@@ -116,7 +124,13 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  on('session.id', () => ok(world.sessionId))
+  on('session.id', () => {
+    if (world.sessionIdDenials > 0) {
+      world.sessionIdDenials -= 1
+      return { deny: 'no session id' } as never
+    }
+    return ok(world.sessionId)
+  })
   on('session.usage', () => (world.usageDenied ? ({ deny: 'no usage' } as never) : ok({ ...noUsage, context: { tokens: world.contextTokens, window: 1_000_000 } })))
   on('session.version', () => {
     if (world.versionThrows) throw new Error('no version')
@@ -142,7 +156,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     if (world.agentListThrows) throw new Error('agent list failed')
     return ok(world.agents)
   })
-  on('prompt.read', () => ok(world.box))
+  on('prompt.read', () => (world.boxReadDenied ? ({ deny: 'no box' } as never) : ok(world.box)))
   on('prompt.fill', (_$, e) => {
     if (world.fillRefusal !== undefined) return { isFilled: false, refusal: world.fillRefusal }
     world.effects.push(`fill:${e.text}`)
@@ -150,6 +164,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     return { isFilled: true }
   })
   on('prompt.submit', (_$, e) => {
+    if (world.submitThrows) throw new Error('submit refused')
     world.effects.push(`entered:${e.origin.kind}:${e.text}`)
     return { text: e.text }
   })
@@ -180,6 +195,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     const [program, ...args] = e.argv
     const finished = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
     if (program === 'git') world.gitCalls += 1
+    if (program === 'git' && world.gitThrows) throw new Error('git failed')
     if (program === 'git') return ok({ ...finished, exitCode: world.branch === null ? 128 : 0, stdout: `${world.branch ?? ''}\n` })
     if (world.logWrite === 'throw') throw new Error('spawn failed')
     world.logTargets.push(args.slice(3))

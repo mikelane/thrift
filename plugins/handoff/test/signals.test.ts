@@ -85,6 +85,10 @@ const segmentCases = [
   ['cat <<EOF\n\tEOF\nEOF\ngit push', ['cat <<EOF', 'git push']],
   ['git commit -m "unterminated; git push', ['git commit -m "unterminated; git push']],
   ['echo `git commit -m x`', ['echo `git commit -m x`']],
+  ['echo a\\', ['echo a\\']],
+  ['cat <<', ['cat <<']],
+  ['cat << ;ls', ['cat <<', 'ls']],
+  ['echo "a\\\nb"; ls', ['echo "ab"', 'ls']],
 ] as const
 
 for (const [command, expected] of segmentCases) {
@@ -150,6 +154,9 @@ const finishesTaskCases = [
   ['echo `git commit -m x`', false],
   ['git commit -m "unterminated', true],
   ['git push 2>&1 | tail -3', true],
+  ['git commit -m "a \\" b" --dry-run', false],
+  ["git commit -m 'it'\"'\"'s done'", true],
+  ['git commit -m a\\ b', true],
 ] as const
 
 for (const [command, expected] of finishesTaskCases) {
