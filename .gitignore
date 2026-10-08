@@ -1,0 +1,13 @@
+# Handoff prompt for the next Claude session; local only
+HANDOFF.md
+
+# Written by the engine on every plugin load
+plugins/*/.claude-plugin/types/
+
+.worktrees/
+node_modules/
+.DS_Store
+*.log
+
+# Decision logs belong under $THRIFT_HOME, never in the tree
+decisions.jsonl
