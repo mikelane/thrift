@@ -45,6 +45,7 @@ export type World = {
   registerThrows: boolean
   logWrite: 'ok' | 'exit' | 'throw'
   stateSetThrows: boolean
+  usageDenied: boolean
   step: { usage: TurnUsage | null; advisorCalls: number }
   toolResult: unknown
   toolMode: 'ok' | 'error' | 'deny'
@@ -106,6 +107,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     registerThrows: false,
     logWrite: 'ok',
     stateSetThrows: false,
+    usageDenied: false,
     step: { usage: null, advisorCalls: 0 },
     toolResult: {},
     toolMode: 'ok',
@@ -115,7 +117,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => ok(world.sessionId))
-  on('session.usage', () => ok({ ...noUsage, context: { tokens: world.contextTokens, window: 1_000_000 } }))
+  on('session.usage', () => (world.usageDenied ? ({ deny: 'no usage' } as never) : ok({ ...noUsage, context: { tokens: world.contextTokens, window: 1_000_000 } })))
   on('session.version', () => {
     if (world.versionThrows) throw new Error('no version')
     return ok(world.version)

@@ -127,6 +127,14 @@ const readVersion = async ($: EngineInterface) => {
   }
 }
 
+const reportedContext = async ($: EngineInterface): Promise<number | undefined> => {
+  try {
+    return (await $.session.usage()).context.tokens
+  } catch {
+    return undefined
+  }
+}
+
 const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult) => {
   const succeeded = ran.deny === undefined && ran.isError !== true
   if (e.tool === 'Bash') {
@@ -532,7 +540,7 @@ export const register: Register = (on, options) => {
   on('turn.step', async function* ($, e, next) {
     const step = yield* next(e)
     if (e.agentId === undefined && step.usage) {
-      const reported = (await $.session.usage()).context.tokens
+      const reported = await reportedContext($)
       state.contextTokens = contextFromStep({
         input: step.usage.input_tokens,
         created: step.usage.cache_creation_input_tokens,
@@ -579,6 +587,11 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     await takeDownBand($, state)
     resetForNewSession(state)
+    if (e.reason === 'clear') {
+      $.clock.after(0, () => {
+        void registerHandoffCommand($)
+      })
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 }
