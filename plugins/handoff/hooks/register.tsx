@@ -302,6 +302,15 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
+const resendInFreshSession = async ($: EngineInterface, text: string, isUnattended: boolean) => {
+  try {
+    await $.prompt.submit({ text })
+  } catch (error) {
+    debug($, `could not send the prompt in the fresh session: ${String(error)}`)
+    if (!isUnattended) await refillBox($, text)
+  }
+}
+
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
@@ -318,7 +327,7 @@ const continueInFreshSession = async (
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
   if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
   const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
-  if (prompt !== undefined) await $.prompt.submit({ text: prompt })
+  if (prompt !== undefined) await resendInFreshSession($, prompt, request.isUnattended)
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
@@ -354,8 +363,6 @@ const runHandoff = async ($: EngineInterface, state: SessionState, request: Hand
       )
     }
     await continueInFreshSession($, state, request, prepared.oldId, prepared.note)
-  } catch (error) {
-    debug($, `handoff failed after the clear: ${String(error)}`)
   } finally {
     state.pending = null
   }

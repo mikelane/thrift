@@ -67,12 +67,39 @@ test('It reports a prompt it cannot submit back instead of crashing', ACT, async
   expect(world.debugLines.join('\n')).toContain('could not restore the held prompt')
 })
 
+test('It puts the held prompt in the box when the resend throws after the clear', ACT, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2')
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2')
+})
+
+test('It puts the handoff and the held prompt in the box when the append is refused and the resend throws', ACT, async ($, on) => {
+  const world = await ready($, on)
+  world.appendDenied = true
+  await submitPerson($, 'now ENG-2')
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.box.text).toContain('The handoff note.')
+  expect(world.box.text).toContain('now ENG-2')
+})
+
+test('It leaves the box alone when an unattended resend throws after the clear', ACT, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.box.text).toBe('')
+  expect(world.debugLines.join('\n')).toContain('could not send the prompt in the fresh session')
+})
+
 test('It finishes the handoff and frees the claim when the resend throws', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
   world.submitThrows = true
   await world.clock.settle()
-  expect(world.debugLines.join('\n')).toContain('handoff failed after the clear')
+  expect(world.debugLines.join('\n')).toContain('could not send the prompt in the fresh session')
   world.submitThrows = false
   await bash($, world, 'git commit -m x')
   await completeTurn($)
