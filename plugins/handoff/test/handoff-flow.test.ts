@@ -1,0 +1,269 @@
+import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+import { HANDOFF_PROMPT } from '../hooks/handoff-note'
+import {
+  answered,
+  bash,
+  compacted,
+  completeTurn,
+  growTo200k,
+  install,
+  lastRecord,
+  runCommand,
+  startSession,
+  ZERO_USAGE,
+  type World,
+} from './helpers'
+
+const ACT = { options: { handoffMode: 'act' } } as const
+const ACT_COMPACTING = { options: { handoffMode: 'act', compactBeforeClear: true } } as const
+
+const finishedTaskTurn = async ($: Engine, world: World) => {
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+}
+
+const handedOff = async ($: Engine, on: On) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  return world
+}
+
+const WRITING = 'toast:Writing a handoff for a fresh session...'
+
+test('It does not hand off inside the hook the turn is waiting on', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  expect(world.effects).not.toContain('clear')
+  expect(world.effects).not.toContain('fork')
+})
+
+test('It hands off in act mode after a commit once the clock fires', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.effects).toContain('clear')
+})
+
+test('It runs the steps in order: toast, fork, clear, append', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  const steps = world.effects.filter(effect => [WRITING, 'fork', 'clear', 'append'].includes(effect))
+  expect(steps).toEqual([WRITING, 'fork', 'clear', 'append'])
+})
+
+test('It asks the fork for the fixed handoff prompt', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.forkPrompts).toEqual([HANDOFF_PROMPT])
+})
+
+test('It appends the handoff for the model with the old session id and the note', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.appended).toEqual([
+    'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.',
+  ])
+})
+
+test('It names the old session and the resume command in a transcript line and a toast', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  const named = world.effects.filter(effect => effect.includes('claude --resume old-session'))
+  expect(named.map(effect => effect.split(':')[0])).toEqual(['log', 'toast'])
+})
+
+test('It logs a cleared record under the old session id with the values that triggered it', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.records).toHaveLength(1)
+  expect(lastRecord(world)).toMatchObject({
+    session_id: 'old-session',
+    mode: 'active',
+    action: 'cleared',
+    trigger_values: { point: 'turn-end', signal: 'strong', context_tokens: 200_000, setting: 'act' },
+  })
+})
+
+test('It registers /handoff again after the clear', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  const afterClear = world.effects.slice(world.effects.indexOf('clear'))
+  expect(afterClear).toContain('register:handoff')
+})
+
+test('It carries on when registering /handoff again is refused', ACT, async ($, on) => {
+  const world = install($, on)
+  world.registerThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain('append')
+  expect(world.debugLines.join('\n')).toContain('register')
+})
+
+test('It does not compact the old session by default', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.effects).not.toContain('compact')
+})
+
+test('It compacts the old session between the fork and the clear when compactBeforeClear is on', ACT_COMPACTING, async ($, on) => {
+  const world = await handedOff($, on)
+  const steps = world.effects.filter(effect => ['fork', 'compact', 'clear'].includes(effect))
+  expect(steps).toEqual(['fork', 'compact', 'clear'])
+})
+
+test('It logs a failed compaction and still clears', ACT_COMPACTING, async ($, on) => {
+  const world = install($, on)
+  world.compact = async () => {
+    throw new Error('compaction failed')
+  }
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.records.map(record => record.action)).toEqual(['none', 'cleared'])
+  expect(world.records[0]?.trigger_values.reason).toBe('compaction_failed')
+  expect(world.effects).toContain('clear')
+})
+
+test('It logs a vetoed compaction and still clears', ACT_COMPACTING, async ($, on) => {
+  const world = install($, on)
+  world.compact = async () => ({ skip: 'vetoed' })
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.records[0]?.trigger_values.reason).toBe('compaction_vetoed')
+  expect(world.effects).toContain('clear')
+})
+
+test('It still clears after a successful compaction first', ACT_COMPACTING, async ($, on) => {
+  const world = install($, on)
+  world.compact = async () => compacted(48_000)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.records.map(record => record.action)).toEqual(['cleared'])
+})
+
+const failedForks = [
+  ['an API error', async () => ({ isAnswered: false, reason: 'api-error', status: 500, error: 'server', usage: ZERO_USAGE }) as never],
+  ['nothing to fork', async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never],
+  ['an empty reply', async () => ({ isAnswered: false, reason: 'empty-reply', usage: ZERO_USAGE }) as never],
+  ['a blank note', async () => answered('   ')],
+  [
+    'a fork that throws',
+    async () => {
+      throw new Error('fork failed')
+    },
+  ],
+] as const
+
+for (const [name, fork] of failedForks) {
+  test(`It clears nothing and says so when the fork returns ${name}`, ACT, async ($, on) => {
+    const world = install($, on)
+    world.fork = fork
+    await startSession($)
+    await finishedTaskTurn($, world)
+    await world.clock.settle()
+    expect(world.effects).not.toContain('clear')
+    expect(world.effects).toContain('toast:No handoff was written. This session is unchanged.')
+    expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'no_handoff_written' } })
+  })
+}
+
+test('It evaluates the next turn after a failed fork', ACT, async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  await bash($, world, 'git commit -m y')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(2)
+})
+
+test('It tells the person the session is unchanged when /clear throws', ACT, async ($, on) => {
+  const world = install($, on)
+  world.clearThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged.')
+  expect(world.effects).not.toContain('append')
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'clear_failed' } })
+})
+
+test('It submits the handoff as a prompt when the append is refused', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  const entered = world.effects.filter(effect => effect.startsWith('entered:plugin:'))
+  expect(entered).toEqual([
+    'entered:plugin:Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.',
+  ])
+})
+
+test('It submits nothing when the append is stored and no prompt was held', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.effects.filter(effect => effect.startsWith('entered:'))).toEqual([])
+})
+
+test('It runs /handoff in off mode', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const answer = await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(answer.text).toBe('Writing a handoff for a fresh session...')
+  expect(world.effects).toContain('clear')
+})
+
+test('It logs an active cleared record for /handoff even in off mode', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({
+    mode: 'active',
+    action: 'cleared',
+    trigger_values: { point: 'command', setting: 'off' },
+  })
+})
+
+test('It logs an active record for /handoff even when the handoff fails', async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { point: 'command' } })
+})
+
+test('It does not start a second handoff while one is pending', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  const second = await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(second.text).toBe('A handoff or compaction is already in progress.')
+  expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
+})
+
+test('It can hand off again after a handoff finished', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(2)
+})
+
+test('It runs /handoff on an untested engine', async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '9.9.9', base: '9.9.9' }
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+})

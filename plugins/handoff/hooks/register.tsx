@@ -1,27 +1,52 @@
+import { atom, update } from 'claude-code'
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult, TurnCompleteInput } from 'claude-code'
 
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
+import { HANDOFF_PROMPT, handoffMessage, joinPrompts, resumeCommand } from './handoff-note'
 import { createState, resetForNewSession, type SessionState } from './session-state'
 import { asMode, asThreshold, classify, contextFromStep, finishesTask, respond, type Signal } from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
 const BACKOFF_TOKENS = 50_000
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
+const WRITING_TOAST = 'Writing a handoff for a fresh session...'
+const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 
-type Evaluation = {
-  action: DecisionAction
+const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
+
+type Trigger = {
   point: TriggerValues['point']
   signal: Signal
   isBusy: boolean
+  contextTokens: number
+  cacheReadTokens: number
+}
+
+type Evaluation = Trigger & {
+  action: DecisionAction
   reason?: string
   sessionId?: string
 }
 
+type HandoffRequest = {
+  trigger: Trigger
+  heldPrompt?: string
+  isUnattended: boolean
+}
+
+const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
+  point,
+  signal,
+  isBusy,
+  contextTokens: state.contextTokens,
+  cacheReadTokens: state.cacheReadTokens,
+})
+
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, reason, sessionId } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
@@ -39,11 +64,11 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
       triggerValues: {
         point,
         signal,
-        context_tokens: state.contextTokens,
+        context_tokens: contextTokens,
         threshold: state.threshold,
         is_background_busy: isBusy,
         setting: state.setting,
-        cache_read_tokens: state.cacheReadTokens,
+        cache_read_tokens: cacheReadTokens,
         ...(reason ? { reason } : {}),
       },
     })
@@ -90,8 +115,6 @@ const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult
   }
 }
 
-type Trigger = Pick<Evaluation, 'point' | 'signal' | 'isBusy'>
-
 const isBackedOff = (state: SessionState) =>
   state.backoffFrom !== null && state.contextTokens < state.backoffFrom + BACKOFF_TOKENS
 
@@ -123,7 +146,163 @@ const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Tr
   })
 }
 
-const evaluateTurnEnd = async ($: EngineInterface, state: SessionState, e: TurnCompleteInput, hasFinishedTask: boolean) => {
+const takeDownBand = async ($: EngineInterface) => {
+  try {
+    await update($, offerAtom, () => null)
+  } catch (error) {
+    debug($, `could not take down the band: ${String(error)}`)
+  }
+}
+
+const registerHandoffCommand = async ($: EngineInterface) => {
+  try {
+    await $.command.register({
+      name: 'handoff',
+      description: 'Write a handoff, clear, and continue in a fresh session',
+    })
+  } catch (error) {
+    debug($, `could not register /handoff: ${String(error)}`)
+  }
+}
+
+const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => {
+  const draft = (await $.prompt.read()).text
+  if (draft.includes(text)) return true
+  const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
+  return filled.isFilled
+}
+
+const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
+  try {
+    if (!isUnattended && (await refillBox($, text))) return
+    await $.prompt.submit({ text })
+  } catch (error) {
+    debug($, `could not restore the held prompt: ${String(error)}`)
+  }
+}
+
+const abandonHandoff = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  reason: string,
+  message: string,
+) => {
+  $.ui.toast(message)
+  await writeRecord($, state, { ...request.trigger, action: 'none', reason })
+  if (request.heldPrompt !== undefined) await restorePrompt($, request.heldPrompt, request.isUnattended)
+}
+
+const writeNote = async ($: EngineInterface): Promise<string | null> => {
+  try {
+    const answer = await $.model.fork({ prompt: HANDOFF_PROMPT })
+    return answer.isAnswered && answer.text.trim() !== '' ? answer.text.trim() : null
+  } catch {
+    return null
+  }
+}
+
+const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
+  try {
+    const result = await $.session.compact()
+    if (result.skip !== undefined) await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
+  } catch (error) {
+    debug($, `compaction before the clear failed: ${String(error)}`)
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed' })
+  }
+}
+
+const clearSession = async ($: EngineInterface): Promise<boolean> => {
+  try {
+    await $.command.run({ command: 'clear' })
+    return true
+  } catch (error) {
+    debug($, `/clear failed: ${String(error)}`)
+    return false
+  }
+}
+
+const appendNote = async ($: EngineInterface, message: string): Promise<boolean> => {
+  try {
+    const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: message }] } })
+    return appended.deny === undefined
+  } catch (error) {
+    debug($, `append failed: ${String(error)}`)
+    return false
+  }
+}
+
+const continueInFreshSession = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  oldId: string,
+  note: string,
+) => {
+  await registerHandoffCommand($)
+  const message = handoffMessage(oldId, note)
+  const isStored = await appendNote($, message)
+  const resume = resumeCommand(oldId)
+  $.ui.log(`handoff: the previous session is ${oldId}. Reopen it with ${resume}`)
+  $.ui.toast(`Handoff written. Reopen ${oldId} with ${resume}`)
+  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
+  const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
+  if (prompt !== undefined) await $.prompt.submit({ text: prompt })
+}
+
+const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+  try {
+    await takeDownBand($)
+    $.ui.toast(WRITING_TOAST)
+    const oldId = await $.session.id()
+    const note = await writeNote($)
+    if (note === null) {
+      await abandonHandoff($, state, request, 'no_handoff_written', 'No handoff was written. This session is unchanged.')
+      return null
+    }
+    if (state.compactBeforeClear) await compactBeforeClearing($, state, request.trigger)
+    return { oldId, note }
+  } catch (error) {
+    debug($, `handoff failed before the clear: ${String(error)}`)
+    await abandonHandoff($, state, request, 'handoff_failed', 'No handoff was written. This session is unchanged.')
+    return null
+  }
+}
+
+const runHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+  try {
+    const prepared = await prepareHandoff($, state, request)
+    if (prepared === null) return
+    if (!(await clearSession($))) {
+      return await abandonHandoff(
+        $,
+        state,
+        request,
+        'clear_failed',
+        'The handoff was written but /clear failed. This session is unchanged.',
+      )
+    }
+    await continueInFreshSession($, state, request, prepared.oldId, prepared.note)
+  } catch (error) {
+    debug($, `handoff failed after the clear: ${String(error)}`)
+  } finally {
+    state.pending = null
+  }
+}
+
+const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+  state.pending = 'handoff'
+  $.clock.after(0, () => {
+    void runHandoff($, state, request)
+  })
+}
+
+const evaluateTurnEnd = async (
+  $: EngineInterface,
+  state: SessionState,
+  e: TurnCompleteInput,
+  hasFinishedTask: boolean,
+) => {
   if (state.pending !== null) return
   state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
   const isBusy = await isBackgroundBusy($, state)
@@ -133,7 +312,7 @@ const evaluateTurnEnd = async ($: EngineInterface, state: SessionState, e: TurnC
     isStoppingPoint: hasFinishedTask,
     isBackgroundBusy: isBusy,
   })
-  const trigger: Trigger = { point: 'turn-end', signal, isBusy }
+  const trigger = snapshot(state, 'turn-end', signal, isBusy)
   const response = respond({
     mode: state.mode,
     signal,
@@ -145,7 +324,15 @@ const evaluateTurnEnd = async ($: EngineInterface, state: SessionState, e: TurnC
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
   }
   if (response.kind === 'compact') return scheduleCompaction($, state, trigger)
+  if (response.kind === 'handoff') return scheduleHandoff($, state, { trigger, isUnattended: state.isTurnUnattended })
   return writeRecord($, state, { ...trigger, action: 'none' })
+}
+
+const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
+  if (state.pending !== null) return { text: ALREADY_PENDING }
+  const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
+  scheduleHandoff($, state, { trigger, isUnattended: false })
+  return { text: WRITING_TOAST }
 }
 
 export const register: Register = (on, options) => {
@@ -162,9 +349,10 @@ export const register: Register = (on, options) => {
     const isUntested = isUntestedEngine(base)
     state.engineVersion = engineVersion
     if (!e.isInteractive || isUntested) state.mode = 'off'
+    if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
       if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}; logging only`)
-      await writeRecord($, state, { action: 'untested_engine', point: 'session-start', signal: 'none', isBusy: false })
+      await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
   }).catch(($, e, next) => next(e))
@@ -205,6 +393,10 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined && e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     return result
   }).catch(($, e, next) => next(e))
+
+  on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
+    text: 'handoff: could not start a handoff.',
+  }))
 
   on('session.end', ($, e, next) => {
     resetForNewSession(state)

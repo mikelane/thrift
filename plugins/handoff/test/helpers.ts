@@ -40,6 +40,7 @@ export type World = {
   compact: () => Promise<SessionCompactResult>
   clearThrows: boolean
   appendDenied: boolean
+  forkPrompts: string[]
   registerThrows: boolean
   logWrite: 'ok' | 'exit' | 'throw'
   stateSetThrows: boolean
@@ -49,11 +50,9 @@ export type World = {
   appended: string[]
 }
 
-export const answered = (text: string): ModelForkResult => ({
-  isAnswered: true,
-  text,
-  usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 0 },
-})
+export const ZERO_USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 0 }
+
+export const answered = (text: string): ModelForkResult => ({ isAnswered: true, text, usage: ZERO_USAGE })
 
 export const compacted = (tokensAfter?: number): SessionCompactResult => ({
   messages: [{ role: 'user', text: 'summary', toolUses: [] }],
@@ -101,6 +100,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     compact: async () => compacted(48_000),
     clearThrows: false,
     appendDenied: false,
+    forkPrompts: [],
     registerThrows: false,
     logWrite: 'ok',
     stateSetThrows: false,
@@ -129,8 +129,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     world.appended.push(first?.type === 'text' ? String(first.text) : '')
     return next(e)
   })
-  on('model.fork', async () => {
+  on('model.fork', async (_$, e) => {
     world.effects.push('fork')
+    world.forkPrompts.push(e.prompt)
     return ok(await world.fork())
   })
   on('agent.list', () => {
@@ -268,3 +269,11 @@ export const tool = (
   world.toolMode = mode
   return $.tool.call({ tool: name, ...input } as never)
 }
+
+export const runCommand = ($: Engine, command: string) =>
+  $.command.run({
+    command,
+    args: '',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
