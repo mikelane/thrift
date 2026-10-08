@@ -33,7 +33,10 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, triggerV
   trigger_values: triggerValues,
 })
 
-export const logLocation = (thriftHome: string | undefined, home: string | undefined) => {
+export const logLocation = (
+  thriftHome: string | undefined,
+  home: string | undefined,
+): { dir: string; file: string } | null => {
   const dir = thriftHome ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
   return dir === null ? null : { dir, file: `${dir}/decisions.jsonl` }
 }

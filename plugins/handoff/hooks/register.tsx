@@ -115,7 +115,8 @@ const isBackgroundBusy = async ($: EngineInterface, state: SessionState): Promis
   if (state.backgroundTasks.size > 0) return true
   try {
     return (await $.agent.list()).some(agent => BUSY_AGENT_STATUSES.has(agent.status))
-  } catch {
+  } catch (error) {
+    debug($, `could not list agents, treating background work as busy: ${String(error)}`)
     return true
   }
 }
@@ -124,7 +125,8 @@ const readVersion = async ($: EngineInterface) => {
   try {
     const { version, base } = await $.session.version()
     return { engineVersion: base ?? version, base }
-  } catch {
+  } catch (error) {
+    debug($, `could not read the engine version: ${String(error)}`)
     return { engineVersion: 'unknown', base: undefined }
   }
 }
@@ -132,17 +134,18 @@ const readVersion = async ($: EngineInterface) => {
 const reportedContext = async ($: EngineInterface): Promise<number | undefined> => {
   try {
     return (await $.session.usage()).context.tokens
-  } catch {
+  } catch (error) {
+    debug($, `could not read session usage: ${String(error)}`)
     return undefined
   }
 }
 
 const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult) => {
-  const succeeded = ran.deny === undefined && ran.isError !== true
+  const didSucceed = ran.deny === undefined && ran.isError !== true
   if (e.tool === 'Bash') {
     const started = validTaskId(fieldOf(ran.result, 'backgroundTaskId'))
     if (started !== null) state.backgroundTasks.add(started)
-    else if (succeeded && finishesTask(e.command)) state.hasFinishedTask = true
+    else if (didSucceed && finishesTask(e.command)) state.hasFinishedTask = true
   } else if (e.tool === 'Monitor') {
     const started = validTaskId(fieldOf(ran.result, 'taskId'))
     if (started !== null) state.backgroundTasks.add(started)
@@ -159,14 +162,14 @@ const isBackedOff = (state: SessionState) =>
 const runCompaction = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
   const sizeBefore = state.contextTokens
   try {
-    const result = await $.session.compact()
-    if (result.skip !== undefined) {
+    const compaction = await $.session.compact()
+    if (compaction.skip !== undefined) {
       state.backoffFrom = sizeBefore
       await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
     } else {
       await writeRecord($, state, { ...trigger, action: 'compacted' })
-      state.backoffFrom = result.tokensAfter ?? sizeBefore
-      state.contextTokens = result.tokensAfter ?? sizeBefore
+      state.backoffFrom = compaction.tokensAfter ?? sizeBefore
+      state.contextTokens = compaction.tokensAfter ?? sizeBefore
     }
   } catch (error) {
     state.backoffFrom = sizeBefore
@@ -286,15 +289,16 @@ const writeNote = async ($: EngineInterface): Promise<string | null> => {
   try {
     const answer = await $.model.fork({ prompt: HANDOFF_PROMPT })
     return answer.isAnswered && answer.text.trim() !== '' ? answer.text.trim() : null
-  } catch {
+  } catch (error) {
+    debug($, `could not write the handoff note: ${String(error)}`)
     return null
   }
 }
 
 const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
   try {
-    const result = await $.session.compact()
-    if (result.skip !== undefined) await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
+    const compaction = await $.session.compact()
+    if (compaction.skip !== undefined) await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
   } catch (error) {
     debug($, `compaction before the clear failed: ${String(error)}`)
     await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed' })
@@ -433,7 +437,8 @@ const readBranch = async ($: EngineInterface): Promise<string> => {
   try {
     const ran = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: BRANCH_READ_TIMEOUT_MS })
     return ran.exitCode === 0 ? ran.stdout.trim() : ''
-  } catch {
+  } catch (error) {
+    debug($, `could not read the git branch: ${String(error)}`)
     return ''
   }
 }
@@ -449,8 +454,8 @@ const inspectPrompt = async ($: EngineInterface, state: SessionState, text: stri
 
 const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
   try {
-    const rest = withoutPrompt((await $.prompt.read()).text, text)
-    if (rest !== null) await $.prompt.fill({ text: rest, mode: 'replace' })
+    const remainingDraft = withoutPrompt((await $.prompt.read()).text, text)
+    if (remainingDraft !== null) await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
@@ -533,9 +538,13 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
   return (
     <Box flexDirection="column">
       <Text>{bandMessage(offer)}</Text>
-      <Box columnGap={1}>
+      <Box flexWrap="wrap" columnGap={1}>
         {bandButtons(offer).map(button => (
-          <Button key={button} label={BUTTON_LABELS[button]} onPress={() => pressButton($, state, offer, button)} />
+          <Button
+            key={button}
+            label={BUTTON_LABELS[button]}
+            onPress={() => logFailure($, pressButton($, state, offer, button))}
+          />
         ))}
       </Box>
       <Text dimColor>{BAND_HINT}</Text>
@@ -566,7 +575,7 @@ export const register: Register = (on, options) => {
     state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
-      if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}; logging only`)
+      if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
       await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started

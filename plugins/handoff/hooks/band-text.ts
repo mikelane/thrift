@@ -14,7 +14,7 @@ export const BAND_HINT = 'Set handoffMode to act in /config to do this without a
 const question = ({ signal, heldPrompt, isBusy }: Offer): string => {
   if (heldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
   if (signal === 'strong') return 'Hand off to a fresh session now?'
-  if (isBusy) return 'A handoff would orphan it, so compact instead?'
+  if (isBusy) return 'A handoff would orphan that work, so compact instead?'
   return 'Hand off to a fresh session, or compact?'
 }
 

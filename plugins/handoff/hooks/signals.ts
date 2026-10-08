@@ -1,15 +1,16 @@
 export type Mode = 'off' | 'ask' | 'act'
 export type Signal = 'none' | 'strong' | 'weak'
-export type StoppingPoint = 'finished-task' | 'new-work' | null
+type StoppingPoint = 'finished-task' | 'new-work' | null
 export type Button = 'handoff' | 'handoff-send' | 'send-here' | 'compact' | 'not-now'
 
-export type Response =
+type Response =
   | { kind: 'none' }
   | { kind: 'handoff'; holdsPrompt: boolean }
   | { kind: 'compact' }
   | { kind: 'advise'; holdsPrompt: boolean; buttons: readonly Button[] }
 
-const MODES: readonly string[] = ['off', 'ask', 'act']
+const MODES: readonly Mode[] = ['off', 'ask', 'act']
+const isMode = (value: unknown): value is Mode => MODES.some(mode => mode === value)
 const TICKET_TOKEN = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d+)\b/g
 const TICKET_URL = /https?:\/\/\S*?\/(?:issue|browse)\/([A-Za-z][A-Za-z0-9]{1,9})-\d+/gi
 const PR_REFERENCE = /\b(?:pr|issue|pull request)\s*#?(\d+)\b/gi
@@ -21,9 +22,9 @@ const HEREDOC_WORD_END = /[\s;|&<>()]/
 const SEPARATORS = new Set([';', '|', '&'])
 
 export const asMode = (value: unknown): Mode =>
-  typeof value === 'string' && MODES.includes(value) ? (value as Mode) : 'off'
+  isMode(value) ? value : 'off'
 
-export const DEFAULT_THRESHOLD = 150_000
+const DEFAULT_THRESHOLD = 150_000
 const MIN_THRESHOLD = 80_000
 const MAX_THRESHOLD = 2_000_000
 
@@ -58,7 +59,7 @@ const readHeredoc = (command: string, start: number): { heredoc: Heredoc; end: n
   if (quote) index += 1
   let word = ''
   while (index < command.length) {
-    const char = command[index] as string
+    const char = command.charAt(index)
     if (quote ? char === quote : HEREDOC_WORD_END.test(char)) break
     word += char
     index += 1
@@ -90,10 +91,10 @@ export const commandSegments = (command: string): string[] => {
     if (current.trim() !== '') segments.push(current.trim())
     current = ''
   }
-  const isWordStart = () => index === 0 || /\s/.test(command[index - 1] as string) || SEPARATORS.has(command[index - 1] as string)
+  const isWordStart = () => index === 0 || /\s/.test(command.charAt(index - 1)) || SEPARATORS.has(command.charAt(index - 1))
 
   while (index < command.length) {
-    const char = command[index] as string
+    const char = command.charAt(index)
     const next = command[index + 1]
 
     if (quote === "'" || (quote === '"' && char !== '\\')) {
@@ -141,19 +142,19 @@ export const commandSegments = (command: string): string[] => {
 }
 
 const words = (segment: string): string[] => {
-  const result: string[] = []
+  const parsedWords: string[] = []
   let word = ''
   let hasWord = false
   let quote: string | null = null
 
   for (let index = 0; index < segment.length; index += 1) {
-    const char = segment[index] as string
+    const char = segment.charAt(index)
     if (quote === "'") {
       if (char === "'") quote = null
       else word += char
     } else if (char === '\\' && index + 1 < segment.length) {
       index += 1
-      word += segment[index]
+      word += segment.charAt(index)
       hasWord = true
     } else if (quote === '"') {
       if (char === '"') quote = null
@@ -162,7 +163,7 @@ const words = (segment: string): string[] => {
       quote = char
       hasWord = true
     } else if (/\s/.test(char)) {
-      if (hasWord) result.push(word)
+      if (hasWord) parsedWords.push(word)
       word = ''
       hasWord = false
     } else {
@@ -170,8 +171,8 @@ const words = (segment: string): string[] => {
       hasWord = true
     }
   }
-  if (hasWord) result.push(word)
-  return result
+  if (hasWord) parsedWords.push(word)
+  return parsedWords
 }
 
 const withoutMessageValues = (args: readonly string[]): string[] =>
@@ -191,10 +192,10 @@ const finishesWithGh = (rest: readonly string[]): boolean =>
   rest[0] === 'pr' && (rest[1] === 'create' || rest[1] === 'merge') && !rest.includes('--dry-run')
 
 const finishesSegment = (segment: string): boolean => {
-  const all = words(segment)
-  const start = all.findIndex(word => !ASSIGNMENT.test(word))
+  const segmentWords = words(segment)
+  const start = segmentWords.findIndex(word => !ASSIGNMENT.test(word))
   if (start === -1) return false
-  const [program, ...rest] = all.slice(start)
+  const [program, ...rest] = segmentWords.slice(start)
   if (program === 'git') return finishesWithGit(rest)
   if (program === 'gh') return finishesWithGh(rest)
   return false
@@ -249,7 +250,7 @@ type RespondInput = {
 
 const NONE: Response = { kind: 'none' }
 
-export type BandShape = { signal: Signal; heldPrompt: boolean; isBusy: boolean }
+type BandShape = { signal: Signal; heldPrompt: boolean; isBusy: boolean }
 
 export const bandButtons = ({ signal, heldPrompt, isBusy }: BandShape): readonly Button[] => {
   if (heldPrompt) return ['handoff-send', 'send-here']

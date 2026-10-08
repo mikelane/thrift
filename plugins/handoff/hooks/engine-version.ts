@@ -7,10 +7,8 @@ const core = (version: string): number[] | null => {
   return match ? match.slice(1).map(Number) : null
 }
 
-const isNewer = (candidate: readonly number[], reference: readonly number[]): boolean => {
-  const differing = candidate.findIndex((part, index) => part !== reference[index])
-  return differing !== -1 && (candidate[differing] as number) > (reference[differing] as number)
-}
+const isNewer = (candidate: readonly number[], reference: readonly number[]): boolean =>
+  candidate.map((part, index) => Math.sign(part - Number(reference[index]))).find(order => order !== 0) === 1
 
 export const isUntestedEngine = (base: string | undefined, testedThrough: string = TESTED_THROUGH): boolean => {
   const release = base === undefined ? null : core(base)

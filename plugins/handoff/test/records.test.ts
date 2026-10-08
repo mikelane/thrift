@@ -55,9 +55,9 @@ for (const [action, setting, point, expected] of modeCases) {
   })
 }
 
-test('It returns the record as one line of JSON ending in a newline from decisionRecord line', () => {
-  const line = JSON.stringify(decisionRecord(baseRecord)) + '\n'
-  expect(JSON.parse(line).session_id).toBe('abc')
+test('It returns a record that survives a JSON round trip unchanged from decisionRecord', () => {
+  const record = decisionRecord(baseRecord)
+  expect(JSON.parse(JSON.stringify(record))).toEqual(record)
 })
 
 const locationCases = [
@@ -66,6 +66,7 @@ const locationCases = [
   ['/data/thrift', '/home/u', { dir: '/data/thrift', file: '/data/thrift/decisions.jsonl' }],
   ['/data/thrift/', '/home/u', { dir: '/data/thrift', file: '/data/thrift/decisions.jsonl' }],
   ['/data/thrift', undefined, { dir: '/data/thrift', file: '/data/thrift/decisions.jsonl' }],
+  [undefined, '/home/u//', { dir: '/home/u/.claude/thrift', file: '/home/u/.claude/thrift/decisions.jsonl' }],
   [undefined, undefined, null],
   ['', '', null],
 ] as const
@@ -84,10 +85,13 @@ test('It appends to the file named by the second argument in LOG_WRITER', () => 
   expect(LOG_WRITER[2]).toEndWith('cat >> "$2"')
 })
 
-test('It asks for each part of a handoff in HANDOFF_PROMPT', () => {
-  const asked = ['task', 'goal', 'done', 'decisions', 'open threads', 'next', 'rediscover']
-  expect(asked.filter(part => !HANDOFF_PROMPT.toLowerCase().includes(part))).toEqual([])
-})
+const handoffParts = ['task', 'goal', 'done', 'decisions', 'open threads', 'next', 'rediscover'] as const
+
+for (const part of handoffParts) {
+  test(`It asks for ${part} in HANDOFF_PROMPT`, () => {
+    expect(HANDOFF_PROMPT.toLowerCase()).toContain(part)
+  })
+}
 
 test('It caps the note at 400 words in HANDOFF_PROMPT', () => {
   expect(HANDOFF_PROMPT).toContain('400 words')

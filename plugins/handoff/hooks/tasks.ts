@@ -5,6 +5,6 @@ export const validTaskId = (value: unknown): string | null =>
   typeof value === 'string' && TASK_ID.test(value) ? value : null
 
 export const fieldOf = (value: unknown, key: string): unknown =>
-  typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined
+  typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
 
 export const notifiedTaskId = (promptText: string): string | null => validTaskId(NOTIFIED_TASK.exec(promptText)?.[1])

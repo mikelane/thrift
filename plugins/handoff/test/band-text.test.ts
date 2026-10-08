@@ -31,6 +31,31 @@ for (const [offer, opening] of messageCases) {
   })
 }
 
+const questionCases = [
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    'Hand off and send it in a fresh session, or send it here?',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    'Hand off to a fresh session now?',
+  ],
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    'A handoff would orphan that work, so compact instead?',
+  ],
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    'Hand off to a fresh session, or compact?',
+  ],
+] as const
+
+for (const [offer, question] of questionCases) {
+  test(`It ends with "${question}" from bandMessage for ${JSON.stringify(offer)}`, () => {
+    expect(bandMessage(offer)).toEndWith(question)
+  })
+}
+
 test('It warns that a handoff would orphan background work from bandMessage', () => {
   const message = bandMessage({ signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true })
   expect(message).toContain('orphan')

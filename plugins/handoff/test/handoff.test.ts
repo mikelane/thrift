@@ -188,7 +188,7 @@ test('It names the base version in the untested toast', ACT, async ($, on) => {
   const world = install($, on)
   world.version = { version: '2.1.296', base: '2.1.296' }
   await startSession($)
-  expect(world.effects).toContain('toast:handoff: untested on Claude Code 2.1.296; logging only')
+  expect(world.effects).toContain('toast:handoff: untested on Claude Code 2.1.296, so it only logs this session. /handoff still works.')
 })
 
 test('It records the version string when the base is missing', ACT, async ($, on) => {

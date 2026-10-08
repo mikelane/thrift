@@ -18,6 +18,21 @@ export type LogRecord = {
   trigger_values: Record<string, unknown>
 }
 
+const LOG_RECORD_STRINGS = ['ts', 'session_id', 'component', 'mode', 'action', 'engine_version'] as const
+
+const isLogRecord = (value: unknown): value is LogRecord =>
+  typeof value === 'object' &&
+  value !== null &&
+  LOG_RECORD_STRINGS.every(key => typeof Reflect.get(value, key) === 'string') &&
+  typeof Reflect.get(value, 'trigger_values') === 'object' &&
+  Reflect.get(value, 'trigger_values') !== null
+
+const parseLogRecord = (line: string): LogRecord => {
+  const parsed: unknown = JSON.parse(line)
+  if (!isLogRecord(parsed)) throw new Error(`not a decision record: ${line}`)
+  return parsed
+}
+
 export type Box = { text: string; cursor: number }
 
 export type World = {
@@ -127,11 +142,11 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   on('session.id', () => {
     if (world.sessionIdDenials > 0) {
       world.sessionIdDenials -= 1
-      return { deny: 'no session id' } as never
+      return { deny: 'no session id' }
     }
     return ok(world.sessionId)
   })
-  on('session.usage', () => (world.usageDenied ? ({ deny: 'no usage' } as never) : ok({ ...noUsage, context: { tokens: world.contextTokens, window: 1_000_000 } })))
+  on('session.usage', () => (world.usageDenied ? { deny: 'no usage' } : ok({ ...noUsage, context: { tokens: world.contextTokens, window: 1_000_000 } })))
   on('session.version', () => {
     if (world.versionThrows) throw new Error('no version')
     return ok(world.version)
@@ -143,7 +158,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   on('session.append', (_$, e, next) => {
     const first = e.message.content[0]
     world.effects.push('append')
-    if (world.appendDenied) return { deny: 'refused' } as never
+    if (world.appendDenied) return { deny: 'refused' }
     world.appended.push(first?.type === 'text' ? String(first.text) : '')
     return next(e)
   })
@@ -156,7 +171,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     if (world.agentListThrows) throw new Error('agent list failed')
     return ok(world.agents)
   })
-  on('prompt.read', () => (world.boxReadDenied ? ({ deny: 'no box' } as never) : ok(world.box)))
+  on('prompt.read', () => (world.boxReadDenied ? { deny: 'no box' } : ok(world.box)))
   on('prompt.fill', (_$, e) => {
     if (world.fillRefusal !== undefined) return { isFilled: false, refusal: world.fillRefusal }
     world.effects.push(`fill:${e.text}`)
@@ -200,7 +215,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     if (world.logWrite === 'throw') throw new Error('spawn failed')
     world.logTargets.push(args.slice(3))
     if (world.logWrite === 'exit') return ok({ ...finished, exitCode: 1, stderr: 'disk full' })
-    world.records.push(JSON.parse(e.init?.stdin ?? '{}') as LogRecord)
+    world.records.push(parseLogRecord(e.init?.stdin ?? '{}'))
     return ok(finished)
   })
   on('turn.step', async function* (_$, e) {
@@ -221,15 +236,15 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     }
   })
   on('state.set', (_$, e, next) => {
-    if (world.stateSetThrows) return { deny: 'cannot write' } as never
+    if (world.stateSetThrows) return { deny: 'cannot write' }
     return next(e)
   })
-  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }) as never)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', (_$, e) => {
     if (world.toolMode === 'deny') return { deny: 'blocked' }
     if (world.toolMode === 'error') return { isError: true as const, result: 'failed', text: 'failed' }
-    return { result: world.toolResult, text: `ran ${e.tool}` } as never
+    return { result: world.toolResult, text: `ran ${e.tool}` }
   })
   return world
 }
@@ -260,7 +275,11 @@ export const completeTurn = ($: Engine, { usage, reason = 'answer', agentId }: C
     ...(agentId ? { agentId } : {}),
   })
 
-export const lastRecord = (world: World): LogRecord => world.records[world.records.length - 1] as LogRecord
+export const lastRecord = (world: World): LogRecord => {
+  const record = world.records.at(-1)
+  if (record === undefined) throw new Error('no decision record was written')
+  return record
+}
 
 export const growTo200k = ($: Engine, world: World) => runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
 
@@ -281,7 +300,7 @@ export const bash = (
 ) => {
   world.toolResult = result
   world.toolMode = mode
-  return $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) } as never)
+  return $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
 }
 
 export const tool = (
@@ -325,10 +344,11 @@ export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnI
   $.prompt.submit({
     text,
     wait: false,
-    origin: { kind } as never,
+    origin: { kind },
     ...(turnId ? { turnId } : {}),
     ...(context ? { context } : {}),
     ...(attachments ? { attachments } : {}),
-  } as never)
+  })
 
-export const dropOf = (result: unknown): string | undefined => (result as { drop?: string }).drop
+export const dropOf = (result: unknown): string | undefined =>
+  typeof result === 'object' && result !== null && 'drop' in result && typeof result.drop === 'string' ? result.drop : undefined

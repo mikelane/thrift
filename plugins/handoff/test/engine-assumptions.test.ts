@@ -60,7 +60,7 @@ test('It counts the main model as one call beside each advisor call', async ($, 
 // Last confirmed live: never. Declared on ModelForkResult in 2.1.295.
 test('It writes no handoff when the fork has nothing to fork', async ($, on) => {
   const world = install($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()

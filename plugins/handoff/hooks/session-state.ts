@@ -1,6 +1,6 @@
 import type { Mode } from './signals'
 
-export type Settings = {
+type Settings = {
   setting: Mode
   threshold: number
   compactBeforeClear: boolean

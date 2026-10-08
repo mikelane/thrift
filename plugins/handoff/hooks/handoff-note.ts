@@ -20,7 +20,7 @@ export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draf
 
 export const withoutPrompt = (draft: string, prompt: string): string | null => {
   const padded = `\n${draft}\n`
-  const at = padded.indexOf(`\n${prompt}\n`)
-  if (at === -1) return null
-  return `${padded.slice(0, at)}${padded.slice(at + prompt.length + 1)}`.slice(1, -1)
+  const promptStart = padded.indexOf(`\n${prompt}\n`)
+  if (promptStart === -1) return null
+  return `${padded.slice(0, promptStart)}${padded.slice(promptStart + prompt.length + 1)}`.slice(1, -1)
 }

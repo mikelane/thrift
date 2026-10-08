@@ -284,7 +284,7 @@ test('It takes a standing band down when the plugin starts again after a reload'
 
 test('It starts the session when the band from before a reload cannot be read', ASK, async ($, on) => {
   const world = install($, on)
-  on('state.get', () => ({ deny: 'store gone' }) as never)
+  on('state.get', () => ({ deny: 'store gone' }))
   await startSession($)
   expect(world.debugLines.join('\n')).toContain('could not read the band')
   expect(world.effects).toContain('register:handoff')

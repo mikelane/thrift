@@ -56,7 +56,7 @@ test('It logs an advised record for a held prompt at the prompt point', ASK, asy
 })
 
 test('It offers Hand off and send it and Send here for a held prompt', ASK, async ($, on) => {
-  const world = await ready($, on)
+  await ready($, on)
   await submitPerson($, 'now ENG-2')
   const band = await mountBand($)
   const labels = (await band.findAll({ type: 'Button' })).map(button => button.props.label)
@@ -75,7 +75,7 @@ test('It sends the held prompt here when the person presses Enter again', ASK, a
 })
 
 test('It takes the band down when Enter sends the held prompt here', ASK, async ($, on) => {
-  const world = await ready($, on)
+  await ready($, on)
   await submitPerson($, 'now ENG-2')
   const band = await mountBand($)
   await submitPerson($, 'now ENG-2')
@@ -211,7 +211,7 @@ test('It does not call the resent ticket new work in the fresh session', ACT, as
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
@@ -221,7 +221,7 @@ test('It puts the prompt back in the box when the fork fails and someone is at t
 
 test('It submits the prompt in the unchanged session when the fork fails and nobody is at the prompt', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   world.fillRefusal = 'no_composer'
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
@@ -279,14 +279,14 @@ test('It hands off for a scheduled prompt in ask mode without asking', ASK, asyn
 })
 
 test('It does nothing for a scheduled prompt in off mode', async ($, on) => {
-  const world = await ready($, on)
+  await ready($, on)
   const result = await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   expect(result).toMatchObject({ text: 'now ENG-2' })
 })
 
 test('It resubmits a scheduled prompt in the unchanged session after a failed fork', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   await world.clock.settle()
   expect(entered(world)).toContain('entered:plugin:now ENG-2')
@@ -330,7 +330,7 @@ test('It offers a band at the end of a turn the person started', ASK, async ($, 
 })
 
 test('It clears the held prompt and the band when the session ends', ASK, async ($, on) => {
-  const world = await ready($, on)
+  await ready($, on)
   await submitPerson($, 'now ENG-2')
   await $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
   const band = await mountBand($)
@@ -391,7 +391,7 @@ test('It writes an unattended prompt to the transcript when it cannot be sent af
 
 test('It writes an unattended prompt to the transcript when the handoff fails and it cannot be sent', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   world.submitThrows = true
   await world.clock.settle()

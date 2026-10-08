@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { ModelForkResult, On } from 'claude-code'
 
 import { HANDOFF_PROMPT } from '../hooks/handoff-note'
 import {
@@ -143,10 +143,10 @@ test('It still clears after a successful compaction first', ACT_COMPACTING, asyn
   expect(world.records.map(record => record.action)).toEqual(['cleared'])
 })
 
-const failedForks = [
-  ['an API error', async () => ({ isAnswered: false, reason: 'api-error', status: 500, error: 'server', usage: ZERO_USAGE }) as never],
-  ['nothing to fork', async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never],
-  ['an empty reply', async () => ({ isAnswered: false, reason: 'empty-reply', usage: ZERO_USAGE }) as never],
+const failedForks: ReadonlyArray<readonly [string, () => Promise<ModelForkResult>]> = [
+  ['an API error', async () => ({ isAnswered: false, reason: 'api-error', status: 500, error: 'server_error', usage: ZERO_USAGE })],
+  ['nothing to fork', async () => ({ isAnswered: false, reason: 'nothing-to-fork' })],
+  ['an empty reply', async () => ({ isAnswered: false, reason: 'empty-reply', usage: ZERO_USAGE })],
   ['a blank note', async () => answered('   ')],
   [
     'a fork that throws',
@@ -154,7 +154,7 @@ const failedForks = [
       throw new Error('fork failed')
     },
   ],
-] as const
+]
 
 for (const [name, fork] of failedForks) {
   test(`It clears nothing and says so when the fork returns ${name}`, ACT, async ($, on) => {
@@ -171,7 +171,7 @@ for (const [name, fork] of failedForks) {
 
 test('It evaluates the next turn after a failed fork', ACT, async ($, on) => {
   const world = install($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
@@ -232,7 +232,7 @@ test('It logs an active cleared record for /handoff even in off mode', async ($,
 
 test('It logs an active record for /handoff even when the handoff fails', async ($, on) => {
   const world = install($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()

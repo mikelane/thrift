@@ -99,8 +99,8 @@ only when the prompt holds a ticket-shaped token.
 
 **Background work** is a subagent with status `pending`, `running`, or `waiting`, or a background
 `Bash` or `Monitor` task that has not reported back. A `<task-notification>` prompt that carries the
-task id marks it done, and so does a `TaskStop` or `KillShell` call that was not denied. Task ids are validated against
-`^[A-Za-z0-9_-]+$`. If the agent list cannot be read, the plugin assumes background work is running.
+task id marks it done, and so does a `TaskStop` or `KillShell` call that was not denied. Task ids
+are validated against `^[A-Za-z0-9_-]+$`. If the agent list cannot be read, the plugin assumes background work is running.
 A handoff would orphan the session that background work reports to, so it turns a strong signal
 into a weak one.
 
@@ -136,11 +136,14 @@ The band draws above the prompt from a typed atom. It states the context in thou
 accuracy drops as context grows, and varies its wording for a held prompt, a finished task,
 background work, or plain size. In `ask` mode a dim line says that `handoffMode` `act` does this
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
-from being evaluated. The band comes down when the next prompt or task notification starts a turn,
-so a button press can never clear a session in the middle of a turn. A band still up when the
-plugin reloads (a code change, or a setting changed in `/config`) comes down when the reload fires
-`session.start` (not yet verified live for a `/config` change). Pressing Send here or Hand off and send it takes the held prompt out of the box and
-leaves any draft typed beside it.
+from being evaluated.
+
+- The band comes down when the next prompt or task notification starts a turn, so a button press
+  can never clear a session in the middle of a turn.
+- A band still up when the plugin reloads (a code change, or a setting changed in `/config`) comes
+  down when the reload fires `session.start` (not yet verified live for a `/config` change).
+- Pressing Send here or Hand off and send it takes the held prompt out of the box and leaves any
+  draft typed beside it.
 
 ### Backoff
 
@@ -224,8 +227,10 @@ plugin without any error. Four layers guard against that:
 3. **A runtime fallback.** `TESTED_THROUGH` in `hooks/engine-version.ts` names the newest release
    the plugin was tested through. At session start, if `$.session.version()` reports a `base` that
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
-   shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and an interactive run, so a hot reload mid-session stays `off` until the next session start. `/handoff`
-   still works, because you asked for it at a moment you chose.
+   shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
+   fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
+   an interactive run, so a hot reload mid-session stays `off` until the next session start.
+   `/handoff` still works, because you asked for it at a moment you chose.
 4. **`engine_version` on every log record.**
 
 | Release | Tested through Claude Code |

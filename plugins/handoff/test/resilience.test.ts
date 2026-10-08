@@ -49,7 +49,7 @@ test('It puts a held prompt back when the session id cannot be read', ACT, async
 
 test('It puts the held prompt back above a draft that only contains its text inside a longer line', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2')
   world.box = { text: 'know ENG-2', cursor: 0 }
   await world.clock.settle()
@@ -58,7 +58,7 @@ test('It puts the held prompt back above a draft that only contains its text ins
 
 test('It submits the held prompt when the box cannot be read to put it back', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   world.boxReadDenied = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
@@ -68,7 +68,7 @@ test('It submits the held prompt when the box cannot be read to put it back', AC
 
 test('It reports a prompt it cannot submit back instead of crashing', ACT, async ($, on) => {
   const world = await ready($, on)
-  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   world.fillRefusal = 'no_composer'
   await submitPerson($, 'now ENG-2')
   world.submitThrows = true
