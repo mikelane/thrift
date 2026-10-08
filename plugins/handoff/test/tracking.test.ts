@@ -70,6 +70,16 @@ test('It records a weak signal when the push moved to the background', async ($,
   expect(lastRecord(world).trigger_values).toMatchObject({ signal: 'weak', is_background_busy: true })
 })
 
+test('It keeps a finished task when a subagent turn completes before the main turn', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($, { agentId: 'sub-1' })
+  await completeTurn($)
+  expect(lastRecord(world).trigger_values.signal).toBe('strong')
+})
+
 test('It forgets a finished task after the turn that ran it', async ($, on) => {
   const world = install($, on)
   await startSession($)

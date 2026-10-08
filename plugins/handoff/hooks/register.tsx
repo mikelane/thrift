@@ -571,9 +571,10 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (e.agentId !== undefined) return result
     const hasFinishedTask = state.hasFinishedTask
     state.hasFinishedTask = false
-    if (e.agentId === undefined && e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
+    if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     return result
   }).catch(($, e, next) => next(e))
 
