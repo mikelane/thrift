@@ -12,7 +12,7 @@ one lever on that cost and logs what it decided, so you can measure whether it h
 
 | Plugin | Status | What it does |
 |---|---|---|
-| `handoff` | in development | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
+| [`handoff`](plugins/handoff) | early, not yet verified live | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
 
 ## Install
 
