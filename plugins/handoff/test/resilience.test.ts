@@ -127,7 +127,8 @@ test('It sends the held prompt once when Send here is pressed twice', ASK, async
   const band = await mountBand($)
   await Promise.all([band.press({ key: 'send-here' }), band.press({ key: 'send-here' })])
   await world.clock.settle()
-  expect(entered(world).filter(effect => effect.includes('now ENG-2'))).toEqual(['entered:plugin:now ENG-2'])
+  expect(entered(world).filter(effect => effect.startsWith('entered:plugin:'))).toEqual(['entered:plugin:now ENG-2'])
+  expect(world.records.filter(record => record.trigger_values.reason === 'send_here')).toHaveLength(1)
 })
 
 test('It reports a send that throws instead of crashing', ASK, async ($, on) => {

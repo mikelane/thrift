@@ -189,6 +189,16 @@ test('It logs a cleared record at the prompt point in act mode', ACT, async ($, 
   })
 })
 
+test('It counts the resent prompt as work the fresh session already named', ACT, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  await growTo200k($, world)
+  await submitPerson($, 'and ENG-3')
+  await world.clock.settle()
+  expect(world.records.filter(record => record.trigger_values.point === 'prompt')).toHaveLength(2)
+})
+
 test('It does not call the resent ticket new work in the fresh session', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')

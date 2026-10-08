@@ -1,6 +1,18 @@
 import { expect, test } from 'claude-code/testing'
 
-import { completeTurn, growTo200k, install, lastRecord, runCommand, runStep, startSession, usageOf } from './helpers'
+import {
+  bash,
+  compacted,
+  completeTurn,
+  growTo200k,
+  install,
+  lastRecord,
+  runCommand,
+  runStep,
+  startSession,
+  submitPerson,
+  usageOf,
+} from './helpers'
 
 const registrations = (effects: readonly string[]) => effects.filter(effect => effect === 'register:handoff')
 
@@ -57,4 +69,58 @@ test('It resets the context size after a clear the person ran', async ($, on) =>
   await runCommand($, 'clear')
   await completeTurn($)
   expect(lastRecord(world).trigger_values.context_tokens).toBe(0)
+})
+
+test('It forgets a finished task when the session ends before the turn does', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await bash($, world, 'git commit -m x')
+  await runCommand($, 'clear')
+  await growTo200k($, world)
+  await completeTurn($)
+  expect(lastRecord(world).trigger_values.signal).toBe('weak')
+})
+
+test('It forgets that a scheduled prompt started the turn when the session ends', { options: { handoffMode: 'ask' } }, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await submitPerson($, 'run the nightly job', { kind: 'scheduled-trigger' })
+  await runCommand($, 'clear')
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(lastRecord(world).action).toBe('advised')
+})
+
+test('It forgets the cache read size of the old session when the session ends', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await completeTurn($, { usage: usageOf(5, 5, 33_000) })
+  await runCommand($, 'clear')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world).trigger_values.cache_read_tokens).toBe(0)
+})
+
+test('It forgets the backoff of the old session when the session ends', { options: { handoffMode: 'act' } }, async ($, on) => {
+  const world = install($, on)
+  world.compact = async () => compacted(190_000)
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(2)
+})
+
+test('It writes no state in off mode when no band was ever shown', async ($, on) => {
+  const world = install($, on)
+  world.stateSetThrows = true
+  await startSession($)
+  await completeTurn($)
+  expect(world.debugLines.join('\n')).not.toContain('band')
 })

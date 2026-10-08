@@ -20,6 +20,7 @@ const untestedCases = [
   ['v2.1.295', '2.1.295', true],
   ['2.1.295-beta', '2.1.295', true],
   ['not a version', '2.1.295', true],
+  ['2.1.295', 'garbage', true],
 ] as const
 
 for (const [base, testedThrough, expected] of untestedCases) {

@@ -172,6 +172,16 @@ test('It evaluates a prompt with an empty attachment list', async ($, on) => {
   expect(promptRecords(world)).toHaveLength(1)
 })
 
+test('It keeps the ticket prefixes a Linear URL taught after a clear', async ($, on) => {
+  const world = await prepared($, on, null)
+  await submitPerson($, 'start on https://linear.app/acme/issue/ENG-1/fix-it')
+  await $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await growTo200k($, world)
+  await submitPerson($, 'review PR #5')
+  await submitPerson($, 'now ENG-2')
+  expect(promptRecords(world)).toHaveLength(0)
+})
+
 test('It forgets what a session named once it ends', async ($, on) => {
   const world = await prepared($, on, 'alice/eng-1-start')
   await submitPerson($, 'start on ENG-1')

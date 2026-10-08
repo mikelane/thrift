@@ -121,9 +121,6 @@ export const commandSegments = (command: string): string[] => {
     } else if (SEPARATORS.has(char)) {
       endSegment()
       index += 1
-    } else if (command.startsWith('<<<', index)) {
-      current += '<<<'
-      index += 3
     } else if (command.startsWith('<<', index)) {
       const opened = readHeredoc(command, index)
       if (opened) {

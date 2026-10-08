@@ -384,7 +384,7 @@ const evaluateTurnEnd = async (
     isBackgroundBusy: isBusy,
     isUnattended: state.isTurnUnattended,
   })
-  if (response.kind !== 'none' && signal === 'weak' && isBackedOff(state)) {
+  if (signal === 'weak' && isBackedOff(state)) {
     await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
   }
@@ -440,7 +440,6 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
 
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
   const isUnattended = e.origin.kind === 'scheduled-trigger'
-  const isHeldPromptAgain = state.heldPrompt === e.text
   if (state.heldPrompt !== null) {
     state.heldPrompt = null
     await takeDownBand($, state)
@@ -448,7 +447,6 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   state.isTurnUnattended = isUnattended
   const isNewWork = await inspectPrompt($, state, e.text)
   const canHold =
-    !isHeldPromptAgain &&
     isNewWork &&
     state.pending === null &&
     e.turnId === undefined &&
@@ -464,11 +462,11 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   })
   const trigger = snapshot(state, 'prompt', signal, isBusy)
   const response = respond({ mode: state.mode, signal, stoppingPoint: 'new-work', isBackgroundBusy: isBusy, isUnattended })
-  if (signal === 'strong' && response.kind === 'handoff') {
+  if (response.kind === 'handoff') {
     scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
     return { drop: HANDING_OFF_FIRST }
   }
-  if (signal === 'strong' && response.kind === 'advise') return holdPrompt($, state, e.text, trigger)
+  if (response.kind === 'advise' && response.holdsPrompt) return holdPrompt($, state, e.text, trigger)
   await writeRecord($, state, { ...trigger, action: 'none' })
   return null
 }
