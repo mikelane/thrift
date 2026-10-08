@@ -157,6 +157,18 @@ const finishesTaskCases = [
   ['git commit -m "a \\" b" --dry-run', false],
   ["git commit -m 'it'\"'\"'s done'", true],
   ['git commit -m a\\ b', true],
+  ['git commit --message=--dry-run', true],
+  ['cat <<EOF | git commit -F -\nbody\nEOF', true],
+  ['echo $# ; git commit -m x', true],
+  ['echo ${#x}; git commit -m x', true],
+  ['git push -fn', false],
+  ['git push -vn origin main', false],
+  ['cat <<< "git commit -m x"', false],
+  ['printf "%s" "a;git commit -m x"', false],
+  ['cat <<-EOF\n\tgit commit -m x\n\tEOF', false],
+  ["cat <<'EOF'\ngit push\nEOF", false],
+  ['git commit-tree HEAD', false],
+  ['git stash push', false],
 ] as const
 
 for (const [command, expected] of finishesTaskCases) {

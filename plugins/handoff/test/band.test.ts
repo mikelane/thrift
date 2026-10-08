@@ -272,3 +272,12 @@ test('It does not offer while a handoff is pending', ASK, async ($, on) => {
   await world.clock.settle()
   expect(world.records.map(record => record.action)).toEqual(['advised', 'cleared'])
 })
+
+test('It takes a standing band down when the plugin starts again after a reload', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  const band = await mountBand($)
+  await startSession($)
+  expect(await band.find({ text: 'engine band' })).toBeDefined()
+})

@@ -241,3 +241,12 @@ test('It forgets tasks, finished work, and context at the end of a session', asy
   await completeTurn($)
   expect(lastRecord(world).trigger_values).toMatchObject({ context_tokens: 0, signal: 'none', is_background_busy: false })
 })
+
+test('It keeps a task busy when the stop call was denied before it ran', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await bash($, world, 'sleep 100', { result: { backgroundTaskId: 'bg1' } })
+  await tool($, world, 'TaskStop', { task_id: 'bg1' }, { mode: 'deny' })
+  await completeTurn($)
+  expect(lastRecord(world).trigger_values.is_background_busy).toBe(true)
+})

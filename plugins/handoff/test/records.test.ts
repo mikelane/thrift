@@ -6,7 +6,7 @@ import {
   logLocation,
   type TriggerValues,
 } from '../hooks/decision-record'
-import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand } from '../hooks/handoff-note'
+import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from '../hooks/handoff-note'
 
 const triggerValues: TriggerValues = {
   point: 'turn-end',
@@ -133,5 +133,22 @@ const holdsCases = [
 for (const [draft, prompt, expected] of holdsCases) {
   test(`It returns ${expected} from holdsPrompt for draft ${JSON.stringify(draft)} and prompt ${JSON.stringify(prompt)}`, () => {
     expect(holdsPrompt(draft, prompt)).toBe(expected)
+  })
+}
+
+const withoutCases = [
+  ['fix it', 'fix it', ''],
+  ['fix it\ndraft', 'fix it', 'draft'],
+  ['first\nfix it', 'fix it', 'first'],
+  ['first\nfix it\nlast', 'fix it', 'first\nlast'],
+  ['one\ntwo\nthree', 'one\ntwo', 'three'],
+  ['prefix it', 'fix it', null],
+  ['fix it now', 'fix it', null],
+  ['', 'fix it', null],
+] as const
+
+for (const [draft, prompt, expected] of withoutCases) {
+  test(`It returns ${JSON.stringify(expected)} from withoutPrompt for draft ${JSON.stringify(draft)} and prompt ${JSON.stringify(prompt)}`, () => {
+    expect(withoutPrompt(draft, prompt)).toBe(expected)
   })
 }

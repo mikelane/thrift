@@ -338,3 +338,63 @@ test('It clears the held prompt and the band when the session ends', ASK, async 
   const result = await submitPerson($, 'now ENG-2')
   expect(result).toMatchObject({ text: 'now ENG-2' })
 })
+
+test('It does not refill the box when Send here was pressed before the refill ran', ASK, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2')
+  const band = await mountBand($)
+  await band.press({ key: 'send-here' })
+  await world.clock.settle()
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+  expect(world.box.text).toBe('')
+})
+
+test('It takes the held prompt out of a box that also holds a draft when Send here is pressed', ASK, async ($, on) => {
+  const world = await ready($, on)
+  world.box = { text: 'draft', cursor: 5 }
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  const band = await mountBand($)
+  await band.press({ key: 'send-here' })
+  await world.clock.settle()
+  expect(world.box.text).toBe('draft')
+})
+
+test('It takes the held prompt out of a box that also holds a draft when Hand off and send it is pressed', ASK, async ($, on) => {
+  const world = await ready($, on)
+  world.box = { text: 'draft', cursor: 5 }
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  const band = await mountBand($)
+  await band.press({ key: 'handoff-send' })
+  await world.clock.settle()
+  expect(world.box.text).toBe('draft')
+})
+
+test('It writes a held prompt to the transcript when nobody is at the box and it cannot be sent', ASK, async ($, on) => {
+  const world = await ready($, on)
+  world.fillRefusal = 'no_composer'
+  world.submitThrows = true
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
+})
+
+test('It writes an unattended prompt to the transcript when it cannot be sent after the clear', ACT, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+  expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
+})
+
+test('It writes an unattended prompt to the transcript when the handoff fails and it cannot be sent', ACT, async ($, on) => {
+  const world = await ready($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) as never
+  await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+  expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
+})
