@@ -530,7 +530,7 @@ export const register: Register = (on, options) => {
     const { engineVersion, base } = await readVersion($)
     const isUntested = isUntestedEngine(base)
     state.engineVersion = engineVersion
-    if (!e.isInteractive || isUntested) state.mode = 'off'
+    state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
       if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}; logging only`)

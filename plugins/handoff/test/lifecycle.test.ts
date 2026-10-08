@@ -124,3 +124,70 @@ test('It writes no state in off mode when no band was ever shown', async ($, on)
   await completeTurn($)
   expect(world.debugLines.join('\n')).not.toContain('band')
 })
+
+const ACT = { options: { handoffMode: 'act' } } as const
+
+test('It evaluates a turn as off when no session.start was seen', ACT, async ($, on) => {
+  const world = install($, on)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).not.toContain('compact')
+  expect(world.effects).not.toContain('fork')
+  expect(world.effects).not.toContain('clear')
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { signal: 'strong', setting: 'act' } })
+})
+
+test('It does not hold a prompt when no session.start was seen', ACT, async ($, on) => {
+  const world = install($, on)
+  world.branch = 'alice/eng-1-start'
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  const result = await submitPerson($, 'now ENG-2')
+  expect(result).toMatchObject({ text: 'now ENG-2' })
+})
+
+test('It keeps the gate closed after session.start on an untested engine', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '9.9.9', base: '9.9.9' }
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It keeps the gate closed after session.start when the run is not interactive', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($, false)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It keeps the gate closed after a clear on an untested engine', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '9.9.9', base: '9.9.9' }
+  await startSession($)
+  await runCommand($, 'clear')
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
+  expect(world.effects).not.toContain('fork')
+})
+
+test('It opens the gate for a tested interactive session', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain('fork')
+})

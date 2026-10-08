@@ -214,7 +214,7 @@ plugin without any error. Four layers guard against that:
 3. **A runtime fallback.** `TESTED_THROUGH` in `hooks/engine-version.ts` names the newest release
    the plugin was tested through. At session start, if `$.session.version()` reports a `base` that
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
-   shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. `/handoff`
+   shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and an interactive run, so a hot reload mid-session stays `off` until the next session start. `/handoff`
    still works, because you asked for it at a moment you chose.
 4. **`engine_version` on every log record.**
 

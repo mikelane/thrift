@@ -24,7 +24,7 @@ export type SessionState = Settings & {
 
 export const createState = (settings: Settings): SessionState => ({
   ...settings,
-  mode: settings.setting,
+  mode: 'off',
   engineVersion: 'unknown',
   contextTokens: 0,
   cacheReadTokens: 0,
