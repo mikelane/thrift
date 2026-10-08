@@ -302,11 +302,11 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const resendInFreshSession = async ($: EngineInterface, text: string, isUnattended: boolean) => {
+const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean) => {
   try {
     await $.prompt.submit({ text })
   } catch (error) {
-    debug($, `could not send the prompt in the fresh session: ${String(error)}`)
+    debug($, `could not send the prompt: ${String(error)}`)
     if (!isUnattended) await refillBox($, text)
   }
 }
@@ -327,7 +327,7 @@ const continueInFreshSession = async (
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
   if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
   const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
-  if (prompt !== undefined) await resendInFreshSession($, prompt, request.isUnattended)
+  if (prompt !== undefined) await sendOrKeepInBox($, prompt, request.isUnattended)
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
@@ -492,7 +492,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void logFailure($, $.prompt.submit({ text: held }))
+    void logFailure($, sendOrKeepInBox($, held, false))
   })
 }
 

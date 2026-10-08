@@ -100,7 +100,7 @@ test('It leaves the box alone when an unattended resend throws after the clear',
   world.submitThrows = true
   await world.clock.settle()
   expect(world.box.text).toBe('')
-  expect(world.debugLines.join('\n')).toContain('could not send the prompt in the fresh session')
+  expect(world.debugLines.join('\n')).toContain('could not send the prompt')
 })
 
 test('It finishes the handoff and frees the claim when the resend throws', ACT, async ($, on) => {
@@ -108,7 +108,7 @@ test('It finishes the handoff and frees the claim when the resend throws', ACT, 
   await submitPerson($, 'now ENG-2')
   world.submitThrows = true
   await world.clock.settle()
-  expect(world.debugLines.join('\n')).toContain('could not send the prompt in the fresh session')
+  expect(world.debugLines.join('\n')).toContain('could not send the prompt')
   world.submitThrows = false
   await bash($, world, 'git commit -m x')
   await completeTurn($)
@@ -186,5 +186,16 @@ test('It reports a send that throws instead of crashing', ASK, async ($, on) => 
   await band.press({ key: 'send-here' })
   world.submitThrows = true
   await world.clock.settle()
-  expect(world.debugLines.join('\n')).toContain('background work failed')
+  expect(world.debugLines.join('\n')).toContain('could not send the prompt')
+})
+
+test('It puts the prompt back in the box when Send here cannot send it', ASK, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  const band = await mountBand($)
+  await band.press({ key: 'send-here' })
+  world.submitThrows = true
+  await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2')
 })
