@@ -138,8 +138,8 @@ background work, or plain size. In `ask` mode a dim line says that `handoffMode`
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
 from being evaluated. The band comes down when the next prompt or task notification starts a turn,
 so a button press can never clear a session in the middle of a turn. A band still up when the
-plugin reloads (a code change, or a setting changed in `/config`) comes down at the reload's
-session start. Pressing Send here or Hand off and send it takes the held prompt out of the box and
+plugin reloads (a code change, or a setting changed in `/config`) comes down when the reload fires
+`session.start` (not yet verified live for a `/config` change). Pressing Send here or Hand off and send it takes the held prompt out of the box and
 leaves any draft typed beside it.
 
 ### Backoff
