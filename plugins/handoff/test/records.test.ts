@@ -23,6 +23,7 @@ const baseRecord = {
   sessionId: 'abc',
   action: 'advised',
   engineVersion: '2.1.295',
+  effectiveMode: 'ask',
   triggerValues,
 } as const
 
@@ -39,18 +40,22 @@ test('It returns every field of the decision log from decisionRecord', () => {
 })
 
 const modeCases = [
-  ['none', 'off', 'turn-end', 'shadow'],
-  ['none', 'ask', 'turn-end', 'active'],
-  ['none', 'act', 'turn-end', 'active'],
-  ['advised', 'off', 'turn-end', 'active'],
-  ['cleared', 'off', 'command', 'active'],
-  ['none', 'off', 'command', 'active'],
-  ['untested_engine', 'off', 'turn-end', 'active'],
+  ['none', 'off', 'off', 'turn-end', 'shadow'],
+  ['none', 'ask', 'ask', 'turn-end', 'active'],
+  ['none', 'act', 'act', 'turn-end', 'active'],
+  ['none', 'act', 'off', 'turn-end', 'shadow'],
+  ['none', 'ask', 'off', 'turn-end', 'shadow'],
+  ['none', 'off', 'ask', 'turn-end', 'active'],
+  ['advised', 'off', 'off', 'turn-end', 'active'],
+  ['cleared', 'off', 'off', 'command', 'active'],
+  ['none', 'off', 'off', 'command', 'active'],
+  ['none', 'act', 'off', 'command', 'active'],
+  ['untested_engine', 'act', 'off', 'turn-end', 'active'],
 ] as const
 
-for (const [action, setting, point, expected] of modeCases) {
-  test(`It returns ${expected} mode from decisionRecord for action ${action}, setting ${setting}, point ${point}`, () => {
-    const record = decisionRecord({ ...baseRecord, action, triggerValues: { ...triggerValues, setting, point } })
+for (const [action, setting, effectiveMode, point, expected] of modeCases) {
+  test(`It returns ${expected} mode from decisionRecord for action ${action}, setting ${setting}, effective mode ${effectiveMode}, point ${point}`, () => {
+    const record = decisionRecord({ ...baseRecord, action, effectiveMode, triggerValues: { ...triggerValues, setting, point } })
     expect(record.mode).toBe(expected)
   })
 }

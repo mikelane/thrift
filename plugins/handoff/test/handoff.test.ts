@@ -154,7 +154,7 @@ test('It only logs under -p even when act is set', ACT, async ($, on) => {
   await startSession($, false)
   await runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
   await completeTurn($)
-  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
   expect(world.effects).not.toContain('compact')
 })
 
@@ -181,6 +181,15 @@ for (const [name, version] of untestedBuilds) {
     await completeTurn($)
     expect(world.effects).not.toContain('compact')
     expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+  })
+
+  test(`It records a non-trigger turn as shadow on ${name} though the setting is act`, ACT, async ($, on) => {
+    const world = install($, on)
+    world.version = version
+    await startSession($)
+    await runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
+    await completeTurn($)
+    expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act' } })
   })
 }
 
