@@ -455,10 +455,7 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
 
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
   const isUnattended = e.origin.kind === 'scheduled-trigger'
-  if (state.heldPrompt !== null) {
-    state.heldPrompt = null
-    await takeDownBand($, state)
-  }
+  state.heldPrompt = null
   state.isTurnUnattended = isUnattended
   const isNewWork = await inspectPrompt($, state, e.text)
   const canHold =
@@ -577,6 +574,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
+    await takeDownBand($, state)
     const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
     if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
     const dropped = PERSON_ORIGINS.has(e.origin.kind) ? await decidePrompt($, state, e) : null
