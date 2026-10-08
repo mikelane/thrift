@@ -3,7 +3,7 @@ import type { Mode, Signal } from './signals'
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
 export type TriggerValues = {
-  point: 'turn-end' | 'prompt' | 'command' | 'button'
+  point: 'turn-end' | 'prompt' | 'command' | 'button' | 'session-start'
   signal: Signal
   context_tokens: number
   threshold: number

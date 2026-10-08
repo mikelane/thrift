@@ -32,6 +32,19 @@ export const asThreshold = (value: unknown): number =>
     ? Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, value))
     : DEFAULT_THRESHOLD
 
+type StepSize = {
+  input: number
+  created: number
+  read: number
+  advisorCalls: number
+  reported: number | undefined
+}
+
+export const contextFromStep = ({ input, created, read, advisorCalls, reported }: StepSize): number => {
+  const perCall = (input + created + read) / (1 + advisorCalls)
+  return Math.round(reported === undefined ? perCall : Math.min(reported, perCall))
+}
+
 export const formatTokens = (tokens: number): string => `${Math.round(tokens / 1000)}k`
 
 type Heredoc = { word: string; stripsTabs: boolean }

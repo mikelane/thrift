@@ -7,6 +7,7 @@ import {
   branchTicketPrefix,
   classify,
   commandSegments,
+  contextFromStep,
   finishesTask,
   formatTokens,
   hasTicketShapedToken,
@@ -342,5 +343,23 @@ const bandButtonCases = [
 for (const [offer, expected] of bandButtonCases) {
   test(`It returns ${JSON.stringify(expected)} from bandButtons for ${JSON.stringify(offer)}`, () => {
     expect(bandButtons(offer)).toEqual(expected)
+  })
+}
+
+const contextCases = [
+  [{ input: 10, created: 20, read: 170, advisorCalls: 0, reported: undefined }, 200],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 0, reported: 150 }, 150],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 0, reported: 250 }, 200],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 1, reported: undefined }, 100],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 1, reported: 120 }, 100],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 1, reported: 90 }, 90],
+  [{ input: 10, created: 20, read: 170, advisorCalls: 3, reported: undefined }, 50],
+  [{ input: 1, created: 1, read: 1, advisorCalls: 1, reported: undefined }, 2],
+  [{ input: 0, created: 0, read: 0, advisorCalls: 0, reported: undefined }, 0],
+] as const
+
+for (const [step, expected] of contextCases) {
+  test(`It returns ${expected} from contextFromStep for ${JSON.stringify(step)}`, () => {
+    expect(contextFromStep(step)).toBe(expected)
   })
 }
