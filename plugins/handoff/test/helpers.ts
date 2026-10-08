@@ -65,7 +65,8 @@ export type World = {
   sessionIdDenials: number
   submitThrows: boolean
   gitThrows: boolean
-  step: { usage: TurnUsage | null; advisorCalls: number }
+  gitFailure: boolean
+  step:{ usage: TurnUsage | null; advisorCalls: number }
   toolResult: unknown
   toolMode: 'ok' | 'error' | 'deny'
   appended: string[]
@@ -131,6 +132,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     sessionIdDenials: 0,
     submitThrows: false,
     gitThrows: false,
+    gitFailure: false,
     step: { usage: null, advisorCalls: 0 },
     toolResult: {},
     toolMode: 'ok',
@@ -211,7 +213,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     const finished = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
     if (program === 'git') world.gitCalls += 1
     if (program === 'git' && world.gitThrows) throw new Error('git failed')
-    if (program === 'git') return ok({ ...finished, exitCode: world.branch === null ? 128 : 0, stdout: `${world.branch ?? ''}\n` })
+    if (program === 'git') return ok({ ...finished, exitCode: world.branch === null || world.gitFailure ? 128 : 0, stdout: `${world.branch ?? ''}\n` })
     if (world.logWrite === 'throw') throw new Error('spawn failed')
     world.logTargets.push(args.slice(3))
     if (world.logWrite === 'exit') return ok({ ...finished, exitCode: 1, stderr: 'disk full' })

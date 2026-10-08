@@ -206,6 +206,13 @@ test('It logs untested_engine without a toast when the mode is off', async ($, o
   expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual([])
 })
 
+test('It records untested_engine at the session-start point', async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($)
+  expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', trigger_values: { point: 'session-start' } })
+})
+
 test('It logs nothing at session start on a tested build', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)

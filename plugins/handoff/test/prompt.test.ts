@@ -123,6 +123,31 @@ test('It records a weak signal when a prompt names new work while background wor
   expect(lastRecord(world)).toMatchObject({ trigger_values: { point: 'prompt', signal: 'weak', is_background_busy: true } })
 })
 
+test('It counts no branch ticket and writes a debug line when reading the branch throws', async ($, on) => {
+  const world = await prepared($, on, 'alice/eng-1-start')
+  world.gitThrows = true
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  expect(promptRecords(world)).toHaveLength(0)
+  expect(world.debugLines.join('\n')).toContain('could not read the git branch')
+})
+
+test('It counts no ticket that only the branch names when git exits non-zero', async ($, on) => {
+  const world = await prepared($, on, 'alice/eng-1-start')
+  world.gitFailure = true
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  expect(promptRecords(world)).toHaveLength(0)
+})
+
+test('It counts a ticket that a tracker URL names when git exits non-zero', async ($, on) => {
+  const world = await prepared($, on)
+  await submitPerson($, 'start on https://tracker.example/issue/ENG-1')
+  await submitPerson($, 'now ENG-2')
+  expect(promptRecords(world)).toHaveLength(1)
+  expect(lastRecord(world)).toMatchObject({ trigger_values: { point: 'prompt', signal: 'strong' } })
+})
+
 test('It treats bridge and sdk prompts as the person', async ($, on) => {
   const world = await prepared($, on, 'alice/eng-1-start')
   await submitPerson($, 'start on ENG-1', { kind: 'bridge' })
