@@ -242,6 +242,8 @@ const registerHandoffCommand = async ($: EngineInterface) => {
   }
 }
 
+// SAFETY: every current caller catches its own engine failures, so no test reaches this catch.
+// Keep it: it is the only guard against an unhandled rejection if a future caller forgets.
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
