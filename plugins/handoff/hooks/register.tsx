@@ -34,6 +34,7 @@ import {
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
 const BACKOFF_TOKENS = 50_000
+const BRANCH_READ_TIMEOUT_MS = 5000
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_TOAST = 'Writing a handoff for a fresh session...'
@@ -412,7 +413,7 @@ const evaluateTurnEnd = async (
 
 const readBranch = async ($: EngineInterface): Promise<string> => {
   try {
-    const ran = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: 5000 })
+    const ran = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: BRANCH_READ_TIMEOUT_MS })
     return ran.exitCode === 0 ? ran.stdout.trim() : ''
   } catch {
     return ''

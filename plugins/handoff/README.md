@@ -136,7 +136,8 @@ The band draws above the prompt from a typed atom. It states the context in thou
 accuracy drops as context grows, and varies its wording for a held prompt, a finished task,
 background work, or plain size. In `ask` mode a dim line says that `handoffMode` `act` does this
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
-from being evaluated.
+from being evaluated. The band comes down when the next prompt or task notification starts a turn,
+so a button press can never clear a session in the middle of a turn.
 
 ### Backoff
 
@@ -155,6 +156,10 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   the same way. A scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
   a prompt, joined to any held prompt.
+- **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
+  the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
+  already holds it as a whole line is left alone.
+- **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 
 ## Settings
