@@ -165,6 +165,14 @@ test('It only logs under -p even when act is set', ACT, async ($, on) => {
   expect(world.effects).not.toContain('compact')
 })
 
+test('It records a non-trigger turn as active in an interactive session on a tested build when act is set', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runStep($, world, { usage: usageOf(1_000, 0, 49_000) })
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { setting: 'act', signal: 'none' } })
+})
+
 const untestedBuilds = [
   ['a newer release', { version: '2.1.296', base: '2.1.296' }],
   ['a development build', { version: '2.1.295-dev.20260920.t1.sha1', base: '2.1.295-dev' }],
