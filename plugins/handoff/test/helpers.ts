@@ -56,7 +56,7 @@ export const answered = (text: string): ModelForkResult => ({
 })
 
 export const compacted = (tokensAfter?: number): SessionCompactResult => ({
-  messages: [],
+  messages: [{ role: 'user', text: 'summary', toolUses: [] }],
   tokensBefore: 200_000,
   tokensAfter,
 })

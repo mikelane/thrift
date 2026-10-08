@@ -1,11 +1,12 @@
-import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
+import type { EngineInterface, Register, ToolCallInput, ToolCallResult, TurnCompleteInput } from 'claude-code'
 
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { createState, resetForNewSession, type SessionState } from './session-state'
-import { asMode, asThreshold, classify, contextFromStep, finishesTask, type Signal } from './signals'
+import { asMode, asThreshold, classify, contextFromStep, finishesTask, respond, type Signal } from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
 
+const BACKOFF_TOKENS = 50_000
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 
 type Evaluation = {
@@ -89,6 +90,64 @@ const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult
   }
 }
 
+type Trigger = Pick<Evaluation, 'point' | 'signal' | 'isBusy'>
+
+const isBackedOff = (state: SessionState) =>
+  state.backoffFrom !== null && state.contextTokens < state.backoffFrom + BACKOFF_TOKENS
+
+const runCompaction = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
+  const sizeBefore = state.contextTokens
+  try {
+    const result = await $.session.compact()
+    if (result.skip !== undefined) {
+      state.backoffFrom = sizeBefore
+      await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
+    } else {
+      await writeRecord($, state, { ...trigger, action: 'compacted' })
+      state.backoffFrom = result.tokensAfter ?? sizeBefore
+      state.contextTokens = result.tokensAfter ?? sizeBefore
+    }
+  } catch (error) {
+    state.backoffFrom = sizeBefore
+    debug($, `compaction failed: ${String(error)}`)
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed' })
+  } finally {
+    state.pending = null
+  }
+}
+
+const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger) => {
+  state.pending = 'compact'
+  $.clock.after(0, () => {
+    void runCompaction($, state, trigger)
+  })
+}
+
+const evaluateTurnEnd = async ($: EngineInterface, state: SessionState, e: TurnCompleteInput, hasFinishedTask: boolean) => {
+  if (state.pending !== null) return
+  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
+  const isBusy = await isBackgroundBusy($, state)
+  const signal = classify({
+    contextTokens: state.contextTokens,
+    threshold: state.threshold,
+    isStoppingPoint: hasFinishedTask,
+    isBackgroundBusy: isBusy,
+  })
+  const trigger: Trigger = { point: 'turn-end', signal, isBusy }
+  const response = respond({
+    mode: state.mode,
+    signal,
+    stoppingPoint: hasFinishedTask ? 'finished-task' : null,
+    isBackgroundBusy: isBusy,
+    isUnattended: state.isTurnUnattended,
+  })
+  if (response.kind !== 'none' && signal === 'weak' && isBackedOff(state)) {
+    return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
+  }
+  if (response.kind === 'compact') return scheduleCompaction($, state, trigger)
+  return writeRecord($, state, { ...trigger, action: 'none' })
+}
+
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   const state = createState({
@@ -143,17 +202,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const hasFinishedTask = state.hasFinishedTask
     state.hasFinishedTask = false
-    if (e.agentId === undefined && e.reason === 'answer') {
-      state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
-      const isBusy = await isBackgroundBusy($, state)
-      const signal = classify({
-        contextTokens: state.contextTokens,
-        threshold: state.threshold,
-        isStoppingPoint: hasFinishedTask,
-        isBackgroundBusy: isBusy,
-      })
-      await writeRecord($, state, { action: 'none', point: 'turn-end', signal, isBusy })
-    }
+    if (e.agentId === undefined && e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     return result
   }).catch(($, e, next) => next(e))
 
