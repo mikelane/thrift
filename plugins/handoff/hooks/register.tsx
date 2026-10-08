@@ -321,6 +321,9 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   try {
     const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: message }] } })
     return appended.deny === undefined
+    // The test kit cannot make the default append reject: a throwing session.append hook is treated as a hook failure,
+    // and the plugin sees a successful append. Whether the live default append can reject is unverified.
+    // Keep it: without it, a rejected append skips the prompt fallback and drops the handoff note.
   } catch (error) {
     debug($, `append failed: ${String(error)}`)
     return false
@@ -628,7 +631,8 @@ export const register: Register = (on, options) => {
     return e.props.hasSurvey || offer === null ? next(e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
-  // SAFETY: startHandoffCommand catches its own failures, so no test reaches this catch. Keep it: every hook must never break a turn.
+  // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.
+  // Keep it: every hook must never break a turn.
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
     text: 'handoff: could not start a handoff.',
   }))
