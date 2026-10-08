@@ -23,6 +23,15 @@ const SEPARATORS = new Set([';', '|', '&'])
 export const asMode = (value: unknown): Mode =>
   typeof value === 'string' && MODES.includes(value) ? (value as Mode) : 'off'
 
+export const DEFAULT_THRESHOLD = 150_000
+const MIN_THRESHOLD = 80_000
+const MAX_THRESHOLD = 2_000_000
+
+export const asThreshold = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, value))
+    : DEFAULT_THRESHOLD
+
 export const formatTokens = (tokens: number): string => `${Math.round(tokens / 1000)}k`
 
 type Heredoc = { word: string; stripsTabs: boolean }
@@ -230,17 +239,24 @@ type RespondInput = {
 
 const NONE: Response = { kind: 'none' }
 
+export type BandShape = { signal: Signal; heldPrompt: boolean; isBusy: boolean }
+
+export const bandButtons = ({ signal, heldPrompt, isBusy }: BandShape): readonly Button[] => {
+  if (heldPrompt) return ['handoff-send', 'send-here']
+  if (signal === 'strong') return ['handoff', 'not-now']
+  return isBusy ? ['compact', 'not-now'] : ['handoff', 'compact', 'not-now']
+}
+
 const respondToStrong = (mode: 'ask' | 'act', stoppingPoint: StoppingPoint): Response => {
   const holdsPrompt = stoppingPoint === 'new-work'
   if (mode === 'act') return { kind: 'handoff', holdsPrompt }
-  const buttons: readonly Button[] = holdsPrompt ? ['handoff-send', 'send-here'] : ['handoff', 'not-now']
+  const buttons = bandButtons({ signal: 'strong', heldPrompt: holdsPrompt, isBusy: false })
   return { kind: 'advise', holdsPrompt, buttons }
 }
 
-const respondToWeak = (mode: 'ask' | 'act', isBackgroundBusy: boolean): Response => {
+const respondToWeak = (mode: 'ask' | 'act', isBusy: boolean): Response => {
   if (mode === 'act') return { kind: 'compact' }
-  const buttons: readonly Button[] = isBackgroundBusy ? ['compact', 'not-now'] : ['handoff', 'compact', 'not-now']
-  return { kind: 'advise', holdsPrompt: false, buttons }
+  return { kind: 'advise', holdsPrompt: false, buttons: bandButtons({ signal: 'weak', heldPrompt: false, isBusy }) }
 }
 
 export const respond = ({ mode, signal, stoppingPoint, isBackgroundBusy, isUnattended }: RespondInput): Response => {

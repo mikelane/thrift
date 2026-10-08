@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   asMode,
+  asThreshold,
+  bandButtons,
   branchTicketPrefix,
   classify,
   commandSegments,
@@ -308,5 +310,37 @@ const respondCases = [
 for (const [input, expected] of respondCases) {
   test(`It returns ${JSON.stringify(expected)} from respond for ${JSON.stringify(input)}`, () => {
     expect(respond({ isBackgroundBusy: false, isUnattended: false, ...input })).toEqual(expected)
+  })
+}
+
+const thresholdCases = [
+  [150_000, 150_000],
+  [80_000, 80_000],
+  [2_000_000, 2_000_000],
+  [79_999, 80_000],
+  [10, 80_000],
+  [2_000_001, 2_000_000],
+  [Number.NaN, 150_000],
+  [Number.POSITIVE_INFINITY, 150_000],
+  ['200000', 150_000],
+  [undefined, 150_000],
+] as const
+
+for (const [input, expected] of thresholdCases) {
+  test(`It returns ${expected} from asThreshold for ${String(input)}`, () => {
+    expect(asThreshold(input)).toBe(expected)
+  })
+}
+
+const bandButtonCases = [
+  [{ signal: 'strong', heldPrompt: true, isBusy: false }, ['handoff-send', 'send-here']],
+  [{ signal: 'strong', heldPrompt: false, isBusy: false }, ['handoff', 'not-now']],
+  [{ signal: 'weak', heldPrompt: false, isBusy: true }, ['compact', 'not-now']],
+  [{ signal: 'weak', heldPrompt: false, isBusy: false }, ['handoff', 'compact', 'not-now']],
+] as const
+
+for (const [offer, expected] of bandButtonCases) {
+  test(`It returns ${JSON.stringify(expected)} from bandButtons for ${JSON.stringify(offer)}`, () => {
+    expect(bandButtons(offer)).toEqual(expected)
   })
 }
