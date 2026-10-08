@@ -53,10 +53,12 @@ plugins/<name>/
   shadow baseline.
 - **Decision log**: `$THRIFT_HOME/decisions.jsonl`, default `~/.claude/thrift/decisions.jsonl`.
   One record per evaluation, non-triggers included:
-  `{ ts, session_id, component, mode, action, trigger_values }`.
+  `{ ts, session_id, component, mode, action, engine_version, trigger_values }`.
   - `ts`: ISO 8601 UTC.
   - `component`: the plugin's name.
   - `mode`: `shadow` only when the action is `none` and the setting is `off`; otherwise `active`.
+  - `engine_version`: the Claude Code release (`$.session.version()`'s `base`), or its `version`
+    when `base` is missing. A change in behavior then shows up as a split between versions.
   - `trigger_values`: scalars only. Never prompt text, file contents, or paths the person typed.
 - Append with `sh -c 'umask 077 && mkdir -p "$dir" && cat >> "$file"'` through `$.process.run`,
   so the file is created owner-only. A failed write goes to the debug log and the turn continues.
@@ -68,8 +70,11 @@ Run these for each plugin the change touches:
 
 1. `claude plugin validate plugins/<name>`: no refusals.
 2. `tsc -p plugins/<name>`: zero errors.
-3. `claude plugin test plugins/<name>`: all pass, 100% line and branch coverage, no skipped
-   tests, no network access.
+3. `claude plugin test plugins/<name>`: all pass, no skipped tests, no network access.
+   `plugin test` measures no coverage (checked on 2.1.294), so review enforces it: every
+   exported function and every branch in `hooks/` has a test whose name says which, and
+   `test-coverage-mapper` reports no uncovered changed function. Go back to a measured 100%
+   once `plugin test` reports coverage.
 
 Tests use `claude-code/testing`. The kit mocks the clock, store, env, and `session.append`
 directly (`mock.*`). Every other engine call (`model.fork`, `process.run`, `agent.list`,

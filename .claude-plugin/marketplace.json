@@ -1,0 +1,12 @@
+{
+  "name": "thrift",
+  "owner": { "name": "Mike Lane" },
+  "metadata": { "description": "Claude Code plugins that keep your token spend down." },
+  "plugins": [
+    {
+      "name": "handoff",
+      "source": "./plugins/handoff",
+      "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes."
+    }
+  ]
+}

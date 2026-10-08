@@ -1,0 +1,117 @@
+name: CI
+
+# Every plugin runs `claude plugin validate`, `tsc -p`, and `claude plugin test` against two Claude
+# Code builds. The pinned build is the last one the plugins were tested through (each plugin's
+# TESTED_THROUGH names it). The latest build tells us early that an update broke a plugin.
+#
+# Branch protection requires only "check (pinned)". "check (latest)" never blocks a change.
+# None of the three commands needs an API key, so fork pull requests run the full matrix.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DISABLE_AUTOUPDATER: '1'
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+
+jobs:
+  check:
+    name: check (${{ matrix.channel }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.channel == 'latest' }}
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'schedule' && '[{"channel":"latest","version":"latest"}]' || '[{"channel":"pinned","version":"2.1.295"},{"channel":"latest","version":"latest"}]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install Claude Code and TypeScript
+        env:
+          CLAUDE_CODE_VERSION: ${{ matrix.version }}
+        run: |
+          npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" typescript@5.6.3
+          echo "$RUNNER_TEMP/tools/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Show the installed builds
+        run: |
+          claude --version
+          tsc --version
+
+      - name: Check the pinned build is the one every plugin was tested through
+        if: matrix.channel == 'pinned'
+        env:
+          PINNED_VERSION: ${{ matrix.version }}
+        run: |
+          for file in plugins/*/hooks/engine-version.ts; do
+            grep -q "TESTED_THROUGH = '${PINNED_VERSION}'" "$file" || { echo "$file does not name ${PINNED_VERSION}"; exit 1; }
+          done
+
+      - name: Let the engine write each plugin's type declarations
+        run: |
+          for dir in plugins/*/; do
+            CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$dir" > /dev/null 2>&1 || true
+            test -f "${dir}.claude-plugin/types/claude-code/index.d.ts" || { echo "No declarations were written for $dir"; exit 1; }
+          done
+
+      - name: Validate, type-check, and test every plugin
+        run: |
+          mkdir -p "$RUNNER_TEMP/failures"
+          status=0
+          for dir in plugins/*/; do
+            name=$(basename "$dir")
+            log="$RUNNER_TEMP/failures/$name.txt"
+            {
+              echo '## claude plugin validate'
+              claude plugin validate "plugins/$name" &&
+                echo '## tsc -p' &&
+                tsc -p "plugins/$name" &&
+                echo '## claude plugin test' &&
+                claude plugin test "plugins/$name"
+            } > "$log" 2>&1 && rm "$log" || { cat "$log"; status=1; }
+          done
+          exit "$status"
+
+      - name: Open an issue for each plugin the new build breaks
+        if: always() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(claude --version | cut -d' ' -f1)
+          for log in "$RUNNER_TEMP"/failures/*.txt; do
+            [ -e "$log" ] || continue
+            plugin=$(basename "$log" .txt)
+            title="Claude Code ${version} breaks ${plugin}"
+            open=$(gh issue list --state open --search "\"${title}\" in:title" --json number --jq 'length')
+            [ "$open" = 0 ] || continue
+            {
+              echo "The weekly canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
+              echo
+              echo 'The fix moves the pinned build in this workflow and TESTED_THROUGH in the plugin forward.'
+              echo
+              echo '```'
+              tail -c 60000 "$log"
+              echo '```'
+            } > "$RUNNER_TEMP/issue-body.md"
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md"
+          done

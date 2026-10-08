@@ -6,13 +6,14 @@ Every model call re-reads the whole session context, so a long session pays for 
 every turn, mostly as cache reads. Accuracy also drops as context grows. Each plugin here pulls
 one lever on that cost and logs what it decided, so you can measure whether it helped.
 
-> **Status:** early development. No plugin is installable yet.
+> **Status:** early development. `handoff` installs from this marketplace but has not yet been
+> verified in a live terminal.
 
 ## Plugins
 
 | Plugin | Status | What it does |
 |---|---|---|
-| `handoff` | in development | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
+| [`handoff`](plugins/handoff) | early, not yet verified live | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
 
 ## Install
 

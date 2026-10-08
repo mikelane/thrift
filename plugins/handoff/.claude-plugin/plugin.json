@@ -1,0 +1,31 @@
+{
+  "name": "handoff",
+  "version": "0.1.0",
+  "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes.",
+  "author": { "name": "Mike Lane" },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "handoffMode": {
+      "type": "string",
+      "title": "Handoff mode",
+      "description": "off logs a shadow baseline and acts on nothing. ask shows a band with buttons. act hands off or compacts without asking.",
+      "options": ["off", "ask", "act"],
+      "default": "off"
+    },
+    "handoffContextTokens": {
+      "type": "number",
+      "title": "Handoff context size (tokens)",
+      "description": "Context size past which a handoff is considered. A fresh session starts near 48,000 tokens.",
+      "min": 80000,
+      "max": 2000000,
+      "default": 150000
+    },
+    "compactBeforeClear": {
+      "type": "boolean",
+      "title": "Compact the old session before clearing",
+      "description": "Costs one compaction per handoff. When on, claude --resume <old id> reopens the compacted transcript, not the full one.",
+      "default": false
+    }
+  }
+}
