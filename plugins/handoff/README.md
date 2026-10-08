@@ -99,7 +99,7 @@ only when the prompt holds a ticket-shaped token.
 
 **Background work** is a subagent with status `pending`, `running`, or `waiting`, or a background
 `Bash` or `Monitor` task that has not reported back. A `<task-notification>` prompt that carries the
-task id marks it done, and so does a `TaskStop` or `KillShell` call. Task ids are validated against
+task id marks it done, and so does a `TaskStop` or `KillShell` call that was not denied. Task ids are validated against
 `^[A-Za-z0-9_-]+$`. If the agent list cannot be read, the plugin assumes background work is running.
 A handoff would orphan the session that background work reports to, so it turns a strong signal
 into a weak one.
@@ -137,7 +137,10 @@ accuracy drops as context grows, and varies its wording for a held prompt, a fin
 background work, or plain size. In `ask` mode a dim line says that `handoffMode` `act` does this
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
 from being evaluated. The band comes down when the next prompt or task notification starts a turn,
-so a button press can never clear a session in the middle of a turn.
+so a button press can never clear a session in the middle of a turn. A band still up when the
+plugin reloads (a code change, or a setting changed in `/config`) comes down at the reload's
+session start. Pressing Send here or Hand off and send it takes the held prompt out of the box and
+leaves any draft typed beside it.
 
 ### Backoff
 
@@ -159,6 +162,8 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
   the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
   already holds it as a whole line is left alone.
+- **A prompt can be neither sent nor put back in the box.** It is written to the transcript (not
+  the decision log), joined to the handoff if the append was refused, so it can be copied back.
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 

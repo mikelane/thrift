@@ -17,3 +17,10 @@ export const joinPrompts = (handoff: string, held: string | undefined): string =
   held ? `${handoff}\n\n${held}` : handoff
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
+
+export const withoutPrompt = (draft: string, prompt: string): string | null => {
+  const padded = `\n${draft}\n`
+  const at = padded.indexOf(`\n${prompt}\n`)
+  if (at === -1) return null
+  return `${padded.slice(0, at)}${padded.slice(at + prompt.length + 1)}`.slice(1, -1)
+}

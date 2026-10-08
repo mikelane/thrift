@@ -13,7 +13,7 @@ import type { Offer } from '../types'
 import { BAND_HINT, BUTTON_LABELS, bandMessage } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
-import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand } from './handoff-note'
+import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
 import { createState, resetForNewSession, type SessionState } from './session-state'
 import {
   asMode,
@@ -41,6 +41,7 @@ const WRITING_TOAST = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
+const UNSENT_PROMPT = 'handoff: your prompt could not be sent or put back in the box. Here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
@@ -145,7 +146,7 @@ const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult
   } else if (e.tool === 'Monitor') {
     const started = validTaskId(fieldOf(ran.result, 'taskId'))
     if (started !== null) state.backgroundTasks.add(started)
-  } else if (e.tool === 'TaskStop' || String(e.tool) === 'KillShell') {
+  } else if (ran.deny === undefined && (e.tool === 'TaskStop' || String(e.tool) === 'KillShell')) {
     const input: Readonly<Record<string, unknown>> = e
     const stopped = validTaskId(input.task_id ?? input.shell_id)
     if (stopped !== null) state.backgroundTasks.delete(stopped)
@@ -200,6 +201,16 @@ const takeDownBand = async ($: EngineInterface, state: SessionState) => {
   }
 }
 
+// The offer atom outlives a reload but `state.hasBand` does not, so a band left up would stick.
+const takeDownBandFromBeforeReload = async ($: EngineInterface, state: SessionState) => {
+  try {
+    if ((await read($, offerAtom)) !== null) state.hasBand = true
+  } catch (error) {
+    debug($, `could not read the band: ${String(error)}`)
+  }
+  await takeDownBand($, state)
+}
+
 const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, heldPrompt: boolean) => {
   const offer: Offer = {
     signal: trigger.signal === 'strong' ? 'strong' : 'weak',
@@ -243,13 +254,20 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
   }
 }
 
-const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
-  if (!isUnattended && (await refillBox($, text))) return
+const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
+
+const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
   try {
     await $.prompt.submit({ text })
   } catch (error) {
     debug($, `could not restore the held prompt: ${String(error)}`)
+    keepInTranscript($, text)
   }
+}
+
+const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
+  if (!isUnattended && (await refillBox($, text))) return
+  await submitOrKeepInTranscript($, text)
 }
 
 const abandonHandoff = async (
@@ -308,7 +326,7 @@ const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: b
     await $.prompt.submit({ text })
   } catch (error) {
     debug($, `could not send the prompt: ${String(error)}`)
-    if (!isUnattended) await refillBox($, text)
+    if (isUnattended || !(await refillBox($, text))) keepInTranscript($, text)
   }
 }
 
@@ -431,18 +449,20 @@ const inspectPrompt = async ($: EngineInterface, state: SessionState, text: stri
 
 const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
   try {
-    if ((await $.prompt.read()).text === text) await $.prompt.fill({ text: '', mode: 'replace' })
+    const rest = withoutPrompt((await $.prompt.read()).text, text)
+    if (rest !== null) await $.prompt.fill({ text: rest, mode: 'replace' })
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
 }
 
 const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {
+  if (state.heldPrompt !== text) return
   if (await refillBox($, text)) return
   if (state.heldPrompt !== text) return
   state.heldPrompt = null
   await takeDownBand($, state)
-  await $.prompt.submit({ text })
+  await submitOrKeepInTranscript($, text)
 }
 
 const holdPrompt = async ($: EngineInterface, state: SessionState, text: string, trigger: Trigger) => {
@@ -539,6 +559,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    await takeDownBandFromBeforeReload($, state)
     const { engineVersion, base } = await readVersion($)
     const isUntested = isUntestedEngine(base)
     state.engineVersion = engineVersion
