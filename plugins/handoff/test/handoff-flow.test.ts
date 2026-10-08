@@ -249,6 +249,15 @@ test('It does not start a second handoff while one is pending', async ($, on) =>
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
 })
 
+test('It starts one handoff when /handoff runs twice at once', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const runs = await Promise.all([runCommand($, 'handoff'), runCommand($, 'handoff')])
+  await world.clock.settle()
+  expect(runs.filter(run => run.text === 'A handoff or compaction is already in progress.')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
+})
+
 test('It can hand off again after a handoff finished', async ($, on) => {
   const world = install($, on)
   await startSession($)

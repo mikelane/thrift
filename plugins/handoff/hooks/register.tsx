@@ -175,11 +175,18 @@ const runCompaction = async ($: EngineInterface, state: SessionState, trigger: T
   }
 }
 
-const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger) => {
-  state.pending = 'compact'
+const claim = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
+  if (state.pending !== null) return false
+  state.pending = kind
+  return true
+}
+
+const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger): boolean => {
+  if (!claim(state, 'compact')) return false
   $.clock.after(0, () => {
     void logFailure($, runCompaction($, state, trigger))
   })
+  return true
 }
 
 const takeDownBand = async ($: EngineInterface, state: SessionState) => {
@@ -354,11 +361,12 @@ const runHandoff = async ($: EngineInterface, state: SessionState, request: Hand
   }
 }
 
-const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
-  state.pending = 'handoff'
+const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest): boolean => {
+  if (!claim(state, 'handoff')) return false
   $.clock.after(0, () => {
     void logFailure($, runHandoff($, state, request))
   })
+  return true
 }
 
 const evaluateTurnEnd = async (
@@ -463,8 +471,8 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   const trigger = snapshot(state, 'prompt', signal, isBusy)
   const response = respond({ mode: state.mode, signal, stoppingPoint: 'new-work', isBackgroundBusy: isBusy, isUnattended })
   if (response.kind === 'handoff') {
-    scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
-    return { drop: HANDING_OFF_FIRST }
+    const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
+    return isClaimed ? { drop: HANDING_OFF_FIRST } : null
   }
   if (response.kind === 'advise' && response.holdsPrompt) return holdPrompt($, state, e.text, trigger)
   await writeRecord($, state, { ...trigger, action: 'none' })
@@ -477,7 +485,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   state.heldPrompt = null
   await takeDownBand($, state)
   await emptyBoxIfHolding($, held)
-  if (button === 'handoff-send') return scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })
+  if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
     void logFailure($, $.prompt.submit({ text: held }))
@@ -511,10 +519,9 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 }
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
-  if (state.pending !== null) return { text: ALREADY_PENDING }
   const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
-  scheduleHandoff($, state, { trigger, isUnattended: false })
-  return { text: WRITING_TOAST }
+  const isClaimed = scheduleHandoff($, state, { trigger, isUnattended: false })
+  return { text: isClaimed ? WRITING_TOAST : ALREADY_PENDING }
 }
 
 export const register: Register = (on, options) => {

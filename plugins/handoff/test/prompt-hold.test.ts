@@ -244,6 +244,14 @@ test('It submits the handoff joined to the held prompt when the append is refuse
   expect(entered(world)).toContain(`entered:plugin:${NOTE_HEADING}\n\nnow ENG-2`)
 })
 
+test('It drops only one of two prompts that name new work at once', ACT, async ($, on) => {
+  const world = await ready($, on)
+  const results = await Promise.all([submitPerson($, 'now ENG-2'), submitPerson($, 'now ENG-3')])
+  await world.clock.settle()
+  expect(results.filter(result => dropOf(result) !== undefined)).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
+})
+
 test('It lets a second prompt through while a handoff is scheduled', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
