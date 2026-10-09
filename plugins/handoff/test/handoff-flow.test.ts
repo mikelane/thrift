@@ -394,3 +394,12 @@ test('It leaves note out of a record that is not a clear', ACT, async ($, on) =>
   await world.clock.settle()
   expect(lastRecord(world).trigger_values).not.toHaveProperty('note')
 })
+
+test('It writes the deny reason to the debug log when the append is refused', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.debugLines).toContain('handoff: append denied: refused')
+})

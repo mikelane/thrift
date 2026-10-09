@@ -348,7 +348,9 @@ const clearSession = async ($: EngineInterface): Promise<boolean> => {
 const appendNote = async ($: EngineInterface, message: string): Promise<boolean> => {
   try {
     const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: message }] } })
-    return appended.deny === undefined
+    if (appended.deny === undefined) return true
+    debug($, `append denied: ${appended.deny}`)
+    return false
     // The test kit cannot make the default append reject: a throwing session.append hook is treated as a hook failure,
     // and the plugin sees a successful append. Whether the live default append can reject is unverified.
     // Keep it: without it, a rejected append skips the prompt fallback and drops the handoff note.
@@ -424,8 +426,16 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   }
 }
 
-const runHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+const runHandoff = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  beforeRun?: () => Promise<void>,
+) => {
   try {
+    // SAFETY: beforeRun is emptyBoxIfHolding, which catches its own failures, so no test can make it throw.
+    // It runs inside the try so a future beforeRun that throws still releases the claim.
+    await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     if (!(await clearSession($))) {
@@ -452,10 +462,7 @@ const scheduleHandoff = (
   if (!claim(state, 'handoff')) return false
   state.heldPrompt = null
   $.clock.after(0, () => {
-    void logFailure($, (async () => {
-      await beforeRun?.()
-      await runHandoff($, state, request)
-    })())
+    void logFailure($, runHandoff($, state, request, beforeRun))
   })
   return true
 }
