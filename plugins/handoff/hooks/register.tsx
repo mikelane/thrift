@@ -30,6 +30,7 @@ import {
   handoffMessage,
   holdsPrompt,
   joinPrompts,
+  noteInBoxMessage,
   noteNotCarriedMessage,
   withoutPrompt,
 } from './handoff-note'
@@ -354,16 +355,25 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<boolean> => {
+type Carried = 'submitted' | 'in_box' | 'not_carried'
+
+const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
   try {
     await $.prompt.submit({ text })
-    return true
+    return 'submitted'
   } catch (error) {
     debug($, `could not send the prompt: ${String(error)}`)
-    if (!isUnattended && (await refillBox($, text))) return true
+    if (!isUnattended && (await refillBox($, text))) return 'in_box'
     keepInTranscript($, text)
-    return false
+    return 'not_carried'
   }
+}
+
+const FINAL_MESSAGES: Record<Carried | 'appended', (oldId: string) => string> = {
+  appended: handedOffMessage,
+  submitted: handedOffMessage,
+  in_box: noteInBoxMessage,
+  not_carried: noteNotCarriedMessage,
 }
 
 const announce = ($: EngineInterface, message: string) => {
@@ -381,13 +391,13 @@ const continueInFreshSession = async (
   await registerHandoffCommand($)
   const message = handoffMessage(oldId, note)
   const isStored = await appendNote($, message)
-  if (isStored) announce($, handedOffMessage(oldId))
+  if (isStored) announce($, FINAL_MESSAGES.appended(oldId))
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
   if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
   const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
   if (prompt === undefined) return
-  const isCarried = await sendOrKeepInBox($, prompt, request.isUnattended)
-  if (!isStored) announce($, isCarried ? handedOffMessage(oldId) : noteNotCarriedMessage(oldId))
+  const noteDelivery = await sendOrKeepInBox($, prompt, request.isUnattended)
+  if (!isStored) announce($, FINAL_MESSAGES[noteDelivery](oldId))
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {

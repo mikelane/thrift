@@ -80,6 +80,7 @@ test('It leads the final transcript line with the fresh session continuing from 
 
 test('It leads the final toast with the fresh session continuing from the note', ACT, async ($, on) => {
   const world = await handedOff($, on)
+  expect(world.effects).not.toContain(`log:${NOT_CARRIED_OVER}`)
   expect(world.effects).toContain('toast:Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session')
 })
 
@@ -289,8 +290,10 @@ test('It runs /handoff on an untested engine', async ($, on) => {
 
 const HANDED_OFF =
   'Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session'
+const IN_THE_BOX =
+  'Handed off. The note summarizing the previous session is in your prompt box. Press Enter to send it. To reopen the full previous conversation: claude --resume old-session'
 const NOT_CARRIED_OVER =
-  'The handoff note could not be added to the new session. The previous conversation is unchanged: claude --resume old-session'
+  'The handoff note could not be added to this session. The previous conversation is unchanged: claude --resume old-session'
 
 const refuseEveryWayToCarryTheNote = (world: World) => {
   world.appendDenied = true
@@ -298,28 +301,36 @@ const refuseEveryWayToCarryTheNote = (world: World) => {
   world.fillRefusal = 'dialog'
 }
 
-test('It reports the handoff once the note is appended', ACT, async ($, on) => {
-  const world = await handedOff($, on)
-  expect(world.effects).toContain(`log:${HANDED_OFF}`)
-})
-
-test('It reports the handoff once the note is submitted after a refused append', ACT, async ($, on) => {
+test('It reports the handoff when the note is submitted after a refused append', ACT, async ($, on) => {
   const world = install($, on)
   world.appendDenied = true
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
   expect(world.effects).toContain(`log:${HANDED_OFF}`)
+  expect(world.effects).not.toContain(`log:${NOT_CARRIED_OVER}`)
 })
 
-test('It reports the handoff once the note is in the box after a refused append and send', ACT, async ($, on) => {
+test('It says the note waits in the prompt box when the append and the send are refused', ACT, async ($, on) => {
   const world = install($, on)
   world.appendDenied = true
   world.submitThrows = true
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.effects).toContain(`log:${HANDED_OFF}`)
+  expect(world.effects).toContain(`log:${IN_THE_BOX}`)
+  expect(world.effects).toContain(`toast:${IN_THE_BOX}`)
+})
+
+test('It does not claim the session starts from the note when the note only waits in the prompt box', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  world.submitThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).not.toContain(`log:${HANDED_OFF}`)
+  expect(world.effects).not.toContain(`log:${NOT_CARRIED_OVER}`)
 })
 
 test('It does not claim the session starts from the note when it could not be appended, sent, or put in the box', ACT, async ($, on) => {

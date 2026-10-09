@@ -61,13 +61,16 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    3. If `compactBeforeClear` is on, compact the old session. A failed or vetoed compaction is
       logged and the handoff goes on.
    4. Run `/clear`.
-   5. Append the handoff as a message the model reads and you do not see, prefixed "Handoff from
-      the previous session (&lt;id&gt;), written by Claude just before a /clear".
-   6. Once the note is appended, submitted, or put in the prompt box, write a transcript line and a
-      toast with the same text: "Handed off. This session starts from a note summarizing the
-      previous one. To reopen the full previous conversation: `claude --resume <id>`". If the note
-      reached the session by none of those, the text is "The handoff note could not be added to the
-      new session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
+   5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
+      (&lt;id&gt;), written by Claude just before a /clear".
+   6. Say what happened to the note, in a transcript line and a toast with the same text. If it was
+      appended, or the append was refused and it was submitted as a prompt: "Handed off. This session
+      starts from a note summarizing the previous one. To reopen the full previous conversation:
+      `claude --resume <id>`". If both were refused and it was put in the prompt box instead, the
+      note is not sent until you press Enter: "Handed off. The note summarizing the previous session
+      is in your prompt box. Press Enter to send it. To reopen the full previous conversation:
+      `claude --resume <id>`". If nothing could carry it: "The handoff note could not be added to
+      this session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
    7. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
