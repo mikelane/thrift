@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, On } from 'claude-code'
+import type { ModelForkResult, On, SessionCompactResult } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
 import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
@@ -589,4 +589,88 @@ test('It logs nothing about waiting when no turn is running', async ($, on) => {
   const { world, finishNote } = await writingTheNote($, on)
   await finishNote()
   expect(world.debugLines.filter(line => line.includes('running turn'))).toEqual([])
+})
+
+// Records written after the person resumed another session still belong to the session the handoff started in.
+const RECORD_KEYS = ['action', 'component', 'engine_version', 'mode', 'session_id', 'trigger_values', 'ts']
+
+const resumeDuringCompaction = ($: Engine, world: World, compaction: () => Promise<SessionCompactResult>) => {
+  world.compact = async () => {
+    world.sessionId = 'resumed-session'
+    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    return compaction()
+  }
+}
+
+test('It logs no_handoff_written against the current session with the standard record keys', async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'no_handoff_written' } })
+  expect(Object.keys(lastRecord(world)).sort()).toEqual(RECORD_KEYS)
+})
+
+test('It logs handoff_failed against the current session when the first id read is refused', async ($, on) => {
+  const world = install($, on)
+  world.sessionIdDenials = 1
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'handoff_failed' } })
+})
+
+test('It logs clear_failed against the handoff session and keeps sessionId out of trigger_values', async ($, on) => {
+  const world = install($, on)
+  world.clearThrows = true
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'clear_failed', is_background_busy: false } })
+  expect(Object.keys(lastRecord(world).trigger_values)).not.toContain('sessionId')
+})
+
+test('It keeps the point and context tokens of the decision on the background_busy abandon', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(lastRecord(world)).toMatchObject({
+    session_id: 'old-session',
+    trigger_values: { reason: 'background_busy', point: 'turn-end', context_tokens: 200_000 },
+  })
+})
+
+test('It records only scalars in trigger_values on the background_busy abandon', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  const objectValues = Object.values(lastRecord(world).trigger_values).filter(value => typeof value === 'object')
+  expect(objectValues).toEqual([])
+})
+
+test('It logs compaction_failed against the session the handoff started in when resumed during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  resumeDuringCompaction($, world, async () => {
+    throw new Error('compaction lost its session')
+  })
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  const failed = world.records.filter(record => record.trigger_values.reason === 'compaction_failed')
+  expect(failed.map(record => record.session_id)).toEqual(['old-session'])
+})
+
+test('It logs compaction_vetoed against the session the handoff started in when resumed during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  resumeDuringCompaction($, world, async () => ({ skip: 'vetoed by a hook' }))
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  const vetoed = world.records.filter(record => record.trigger_values.reason === 'compaction_vetoed')
+  expect(vetoed.map(record => record.session_id)).toEqual(['old-session'])
+})
+
+test('It logs the cleared record against the handoff session after compacting', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', action: 'cleared' })
 })

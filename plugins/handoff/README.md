@@ -292,7 +292,7 @@ the log, and nothing from it is written into the session.
 | Field | Values |
 |---|---|
 | `ts` | ISO 8601 UTC |
-| `session_id` | The session the decision is about. A `cleared` record carries the old session's id. |
+| `session_id` | The session the decision is about. A `cleared` record, and any record a handoff writes after the wait (an abandon, a failed or vetoed compaction), carries the id of the session the handoff started in, even if the session changed meanwhile. |
 | `component` | Always `handoff` |
 | `mode` | `shadow` only when `action` is `none` and the plugin ran in `off`, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. `trigger_values.setting` still shows what you configured. A record for `/handoff` is always `active`, because you asked for it. |
 | `action` | `none`, `advised` (a band was shown), `cleared`, `compacted`, or `untested_engine` |

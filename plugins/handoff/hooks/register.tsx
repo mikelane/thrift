@@ -381,13 +381,15 @@ const writeNote = async ($: EngineInterface): Promise<string | null> => {
   }
 }
 
-const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
+const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger, sessionId: string) => {
   try {
     const compaction = await $.session.compact()
-    if (compaction.skip !== undefined) await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
+    if (compaction.skip !== undefined) {
+      await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
+    }
   } catch (error) {
     debug($, `compaction before the clear failed: ${String(error)}`)
-    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed' })
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
   }
 }
 
@@ -525,7 +527,7 @@ const runHandoff = async (
       if (state.sessionEndBeforeClear !== null) break
       if (!isCompacted) {
         isCompacted = true
-        await compactBeforeClearing($, state, request.trigger)
+        await compactBeforeClearing($, state, request.trigger, prepared.oldId)
         continue
       }
       if (!mustRefuseWhenBusy) break
