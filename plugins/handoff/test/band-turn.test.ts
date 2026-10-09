@@ -437,7 +437,7 @@ test('It keeps a band whose busy state is unchanged after an interrupted turn', 
   await submitPerson($, 'keep going')
   await startTurn($)
   await completeTurn($, { reason: 'aborted' })
-  expect(await buttonLabels(band)).toEqual(['Hand off and clear', 'Compact', 'Not now'])
+  expect(await buttonLabels(band)).toEqual(['Compact', 'Hand off and clear', 'Not now'])
 })
 
 test('It draws no band after an interrupted turn when none was up', ASK, async ($, on) => {
@@ -539,7 +539,7 @@ test('It offers Hand off again after an interrupted turn once the background wor
   await notify($, 'bg1')
   await startTurn($)
   await completeTurn($, { reason: 'aborted' })
-  expect(await buttonLabels(band)).toEqual(['Hand off and clear', 'Compact', 'Not now'])
+  expect(await buttonLabels(band)).toEqual(['Compact', 'Hand off and clear', 'Not now'])
 })
 
 test('It refreshes the band on a refusal turn end', ASK, async ($, on) => {
@@ -563,7 +563,7 @@ const SHAPES = [
 
 for (const shape of SHAPES) {
   test(`It gives unique hotkeys and one primary for ${JSON.stringify(shape)}`, () => {
-    const controls = bandControls(bandButtons(shape), shape.signal)
+    const controls = bandControls(bandButtons(shape))
     expect(new Set(controls.map(c => c.hotkey)).size).toBe(controls.length)
     expect(controls.filter(c => c.isPrimary)).toHaveLength(1)
   })

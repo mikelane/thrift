@@ -70,13 +70,13 @@ test('It adds a dim line about act mode to the band', ASK, async ($, on) => {
   expect(hint?.props.dimColor).toBe(true)
 })
 
-test('It offers Hand off, Compact, and Not now for a weak signal', ASK, async ($, on) => {
+test('It offers Compact, Hand off, and Not now for a weak signal', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   const band = await mountBand($)
-  expect(await labelsOf(band)).toEqual(['Hand off and clear', 'Compact', 'Not now'])
+  expect(await labelsOf(band)).toEqual(['Compact', 'Hand off and clear', 'Not now'])
 })
 
 test('It offers no handoff button while background work runs', ASK, async ($, on) => {
@@ -282,15 +282,15 @@ const buttonProps = async (band: Awaited<ReturnType<typeof mountBand>>) =>
     role: props.role,
   }))
 
-test('It draws a weak band as plain buttons with hotkeys h, c and 0', ASK, async ($, on) => {
+test('It draws a weak band as plain buttons with hotkeys c, h and 0', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   const band = await mountBand($)
   expect(await buttonProps(band)).toEqual([
-    { hotkey: 'h', plain: true, variant: undefined, autoFocus: undefined, role: undefined },
     { hotkey: 'c', plain: true, variant: 'primary', autoFocus: true, role: undefined },
+    { hotkey: 'h', plain: true, variant: undefined, autoFocus: undefined, role: undefined },
     { hotkey: '0', plain: true, variant: undefined, autoFocus: undefined, role: 'dismiss' },
   ])
 })

@@ -317,7 +317,7 @@ const respondCases = [
   ],
   [
     { mode: 'ask', signal: 'weak', stoppingPoint: null },
-    { kind: 'advise', holdsPrompt: false, buttons: ['handoff', 'compact', 'not-now'] },
+    { kind: 'advise', holdsPrompt: false, buttons: ['compact', 'handoff', 'not-now'] },
   ],
   [{ mode: 'act', signal: 'weak', stoppingPoint: null }, { kind: 'compact' }],
   [{ mode: 'ask', signal: 'strong', stoppingPoint: 'finished-task', isUnattended: true }, { kind: 'handoff', holdsPrompt: false }],
@@ -357,7 +357,7 @@ const bandButtonCases = [
   [{ signal: 'strong', heldPrompt: true, isBusy: true }, ['send-here']],
   [{ signal: 'strong', heldPrompt: false, isBusy: false }, ['handoff', 'not-now']],
   [{ signal: 'weak', heldPrompt: false, isBusy: true }, ['compact', 'not-now']],
-  [{ signal: 'weak', heldPrompt: false, isBusy: false }, ['handoff', 'compact', 'not-now']],
+  [{ signal: 'weak', heldPrompt: false, isBusy: false }, ['compact', 'handoff', 'not-now']],
 ] as const
 
 for (const [offer, expected] of bandButtonCases) {
