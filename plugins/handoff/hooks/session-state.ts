@@ -59,5 +59,6 @@ export const resetForNewSession = (state: SessionState): void => {
   state.backoffFrom = null
   state.heldPrompt = null
   state.isTurnRunning = false
+  state.isPressing = false
   state.deferredPress = null
 }

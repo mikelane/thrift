@@ -51,6 +51,7 @@ const usedState = () => {
   state.heldPrompt = 'now ENG-2'
   state.hasBand = true
   state.isTurnRunning = true
+  state.isPressing = true
   state.deferredPress = { offer: { signal: 'strong', contextTokens: 200_000, heldPrompt: false, isBusy: false }, button: 'handoff' }
   return state
 }
@@ -69,6 +70,7 @@ test('It clears what the old session learned in resetForNewSession', () => {
     backoffFrom: null,
     heldPrompt: null,
     isTurnRunning: false,
+    isPressing: false,
     deferredPress: null,
   })
 })
