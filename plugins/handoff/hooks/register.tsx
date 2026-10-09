@@ -582,19 +582,19 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
 }
 
 const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, trigger: Trigger, button: Button) => {
-  const held = state.heldPrompt
-  if (held === null) {
+  const heldPrompt = state.heldPrompt
+  if (heldPrompt === null) {
     debug($, `dropped a ${button} press: no prompt is held`)
     $.ui.toast(PROMPT_NOT_HELD)
     return takeDownBand($, state)
   }
   state.heldPrompt = null
   await takeDownBand($, state)
-  await emptyBoxIfHolding($, held)
-  if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })) return
+  await emptyBoxIfHolding($, heldPrompt)
+  if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void logFailure($, sendOrKeepInBox($, held, false))
+    void logFailure($, sendOrKeepInBox($, heldPrompt, false))
   })
 }
 
@@ -677,7 +677,7 @@ const refreshBandBusyState = async ($: EngineInterface, state: SessionState) => 
   }
 }
 
-const drawStatus = ($: EngineInterface, e: RenderInput<'AbovePrompt'>) => {
+const drawWritingStatus = ($: EngineInterface, e: RenderInput<'AbovePrompt'>) => {
   const { Box, Text } = $.ui.resolve(e)
   return (
     <Box flexDirection="column" backgroundColor="subtle">
@@ -711,12 +711,12 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
-  const held = state.heldPrompt
-  const emptyBox = held === null ? undefined : () => emptyBoxIfHolding($, held)
+  const heldPrompt = state.heldPrompt
+  const emptyBox = heldPrompt === null ? undefined : () => emptyBoxIfHolding($, heldPrompt)
   const isClaimed = scheduleHandoff(
     $,
     state,
-    { trigger, ...(held === null ? {} : { heldPrompt: held }), isUnattended: false },
+    { trigger, ...(heldPrompt === null ? {} : { heldPrompt }), isUnattended: false },
     emptyBox,
   )
   return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
@@ -800,7 +800,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const offer = await read($, offerAtom)
     if (e.props.hasSurvey || offer === null) return next(e)
-    return isWriting(offer) ? drawStatus($, e) : drawBand($, state, e, offer)
+    return isWriting(offer) ? drawWritingStatus($, e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
   // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.
