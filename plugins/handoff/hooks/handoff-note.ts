@@ -24,10 +24,10 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
   `The handoff note could not be added to this session. The previous conversation is unchanged: ${resumeCommand(oldSessionId)}`
 
-export const joinPrompts = (handoff: string, held: string | undefined): string =>
-  held ? `${handoff}\n\n${held}` : handoff
-
 const PROMPT_SEPARATOR = '\n\n'
+
+export const joinPrompts = (handoff: string, held: string | undefined): string =>
+  held ? `${handoff}${PROMPT_SEPARATOR}${held}` : handoff
 
 export type HeldPrompt = { text: string; isUnattended: boolean }
 

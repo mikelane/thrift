@@ -65,9 +65,11 @@ const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fr
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent in the fresh session.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
@@ -598,7 +600,8 @@ const returnToBox = async ($: EngineInterface, text: string) => {
 
 // An attachment or context can't be resent, so the prompt waits in the box for the person to send it again.
 const refuseDuringHandoff = ($: EngineInterface, text: string) => {
-  $.ui.toast(REFUSED_DURING_HANDOFF)
+  debug($, 'refused a prompt with attachments or context during the handoff')
+  $.ui.toast(REFUSED_TOAST)
   $.clock.after(0, () => {
     void logFailure($, returnToBox($, text))
   })
@@ -608,12 +611,16 @@ const refuseDuringHandoff = ($: EngineInterface, text: string) => {
 const holdForHandoff = ($: EngineInterface, held: HeldPrompt[], e: PromptSubmitInput) => {
   if ((e.attachments?.length ?? 0) > 0 || (e.context?.length ?? 0) > 0) return refuseDuringHandoff($, e.text)
   held.push({ text: e.text, isUnattended: e.origin.kind === 'scheduled-trigger' })
+  debug($, `held a prompt for the handoff (${held.length} held)`)
   return { drop: HELD_FOR_HANDOFF }
 }
 
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
   // The handoff already carries this text and sends or restores it itself, so a repeat of it would run twice.
-  if (e.text === state.carriedForHandoff) return { drop: HELD_FOR_HANDOFF }
+  if (e.text === state.carriedForHandoff) {
+    debug($, 'dropped a repeat of the prompt the handoff carries')
+    return { drop: REPEAT_NOT_ADDED }
+  }
   if (state.promptsHeldForHandoff !== null) return holdForHandoff($, state.promptsHeldForHandoff, e)
   const isUnattended = e.origin.kind === 'scheduled-trigger'
   state.heldPrompt = null

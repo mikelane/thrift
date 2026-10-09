@@ -51,6 +51,8 @@ const usedState = () => {
   state.backoffFrom = 180_000
   state.pending = 'handoff'
   state.heldPrompt = 'now ENG-2'
+  state.promptsHeldForHandoff = [{ text: 'next thing', isUnattended: false }]
+  state.carriedForHandoff = 'now ENG-2'
   state.hasBand = true
   state.isTurnRunning = true
   state.isPressRunning = true
@@ -71,8 +73,6 @@ test('It clears what the old session learned in resetForNewSession', () => {
     isTurnUnattended: false,
     backoffFrom: null,
     heldPrompt: null,
-    promptsHeldForHandoff: null,
-    carriedForHandoff: null,
     isTurnRunning: false,
     isPressRunning: false,
     deferredPress: null,
@@ -90,5 +90,14 @@ test('It keeps the settings, mode, engine version, pending claim, and band in re
     engineVersion: '2.1.295',
     pending: 'handoff',
     hasBand: true,
+  })
+})
+
+test('It leaves the prompts a handoff holds and carries alone in resetForNewSession, because the clear happens mid-handoff', () => {
+  const state = usedState()
+  resetForNewSession(state)
+  expect(state).toMatchObject({
+    promptsHeldForHandoff: [{ text: 'next thing', isUnattended: false }],
+    carriedForHandoff: 'now ENG-2',
   })
 })

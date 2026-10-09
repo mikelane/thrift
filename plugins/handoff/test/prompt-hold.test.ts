@@ -255,7 +255,7 @@ test('It holds a second prompt and sends it once with the first while a handoff 
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
   const second = await submitPerson($, 'also ENG-3')
-  expect(dropOf(second)).toBe('A handoff is in progress. Your prompt is held and will be sent in the fresh session.')
+  expect(dropOf(second)).toBe('A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.')
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso ENG-3'])

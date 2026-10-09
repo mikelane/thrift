@@ -17,9 +17,11 @@ import {
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent in the fresh session.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
 
 const holdFork = (world: World) => {
@@ -122,7 +124,7 @@ const heldBeforeTheHandoff = async ($: Engine, on: On) => {
   await submitPerson($, 'now ENG-2')
   await runCommand($, 'handoff')
   await world.clock.settle()
-  return { world, finishNote: async () => {
+  return { world, fork, finishNote: async () => {
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
   } }
@@ -198,13 +200,13 @@ test('It passes a prompt sent after the handoff finished', async ($, on) => {
 test('It refuses a prompt with attachments while the note is written', async ($, on) => {
   const { world } = await writingTheNote($, on)
   expect(dropOf(await submitPerson($, 'look', { attachments: IMAGE }))).toBe(REFUSED_DURING_HANDOFF)
-  expect(world.effects).toContain(`toast:${REFUSED_DURING_HANDOFF}`)
+  expect(world.effects).toContain(`toast:${REFUSED_TOAST}`)
 })
 
 test('It refuses a prompt with context while the note is written', async ($, on) => {
   const { world } = await writingTheNote($, on)
   expect(dropOf(await submitPerson($, 'see this', { context: ['@file'] }))).toBe(REFUSED_DURING_HANDOFF)
-  expect(world.effects).toContain(`toast:${REFUSED_DURING_HANDOFF}`)
+  expect(world.effects).toContain(`toast:${REFUSED_TOAST}`)
 })
 
 test('It leaves a refused prompt in the box', async ($, on) => {
@@ -235,6 +237,42 @@ test('It holds a text prompt next to a refused one', async ($, on) => {
   await submitPerson($, 'plain')
   await finishNote()
   expect(entered(world)).toEqual(['entered:plugin:plain'])
+})
+
+test('It logs a held prompt to debug with the count and no text', async ($, on) => {
+  const { world } = await writingTheNote($, on)
+  await submitPerson($, 'secret words')
+  await submitPerson($, 'more words')
+  expect(world.debugLines).toContain('handoff: held a prompt for the handoff (2 held)')
+  expect(world.debugLines.join('\n')).not.toContain('words')
+})
+
+test('It logs a refused prompt to debug without its text', async ($, on) => {
+  const { world } = await writingTheNote($, on)
+  await submitPerson($, 'secret words', { attachments: IMAGE })
+  expect(world.debugLines).toContain('handoff: refused a prompt with attachments or context during the handoff')
+  expect(world.debugLines.join('\n')).not.toContain('words')
+})
+
+test('It logs a dropped repeat of the carried prompt to debug without its text', ASK, async ($, on) => {
+  const { world } = await heldBeforeTheHandoff($, on)
+  await submitPerson($, 'now ENG-2')
+  expect(world.debugLines).toContain('handoff: dropped a repeat of the prompt the handoff carries')
+  expect(world.debugLines.join('\n')).not.toContain('ENG-2')
+})
+
+test('It drops a repeat of the carried prompt with its own message, not the held one', ASK, async ($, on) => {
+  const { world } = await heldBeforeTheHandoff($, on)
+  expect(dropOf(await submitPerson($, 'now ENG-2'))).toBe(REPEAT_NOT_ADDED)
+  expect(world.effects).not.toContain(`toast:${HELD_FOR_HANDOFF}`)
+})
+
+test('It submits the note alone, then the scheduled prompt, when the append is denied and only a scheduled prompt is held', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.appendDenied = true
+  await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+  await finishNote()
+  expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin:nightly job'])
 })
 
 test('It holds a prompt sent while the session is compacted before the clear', { options: { compactBeforeClear: true } }, async ($, on) => {
@@ -274,7 +312,7 @@ test('It puts a person prompt held during an unattended handoff back in the box 
   const { world, failNote } = await unattendedHandoffWriting($, on)
   await submitPerson($, 'actually wait')
   await failNote()
-  expect(world.box.text).toContain('actually wait')
+  expect(world.box.text).toBe('actually wait')
 })
 
 test('It submits the carried scheduled prompt of an unattended handoff when the note fails', ASK, async ($, on) => {
@@ -361,7 +399,7 @@ const repeatingDuringDelivery = async ($: Engine, on: On) => {
 
 test('It drops a repeat of the carried prompt that arrives after the clear', ASK, async ($, on) => {
   const { outcome } = await repeatingDuringDelivery($, on)
-  expect(outcome.drop).toBe(HELD_FOR_HANDOFF)
+  expect(outcome.drop).toBe(REPEAT_NOT_ADDED)
 })
 
 test('It sends the carried prompt once when it is repeated after the clear', ASK, async ($, on) => {
@@ -374,7 +412,7 @@ test('It drops a repeat of the carried prompt that arrives with an attachment an
   const repeat = await submitPerson($, 'now ENG-2', { attachments: IMAGE })
   await finishNote()
   expect([dropOf(repeat), world.box.text, entered(world)]).toEqual([
-    HELD_FOR_HANDOFF,
+    REPEAT_NOT_ADDED,
     '',
     ['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'],
   ])
@@ -413,50 +451,26 @@ test('It keeps one group per origin, ordered by first arrival, in groupHeldPromp
 // Ask mode: "now ENG-2" names new work and is held on the band; /handoff then carries it. A scheduled prompt
 // is held while the note is written, so the handoff settles with two groups: the carried one first.
 const carriedPlusScheduled = async ($: Engine, on: On) => {
-  const world = install($, on)
-  const fork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      fork.release = resolve
-    })
-  world.branch = 'alice/eng-1-start'
-  await startSession($)
-  await growTo200k($, world)
-  await submitPerson($, 'start on ENG-1')
-  await submitPerson($, 'now ENG-2')
-  await runCommand($, 'handoff')
-  await world.clock.settle()
+  const { world, fork } = await heldBeforeTheHandoff($, on)
   await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
   return { world, fork }
 }
 
-// The person sends the carried prompt again while the scheduled group is still being delivered,
-// that is, after the carried prompt has already been put back in the box or refused by the fresh session.
-const repeatWhileScheduledGroupIsDelivered = ($: Engine, world: World) => {
+// The person sends the carried prompt again while the scheduled group is still being delivered: on the submit that
+// follows the carried prompt's own (a restore that fills the box makes none), after it was put back or refused.
+const repeatOnSubmitAfter = ($: Engine, world: World, submitsBefore: number) => {
   const outcome: { repeat: Promise<unknown> | null } = { repeat: null }
-  let isDropping = world.submitDropped
-  Object.defineProperty(world, 'submitThrows', {
-    configurable: true,
-    get: () => {
-      if (outcome.repeat !== null || !world.box.text.includes('now ENG-2')) return false
-      isDropping = false
-      outcome.repeat = submitPerson($, 'now ENG-2')
-      return false
-    },
-  })
-  Object.defineProperty(world, 'submitDropped', {
-    configurable: true,
-    get: () => isDropping,
-    set: (value: boolean) => {
-      isDropping = value
-    },
-  })
+  const repeatCarriedPrompt = () => {
+    world.submitDropped = false
+    outcome.repeat = submitPerson($, 'now ENG-2')
+  }
+  world.submitHooks = [...Array.from({ length: submitsBefore }, () => undefined), repeatCarriedPrompt]
   return outcome
 }
 
 test('It runs here a carried prompt the person re-sends from the box while a failed handoff is still restoring', ASK, async ($, on) => {
   const { world, fork } = await carriedPlusScheduled($, on)
-  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  const outcome = repeatOnSubmitAfter($, world, 0)
   fork.release({ isAnswered: false, reason: 'nothing-to-fork' })
   await world.clock.settle()
   const repeat = await outcome.repeat
@@ -469,7 +483,7 @@ test('It runs here a carried prompt the person re-sends from the box while a fai
 test('It sends a carried prompt the person re-sends from the box after the fresh session refused it', ASK, async ($, on) => {
   const { world, fork } = await carriedPlusScheduled($, on)
   world.submitDropped = true
-  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  const outcome = repeatOnSubmitAfter($, world, 1)
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
   const repeat = await outcome.repeat
@@ -480,7 +494,7 @@ test('It runs a carried prompt the person re-sends from the box after the append
   const { world, fork } = await carriedPlusScheduled($, on)
   world.appendDenied = true
   world.submitDropped = true
-  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  const outcome = repeatOnSubmitAfter($, world, 1)
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
   const repeat = await outcome.repeat
