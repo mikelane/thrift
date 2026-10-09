@@ -397,6 +397,18 @@ test('It writes an unattended prompt to the transcript when it cannot be sent af
   expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
 })
 
+test('It announces the note was not carried and not handed off when an unattended handoff can neither append nor send', ACT, async ($, on) => {
+  const world = await ready($, on)
+  world.appendDenied = true
+  world.submitThrows = true
+  await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+  await world.clock.settle()
+  const logged = world.effects.filter(effect => effect.startsWith('log:') && effect.includes('claude --resume'))
+  expect(logged).toEqual([
+    'log:The handoff note could not be added to this session. The previous conversation is unchanged: claude --resume old-session',
+  ])
+})
+
 test('It writes an unattended prompt to the transcript when the handoff fails and it cannot be sent', ACT, async ($, on) => {
   const world = await ready($, on)
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })

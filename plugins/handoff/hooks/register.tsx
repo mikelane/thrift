@@ -33,6 +33,7 @@ import {
   noteInBoxMessage,
   noteNotCarriedMessage,
   withoutPrompt,
+  type NoteDelivery,
 } from './handoff-note'
 import { createState, resetForNewSession, type ButtonPress, type SessionState } from './session-state'
 import {
@@ -79,6 +80,7 @@ type Trigger = {
 type Evaluation = Trigger & {
   action: DecisionAction
   reason?: string
+  note?: NoteDelivery
   sessionId?: string
 }
 
@@ -99,7 +101,7 @@ const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, sessionId } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
@@ -124,6 +126,7 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
         setting: state.setting,
         cache_read_tokens: cacheReadTokens,
         ...(reason ? { reason } : {}),
+        ...(note ? { note } : {}),
       },
     })
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
@@ -355,7 +358,7 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type Carried = 'submitted' | 'in_box' | 'not_carried'
+type Carried = Exclude<NoteDelivery, 'appended'>
 
 const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
   try {
@@ -369,7 +372,7 @@ const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: b
   }
 }
 
-const FINAL_MESSAGES: Record<Carried | 'appended', (oldId: string) => string> = {
+const FINAL_MESSAGES: Record<NoteDelivery, (oldId: string) => string> = {
   appended: handedOffMessage,
   submitted: handedOffMessage,
   in_box: noteInBoxMessage,
@@ -381,6 +384,11 @@ const announce = ($: EngineInterface, message: string) => {
   $.ui.toast(message)
 }
 
+const deliverNote = async ($: EngineInterface, request: HandoffRequest, message: string): Promise<NoteDelivery> =>
+  (await appendNote($, message))
+    ? 'appended'
+    : sendOrKeepInBox($, joinPrompts(message, request.heldPrompt), request.isUnattended)
+
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
@@ -389,15 +397,12 @@ const continueInFreshSession = async (
   note: string,
 ) => {
   await registerHandoffCommand($)
-  const message = handoffMessage(oldId, note)
-  const isStored = await appendNote($, message)
-  if (isStored) announce($, FINAL_MESSAGES.appended(oldId))
-  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
-  if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
-  const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
-  if (prompt === undefined) return
-  const noteDelivery = await sendOrKeepInBox($, prompt, request.isUnattended)
-  if (!isStored) announce($, FINAL_MESSAGES[noteDelivery](oldId))
+  const noteDelivery = await deliverNote($, request, handoffMessage(oldId, note))
+  announce($, FINAL_MESSAGES[noteDelivery](oldId))
+  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
+  if (request.heldPrompt === undefined) return
+  await inspectPrompt($, state, request.heldPrompt)
+  if (noteDelivery === 'appended') await sendOrKeepInBox($, request.heldPrompt, request.isUnattended)
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {

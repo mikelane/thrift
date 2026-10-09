@@ -351,3 +351,46 @@ test('It says the note was not carried over, with the resume command, when nothi
   expect(world.effects).toContain(`log:${NOT_CARRIED_OVER}`)
   expect(world.effects).toContain(`toast:${NOT_CARRIED_OVER}`)
 })
+
+test('It logs note appended in the cleared record when the append is stored', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'appended' } })
+})
+
+test('It logs note submitted in the cleared record when the note is sent after a refused append', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'submitted' } })
+})
+
+test('It logs note in_box in the cleared record when the note waits in the prompt box', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  world.submitThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'in_box' } })
+})
+
+test('It logs note not_carried in the cleared record when nothing could carry the note', ACT, async ($, on) => {
+  const world = install($, on)
+  refuseEveryWayToCarryTheNote(world)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.records).toHaveLength(1)
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'not_carried' } })
+})
+
+test('It leaves note out of a record that is not a clear', ACT, async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('note')
+})

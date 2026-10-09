@@ -8,6 +8,8 @@ Cover, under short headings:
 - Facts the next session would otherwise rediscover.
 Use plain Markdown, at most 400 words, and no preamble.`
 
+export type NoteDelivery = 'appended' | 'submitted' | 'in_box' | 'not_carried'
+
 export const handoffMessage = (oldSessionId: string, note: string): string =>
   `Handoff from the previous session (${oldSessionId}), written by Claude just before a /clear:\n\n${note}`
 
