@@ -9,9 +9,11 @@ import type {
   TurnCompleteInput,
 } from 'claude-code'
 
-import type { BandState, Offer } from '../types'
+import type { BandState, Offer, Writing } from '../types'
 import {
   BUTTON_LABELS,
+  WAITING,
+  WAITING_STATUS,
   WRITING,
   WRITING_STATUS,
   bandControls,
@@ -21,6 +23,7 @@ import {
   isSameOffer,
   isWriting,
   offerWithBusyState,
+  statusText,
 } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
@@ -482,6 +485,11 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   }
 }
 
+const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
+  await redrawBand($, state, WAITING)
+  $.ui.toast(WAITING_STATUS)
+}
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -495,14 +503,25 @@ const runHandoff = async (
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     // SAFETY: no await sits between the last isTurnRunning read and the $.command.run inside clearSession. Every awaited
-    // step before the clear (the compaction, the busy check) is followed by another pass through the wait, and the loop
-    // resumes straight from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's first step is the
-    // synchronous command call. Do not add an await after the loop, or move the clear behind a helper that awaits first.
+    // step before the clear (the waiting status, the compaction, the busy check) is followed by another pass through the
+    // wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's
+    // first step is the synchronous command call. Do not add an await after the loop, or move the clear behind a helper
+    // that awaits first.
     const mustRefuseWhenBusy = request.trigger.point !== 'command'
     let isCompacted = !state.compactBeforeClear
     let isBusy = false
+    let hasShownWaiting = false
     for (;;) {
-      while (state.isTurnRunning) await waitForTurnEnd(state)
+      while (state.isTurnRunning) {
+        if (!hasShownWaiting) {
+          hasShownWaiting = true
+          debug($, 'waiting for a running turn to end before the clear')
+          await showWaitingStatus($, state)
+          continue
+        }
+        await waitForTurnEnd(state)
+        debug($, 'resumed after the wait for a running turn')
+      }
       if (state.sessionEndBeforeClear !== null) break
       if (!isCompacted) {
         isCompacted = true
@@ -818,11 +837,11 @@ const refreshBandBusyState = async ($: EngineInterface, state: SessionState) => 
   }
 }
 
-const drawWritingStatus = ($: EngineInterface, e: RenderInput<'AbovePrompt'>) => {
+const drawWritingStatus = ($: EngineInterface, e: RenderInput<'AbovePrompt'>, band: Writing) => {
   const { Box, Text } = $.ui.resolve(e)
   return (
     <Box flexDirection="column" backgroundColor="subtle">
-      <Text>{WRITING_STATUS}</Text>
+      <Text>{statusText(band)}</Text>
     </Box>
   )
 }
@@ -947,7 +966,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const offer = await read($, offerAtom)
     if (e.props.hasSurvey || offer === null) return next(e)
-    return isWriting(offer) ? drawWritingStatus($, e) : drawBand($, state, e, offer)
+    return isWriting(offer) ? drawWritingStatus($, e, offer) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
   // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.

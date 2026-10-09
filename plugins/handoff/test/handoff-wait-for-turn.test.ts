@@ -565,3 +565,28 @@ test('It logs session_ended against the session the handoff started in', async (
   await world.clock.settle()
   expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'session_ended' } })
 })
+
+test('It logs to debug when the handoff starts waiting for a running turn', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before the clear')
+})
+
+test('It logs to debug once when a second turn starts during the wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await completeTurn($)
+  await startTurn($)
+  await world.clock.settle()
+  expect(world.debugLines.filter(line => line.includes('waiting for a running turn'))).toHaveLength(1)
+})
+
+test('It logs to debug when the handoff resumes after the wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endTurn($, world)
+  expect(world.debugLines).toContain('handoff: resumed after the wait for a running turn')
+})
+
+test('It logs nothing about waiting when no turn is running', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await finishNote()
+  expect(world.debugLines.filter(line => line.includes('running turn'))).toEqual([])
+})

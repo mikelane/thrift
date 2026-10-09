@@ -54,13 +54,17 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
       first. Presses and hotkeys do nothing while it is up.
       It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
+      While a turn is running (step 3) it reads "Handoff note written. It clears when the current turn
+      ends. Your prompts stay held.", and that text is a toast too.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open
       threads, the next concrete step, and facts the next session would otherwise rediscover, in
       at most 400 words of plain Markdown.
    3. If a turn is running (one a peer or a finished background task started, or one that was queued
-      before the handoff), wait for it to end, however long that takes. The Writing status stays up
-      and person prompts stay held meanwhile. The wait has no limit.
+      before the handoff), wait for it to end, however long that takes. The wait has no limit. When
+      the wait begins, the status line changes to the waiting text and a toast shows it once. Person
+      prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
+      the debug log when it begins and when it ends.
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
       turn started during the compaction, go back to step 3.
@@ -160,8 +164,9 @@ Special cases:
 - **Turns started by something other than a person.** A peer prompt or a finished background
   task is not held, and a finished task is still marked done. If it starts a turn while the handoff
   is pending, the handoff waits for that turn to end before it clears (step 3).
-- **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while the handoff waits for a turn, or
-  while the session is compacted before the clear is held, so `/clear` never runs inside its turn.
+- **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while
+  the handoff waits for a turn, or while the session is compacted before the clear is held, so
+  `/clear` never runs inside its turn.
   - Held: after the clear it is sent in the fresh session, after the note.
   - Grouped by sender: prompts from the same kind of sender (a person, or a scheduled trigger) are
     joined with a blank line, in the order they arrived, and sent as one. Each kind follows its own
@@ -350,7 +355,7 @@ terminal and have not been watched yet:
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
 - That `claude --resume <old id>` reopens the old session after a handoff.
-- That the status line shows during the wait and is gone after the clear, and that no `handoff:`
+- That the status lines (writing, then waiting for a turn) show and are gone after the clear, and that no `handoff:`
   appears twice in a transcript line or toast.
 - Whether the appended note shows in the fresh session's transcript, or only in its context. If it
   does not show, a "note loaded" line would be needed; none is written yet.
@@ -378,4 +383,4 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
 | `hooks/session-state.ts` | The per-session state object |
-| `types/index.d.ts` | The band's atom: an `Offer`, or the writing status |
+| `types/index.d.ts` | The band's atom: an `Offer`, or a status line (writing the note, or waiting for a turn) |

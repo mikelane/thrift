@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, SessionCompactResult } from 'claude-code'
+import type { ModelForkResult, On, SessionCompactResult } from 'claude-code'
 
 import {
   answered,
@@ -21,6 +21,7 @@ const ASK = { options: { handoffMode: 'ask' } } as const
 const ACT = { options: { handoffMode: 'act' } } as const
 
 const STATUS = 'Writing a handoff note — this takes a few seconds…'
+const WAITING = 'Handoff note written. It clears when the current turn ends. Your prompts stay held.'
 
 // The fork stays unanswered until the test releases it, so the band can be read while the note is being written.
 const holdFork = (world: World) => {
@@ -375,4 +376,69 @@ test('It answers /handoff from the bridge with already-in-progress while the com
   expect(boxTextBefore).toBe(HELD_PROMPT)
   expect(world.effects).not.toContain('fork')
   expect(commandReply).toEqual({ text: 'A handoff or compaction is already in progress.' })
+})
+
+// The note is written while a turn runs, so the handoff waits for that turn to end before it clears.
+const waitingForATurn = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const release = holdFork(world)
+  await startSession($)
+  await startTurn($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  release(answered('The handoff note.'))
+  await world.clock.settle()
+  return world
+}
+
+const toastCount = (world: World, text: string) => world.effects.filter(effect => effect === `toast:${text}`).length
+
+test('It shows the waiting status instead of the writing status while the handoff waits for a turn', async ($, on) => {
+  await waitingForATurn($, on)
+  expect(await shownText(await mountBand($))).toEqual([WAITING])
+})
+
+test('It shows no buttons while the handoff waits for a turn', async ($, on) => {
+  await waitingForATurn($, on)
+  expect(await buttonCount(await mountBand($))).toBe(0)
+})
+
+test('It keeps the writing status while the note is written even when a turn is running', async ($, on) => {
+  const world = install($, on)
+  holdFork(world)
+  await startSession($)
+  await startTurn($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(await shownText(await mountBand($))).toEqual([STATUS])
+})
+
+test('It toasts the waiting status once when the handoff starts to wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  expect(toastCount(world, WAITING)).toBe(1)
+})
+
+test('It toasts the waiting status once when a second turn starts during the wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await completeTurn($)
+  await startTurn($)
+  await world.clock.settle()
+  expect(toastCount(world, WAITING)).toBe(1)
+})
+
+test('It neither shows nor toasts the waiting status when no turn is running', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(toastCount(world, WAITING)).toBe(0)
+})
+
+test('It takes the waiting status down once the clear runs', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  const band = await mountBand($)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+  expect(await shownText(band)).toEqual(['engine band'])
 })
