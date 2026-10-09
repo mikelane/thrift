@@ -27,6 +27,11 @@ export const noteNotCarriedMessage = (oldSessionId: string): string =>
 export const joinPrompts = (handoff: string, held: string | undefined): string =>
   held ? `${handoff}\n\n${held}` : handoff
 
+const PROMPT_SEPARATOR = '\n\n'
+
+export const joinHeldPrompts = (prompts: readonly string[]): string | undefined =>
+  prompts.length === 0 ? undefined : prompts.join(PROMPT_SEPARATOR)
+
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 
 export const withoutPrompt = (draft: string, prompt: string): string | null => {

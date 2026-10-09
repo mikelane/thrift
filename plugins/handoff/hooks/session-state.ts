@@ -22,6 +22,7 @@ export type SessionState = Settings & {
   backoffFrom: number | null
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
+  promptsHeldForHandoff: string[] | null
   hasBand: boolean
   isTurnRunning: boolean
   isPressRunning: boolean
@@ -42,6 +43,7 @@ export const createState = (settings: Settings): SessionState => ({
   backoffFrom: null,
   pending: null,
   heldPrompt: null,
+  promptsHeldForHandoff: null,
   hasBand: false,
   isTurnRunning: false,
   isPressRunning: false,

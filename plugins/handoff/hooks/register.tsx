@@ -29,6 +29,7 @@ import {
   handedOffMessage,
   handoffMessage,
   holdsPrompt,
+  joinHeldPrompts,
   joinPrompts,
   noteInBoxMessage,
   noteNotCarriedMessage,
@@ -63,6 +64,9 @@ const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fr
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent in the fresh session.'
+const REFUSED_DURING_HANDOFF =
+  'A handoff is in progress, so a prompt with attachments or context cannot be held. It is back in your prompt box. Send it again after the handoff.'
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
@@ -310,6 +314,13 @@ const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boo
   await submitOrKeepInTranscript($, text)
 }
 
+// Once taken, a prompt that arrives is no longer held: it belongs to the fresh session, or to the old one if the handoff failed.
+const takeHeldPrompts = (state: SessionState, request: HandoffRequest): HandoffRequest => {
+  const held = joinHeldPrompts(state.promptsHeldForHandoff ?? [])
+  state.promptsHeldForHandoff = null
+  return { trigger: request.trigger, isUnattended: request.isUnattended, ...(held === undefined ? {} : { heldPrompt: held }) }
+}
+
 const abandonHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -417,14 +428,14 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
     const oldId = await $.session.id()
     const note = await writeNote($)
     if (note === null) {
-      await abandonHandoff($, state, request, 'no_handoff_written', 'No handoff was written. This session is unchanged.')
+      await abandonHandoff($, state, takeHeldPrompts(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.')
       return null
     }
     if (state.compactBeforeClear) await compactBeforeClearing($, state, request.trigger)
     return { oldId, note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, request, 'handoff_failed', 'No handoff was written. This session is unchanged.')
+    await abandonHandoff($, state, takeHeldPrompts(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.')
     return null
   }
 }
@@ -441,17 +452,20 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    if (!(await clearSession($))) {
+    const isCleared = await clearSession($)
+    const settled = takeHeldPrompts(state, request)
+    if (!isCleared) {
       return await abandonHandoff(
         $,
         state,
-        request,
+        settled,
         'clear_failed',
         'The handoff was written but /clear failed. This session is unchanged.',
       )
     }
-    await continueInFreshSession($, state, request, prepared.oldId, prepared.note)
+    await continueInFreshSession($, state, settled, prepared.oldId, prepared.note)
   } finally {
+    state.promptsHeldForHandoff = null
     state.pending = null
   }
 }
@@ -464,6 +478,7 @@ const scheduleHandoff = (
 ): boolean => {
   if (!claim(state, 'handoff')) return false
   state.heldPrompt = null
+  state.promptsHeldForHandoff = request.heldPrompt === undefined ? [] : [request.heldPrompt]
   $.clock.after(0, () => {
     void logFailure($, runHandoff($, state, request, beforeRun))
   })
@@ -554,7 +569,28 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
   return { drop: HELD_PROMPT }
 }
 
+const returnToBox = async ($: EngineInterface, text: string) => {
+  if (!(await refillBox($, text))) keepInTranscript($, text)
+}
+
+// An attachment or context can't be resent, so the prompt waits in the box for the person to send it again.
+const refuseDuringHandoff = ($: EngineInterface, text: string) => {
+  $.ui.toast(REFUSED_DURING_HANDOFF)
+  $.clock.after(0, () => {
+    void logFailure($, returnToBox($, text))
+  })
+  return { drop: REFUSED_DURING_HANDOFF }
+}
+
+// A prompt sent again while it is already held is the same prompt, so it is held once.
+const holdForHandoff = ($: EngineInterface, held: string[], e: PromptSubmitInput) => {
+  if ((e.attachments?.length ?? 0) > 0 || (e.context?.length ?? 0) > 0) return refuseDuringHandoff($, e.text)
+  if (!held.includes(e.text)) held.push(e.text)
+  return { drop: HELD_FOR_HANDOFF }
+}
+
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
+  if (state.promptsHeldForHandoff !== null) return holdForHandoff($, state.promptsHeldForHandoff, e)
   const isUnattended = e.origin.kind === 'scheduled-trigger'
   state.heldPrompt = null
   state.isTurnUnattended = isUnattended

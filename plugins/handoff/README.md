@@ -140,7 +140,13 @@ Special cases:
 - **Prompts never held.** A prompt that carries context or attachments (only its text can be
   resent), a prompt typed while a turn is running, a prompt from a plugin or another session (only
   the person origins `composer`, `bridge`, `sdk`, and `scheduled-trigger` count), and any prompt
-  that arrives while a handoff or compaction is pending.
+  that arrives while a compaction is pending.
+- **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
+  session is compacted before the clear) is held, so `/clear` never runs inside its turn. After the
+  clear it is sent in the fresh session after the note. Several prompts are joined with a blank
+  line, in the order they arrived, and sent as one; a prompt sent again while held is sent once. If
+  the handoff fails, they go back in the box like any held prompt. A prompt with attachments or
+  context can't be resent, so it is refused with a toast and left in the box to send again.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 
