@@ -3,6 +3,9 @@ import { expect, test } from 'claude-code/testing'
 import {
   addHeldPrompt,
   beginHandoffHold,
+  beginHandoffStage,
+  beginOwnClear,
+  noteSessionEnd,
   createState,
   endHandoffHold,
   isCarriedByHandoff,
@@ -45,6 +48,8 @@ test('It returns the settings with a closed gate and an empty session from creat
     deferredPress: null,
     hasTurnMissingFromNote: false,
     turnEndWaiter: null,
+    handoffStage: 'idle',
+    sessionEndBeforeClear: null,
   })
 })
 
@@ -306,11 +311,75 @@ test('It does nothing in releaseTurnEndWaiter when no one is waiting', () => {
   expect(() => releaseTurnEndWaiter(state)).not.toThrow()
 })
 
-test('It resolves a waiter in resetForNewSession so none dangles', async () => {
+test('It leaves the waiter pending in resetForNewSession so the handoff resumes after the session end hook', async () => {
   const state = createState(settings)
   startMainTurn(state)
   const waiting = waitForTurnEnd(state)
   resetForNewSession(state)
-  await waiting
-  expect(state.turnEndWaiter).toBeNull()
+  expect(await isPending(waiting)).toBe(true)
+})
+
+test('It enters the before_clear stage and forgets an earlier session end in beginHandoffStage', () => {
+  const state = createState(settings)
+  state.sessionEndBeforeClear = 'other'
+  beginHandoffStage(state)
+  expect(state.handoffStage).toBe('before_clear')
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It enters the own_clear stage in beginOwnClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  expect(state.handoffStage).toBe('own_clear')
+})
+
+test('It returns to idle in endHandoffHold', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  endHandoffHold(state)
+  expect(state.handoffStage).toBe('idle')
+})
+
+test('It records a clear before the handoff clears as the person clearing in noteSessionEnd', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  noteSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBe('cleared_by_person')
+})
+
+test('It records any other end before the handoff clears as other in noteSessionEnd', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  noteSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It lets a later other end outrank a clear in noteSessionEnd', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  noteSessionEnd(state, 'clear')
+  noteSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It keeps other when a clear follows in noteSessionEnd', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  noteSessionEnd(state, 'resume')
+  noteSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It ignores the end the handoff own clear causes in noteSessionEnd', () => {
+  const state = createState(settings)
+  beginHandoffStage(state)
+  beginOwnClear(state)
+  noteSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It ignores a session end when no handoff is pending in noteSessionEnd', () => {
+  const state = createState(settings)
+  noteSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBeNull()
 })

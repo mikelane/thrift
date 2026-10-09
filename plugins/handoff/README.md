@@ -172,6 +172,14 @@ Special cases:
     is dropped with a short toast and is not sent in the fresh session. Its text is put back in the
     prompt box, or shown in the transcript if the box can't take it. After the handoff, send it
     again and add the attachments or context again.
+- **The session ends before the handoff clears.** This covers the note being written, the wait for a
+  turn, and the compaction. The handoff's own `/clear` ends the session too, and that is not counted.
+  - You typed `/clear`: the handoff runs no second clear. The note (with the turn-after-note line, if
+    it applies) and the held prompts go into the fresh session you made, as they would after the
+    handoff's own clear, and the record is `cleared`.
+  - Any other end (`/resume` and so on): the handoff stops. Nothing is cleared and no note is added.
+    A toast says the handoff stopped because the session ended, held prompts go back as they do on
+    any failure, and a `none` record with reason `session_ended` is written.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 
@@ -285,7 +293,7 @@ the log, and nothing from it is written into the session.
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode` (the plugin may act as `off` anyway; see Compatibility) |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
-| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
+| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 
 A prompt is evaluated, and so logged, only when it names new work.

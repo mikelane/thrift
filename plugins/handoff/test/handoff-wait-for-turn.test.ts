@@ -7,6 +7,7 @@ import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, l
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const BUSY_TOAST = 'toast:Background work started, and a handoff would cut it off. Nothing was cleared.'
+const SESSION_ENDED_TOAST = 'toast:The session ended, so the handoff stopped. Nothing was cleared.'
 const COMPACTING = { options: { compactBeforeClear: true } } as const
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
@@ -328,5 +329,115 @@ test('It clears an act-mode handoff when no background work started during the w
   const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
   await finishNote()
   await endTurn($, world)
+  expect(world.effects).toContain('clear')
+})
+
+// The person ends the session while the handoff waits: /clear delivers into their fresh session, anything else abandons.
+const waitingForATurn = async ($: Engine, on: On) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await finishNote()
+  return world
+}
+
+const endSession = ($: Engine, reason: 'resume' | 'other') =>
+  $.session.end({ reason, sessionId: 'old-session', resume: { id: 'old-session' } })
+
+const clearCount = (world: World) => world.effects.filter(effect => effect === 'clear').length
+
+test('It does not clear a session the person resumed while the handoff waited for a turn', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It does not clear a session that ended for another reason while the handoff waited', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'other')
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It adds no note when the session ends while the handoff waits', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(world.appended).toEqual([])
+})
+
+test('It tells the person the handoff stopped when the session ends while it waits', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(world.effects).toContain(SESSION_ENDED_TOAST)
+})
+
+test('It records session_ended when the session ends while the handoff waits', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'session_ended' } })
+})
+
+test('It puts a held prompt back in the box when the session ends while the handoff waits', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await submitPerson($, 'next thing')
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(world.box.text).toBe('next thing')
+})
+
+test('It abandons the handoff when the session ends while the note is written', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await endSession($, 'resume')
+  await finishNote()
+  expect(world.effects).not.toContain('clear')
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'session_ended' } })
+})
+
+test('It runs no second clear after the person typed /clear while the handoff waited', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(clearCount(world)).toBe(1)
+})
+
+test('It delivers the note into the session the person cleared to, with the turn-missing line', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+})
+
+test('It logs cleared when the person cleared while the handoff waited', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+})
+
+test('It sends a held prompt into the session the person cleared to', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await submitPerson($, 'next thing')
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(world.effects).toContain('entered:plugin:next thing')
+})
+
+test('It runs no second clear after the person typed /clear while the note is written', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await runCommand($, 'clear')
+  await finishNote()
+  expect(clearCount(world)).toBe(1)
+  expect(world.appended).toEqual([BASE_MESSAGE])
+})
+
+test('It clears normally after a session ended while no handoff was pending', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await endSession($, 'resume')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
   expect(world.effects).toContain('clear')
 })

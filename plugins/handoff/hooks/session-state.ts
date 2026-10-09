@@ -22,6 +22,15 @@ export type HandoffHold =
   | { phase: 'holding'; heldPrompts: HeldPrompt[]; promptCarriedByHandoff: string | null }
   | { phase: 'delivering'; promptCarriedByHandoff: string }
 
+// Where a handoff stands relative to its own /clear, so the session end that /clear causes is not taken for the person's.
+//   idle:         no handoff.
+//   before_clear: the note is written, awaited, or compacted; the clear has not been issued.
+//   own_clear:    the handoff issued its /clear.
+export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
+
+// What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
+export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
+
 export type SessionState = Settings & {
   mode: Mode
   engineVersion: string
@@ -42,6 +51,8 @@ export type SessionState = Settings & {
   deferredPress: ButtonPress | null
   hasTurnMissingFromNote: boolean
   turnEndWaiter: (() => void) | null
+  handoffStage: HandoffStage
+  sessionEndBeforeClear: SessionEndBeforeClear | null
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -65,6 +76,8 @@ export const createState = (settings: Settings): SessionState => ({
   deferredPress: null,
   hasTurnMissingFromNote: false,
   turnEndWaiter: null,
+  handoffStage: 'idle',
+  sessionEndBeforeClear: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -80,10 +93,10 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnRunning = false
   state.isPressRunning = false
   state.deferredPress = null
-  releaseTurnEndWaiter(state)
 }
 
-// The prompts a handoff holds and carries survive resetForNewSession: the clear happens in the middle of the handoff.
+// The prompts a handoff holds and carries, and its stage, survive resetForNewSession: the clear happens in the middle of
+// the handoff. The turn-end waiter is not released here: the handoff must resume after the session end hook returns.
 
 export const isGroupOfOrigin = (group: HeldPromptGroup, isUnattended: boolean): boolean => group.isUnattended === isUnattended
 
@@ -132,6 +145,23 @@ export const releaseCarriedGroup = (state: SessionState, group: HeldPromptGroup,
 
 export const endHandoffHold = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
+  state.handoffStage = 'idle'
+}
+
+export const beginHandoffStage = (state: SessionState): void => {
+  state.handoffStage = 'before_clear'
+  state.sessionEndBeforeClear = null
+}
+
+export const beginOwnClear = (state: SessionState): void => {
+  state.handoffStage = 'own_clear'
+}
+
+// Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
+export const noteSessionEnd = (state: SessionState, reason: string): void => {
+  if (state.handoffStage !== 'before_clear') return
+  if (state.sessionEndBeforeClear === 'other') return
+  state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
 
 export const startMainTurn = (state: SessionState): void => {

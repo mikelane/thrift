@@ -41,12 +41,15 @@ import {
 import {
   addHeldPrompt,
   beginHandoffHold,
+  beginHandoffStage,
+  beginOwnClear,
   beginNoteWindow,
   createState,
   endHandoffHold,
   endMainTurn,
   isCarriedByHandoff,
   isHoldingForHandoff,
+  noteSessionEnd,
   releaseCarried,
   releaseCarriedGroup,
   releaseTurnEndWaiter,
@@ -83,6 +86,7 @@ const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
+const SESSION_ENDED = 'The session ended, so the handoff stopped. Nothing was cleared.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
@@ -495,6 +499,7 @@ const runHandoff = async (
     let isBusy = false
     for (;;) {
       while (state.isTurnRunning) await waitForTurnEnd(state)
+      if (state.sessionEndBeforeClear !== null) break
       if (!isCompacted) {
         isCompacted = true
         await compactBeforeClearing($, state, request.trigger)
@@ -504,9 +509,20 @@ const runHandoff = async (
       isBusy = await isBackgroundBusy($, state)
       if (!state.isTurnRunning) break
     }
-    if (isBusy) return await abandonHandoff($, state, settleHandoff(state, request), 'background_busy', BUSY_REFUSAL)
+    const sessionEnd = state.sessionEndBeforeClear
+    if (sessionEnd === 'other') {
+      return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED)
+    }
+    if (sessionEnd === null && isBusy) {
+      return await abandonHandoff($, state, settleHandoff(state, request), 'background_busy', BUSY_REFUSAL)
+    }
     const hasTurnAfterNote = state.hasTurnMissingFromNote
-    const isCleared = await clearSession($)
+    // The person already cleared: the fresh session they made takes the note, and no second clear runs.
+    let isCleared = true
+    if (sessionEnd === null) {
+      beginOwnClear(state)
+      isCleared = await clearSession($)
+    }
     const settledHandoff = settleHandoff(state, request)
     if (!isCleared) {
       return await abandonHandoff(
@@ -532,6 +548,7 @@ const scheduleHandoff = (
 ): boolean => {
   if (!claim(state, 'handoff')) return false
   state.heldPrompt = null
+  beginHandoffStage(state)
   beginHandoffHold(
     state,
     request.heldPrompt === undefined ? null : { text: request.heldPrompt, isUnattended: request.isUnattended },
@@ -931,8 +948,11 @@ export const register: Register = (on, options) => {
   }))
 
   on('session.end', async ($, e, next) => {
+    noteSessionEnd(state, e.reason)
     await takeDownBand($, state)
     resetForNewSession(state)
+    // A handoff waiting on a turn resumes in a later tick, so it never runs inside this hook.
+    $.clock.after(0, () => releaseTurnEndWaiter(state))
     if (e.reason === 'clear') {
       $.clock.after(0, () => {
         void logFailure($, registerHandoffCommand($))
