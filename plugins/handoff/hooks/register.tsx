@@ -339,7 +339,11 @@ const abandonHandoff = async (
   await takeDownBand($, state)
   $.ui.toast(message)
   await writeRecord($, state, { ...settled.trigger, action: 'none', reason })
-  for (const { text, isUnattended } of settled.held) await restorePrompt($, text, isUnattended)
+  for (const { text, isUnattended } of settled.held) {
+    await restorePrompt($, text, isUnattended)
+    // The carried group shares the handoff's origin, so once it is back in the box it is no longer a repeat to drop.
+    if (isUnattended === settled.isUnattended) state.carriedForHandoff = null
+  }
 }
 
 const writeNote = async ($: EngineInterface): Promise<string | null> => {
@@ -424,12 +428,17 @@ const continueInFreshSession = async (
 ) => {
   await registerHandoffCommand($)
   const noteDelivery = await deliverNote($, settled, handoffMessage(oldId, note))
+  // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
+  if (noteDelivery !== 'appended') state.carriedForHandoff = null
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   await writeRecord($, state, { ...settled.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
   for (const { text } of settled.held) await inspectPrompt($, state, text)
   const unsent =
     noteDelivery === 'appended' ? settled.held : settled.held.filter(group => group.isUnattended !== settled.isUnattended)
-  for (const { text, isUnattended } of unsent) await sendOrKeepInBox($, text, isUnattended)
+  for (const { text, isUnattended } of unsent) {
+    await sendOrKeepInBox($, text, isUnattended)
+    if (isUnattended === settled.isUnattended) state.carriedForHandoff = null
+  }
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {

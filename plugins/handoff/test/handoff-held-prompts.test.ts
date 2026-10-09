@@ -409,3 +409,69 @@ test('It keeps one group per origin, ordered by first arrival, in groupHeldPromp
     { text: 'p1', isUnattended: false },
   ])
 })
+
+// Ask mode: "now ENG-2" names new work and is held on the band; /handoff then carries it. A scheduled prompt
+// is held while the note is written, so the handoff settles with two groups: the carried one first.
+const carriedPlusScheduled = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
+  world.fork = () =>
+    new Promise<ModelForkResult>(resolve => {
+      fork.release = resolve
+    })
+  world.branch = 'alice/eng-1-start'
+  await startSession($)
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+  return { world, fork }
+}
+
+// The person sends the carried prompt again while the scheduled group is still being delivered,
+// that is, after the carried prompt has already been put back in the box or refused by the fresh session.
+const repeatWhileScheduledGroupIsDelivered = ($: Engine, world: World) => {
+  const outcome: { repeat: Promise<unknown> | null } = { repeat: null }
+  let isDropping = world.submitDropped
+  Object.defineProperty(world, 'submitThrows', {
+    configurable: true,
+    get: () => {
+      if (outcome.repeat !== null || !world.box.text.includes('now ENG-2')) return false
+      isDropping = false
+      outcome.repeat = submitPerson($, 'now ENG-2')
+      return false
+    },
+  })
+  Object.defineProperty(world, 'submitDropped', {
+    configurable: true,
+    get: () => isDropping,
+    set: (value: boolean) => {
+      isDropping = value
+    },
+  })
+  return outcome
+}
+
+test('It runs here a carried prompt the person re-sends from the box while a failed handoff is still restoring', ASK, async ($, on) => {
+  const { world, fork } = await carriedPlusScheduled($, on)
+  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  fork.release({ isAnswered: false, reason: 'nothing-to-fork' })
+  await world.clock.settle()
+  const repeat = await outcome.repeat
+  expect([dropOf(repeat), world.effects.filter(effect => effect.startsWith('entered:'))]).toEqual([
+    undefined,
+    ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
+  ])
+})
+
+test('It sends a carried prompt the person re-sends from the box after the fresh session refused it', ASK, async ($, on) => {
+  const { world, fork } = await carriedPlusScheduled($, on)
+  world.submitDropped = true
+  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  const repeat = await outcome.repeat
+  expect(dropOf(repeat)).toBeUndefined()
+})
