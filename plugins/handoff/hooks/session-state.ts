@@ -1,10 +1,13 @@
-import type { Mode } from './signals'
+import type { Offer } from '../types'
+import type { Button, Mode } from './signals'
 
 type Settings = {
   setting: Mode
   threshold: number
   compactBeforeClear: boolean
 }
+
+export type ButtonPress = { offer: Offer; button: Button }
 
 export type SessionState = Settings & {
   mode: Mode
@@ -20,6 +23,9 @@ export type SessionState = Settings & {
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   hasBand: boolean
+  isTurnRunning: boolean
+  isPressRunning: boolean
+  deferredPress: ButtonPress | null
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -37,6 +43,9 @@ export const createState = (settings: Settings): SessionState => ({
   pending: null,
   heldPrompt: null,
   hasBand: false,
+  isTurnRunning: false,
+  isPressRunning: false,
+  deferredPress: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -49,4 +58,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnUnattended = false
   state.backoffFrom = null
   state.heldPrompt = null
+  state.isTurnRunning = false
+  state.isPressRunning = false
+  state.deferredPress = null
 }

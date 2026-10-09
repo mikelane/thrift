@@ -1,6 +1,5 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND_HINT } from '../hooks/band-text'
 import {
   bash,
   completeTurn,
@@ -8,10 +7,8 @@ import {
   install,
   lastRecord,
   mountBand,
-  notify,
   runStep,
   startSession,
-  submitPerson,
   usageOf,
 } from './helpers'
 
@@ -61,30 +58,16 @@ test('It states the context in thousands and that accuracy drops in a finished-t
   expect(message?.text).toContain('Accuracy drops as context grows.')
 })
 
-test('It takes the band down when the person starts the next turn', ASK, async ($, on) => {
-  const world = install($, on)
-  await startSession($)
-  await finishedTaskTurn($, world)
-  await submitPerson($, 'keep going')
-  const band = await mountBand($)
-  expect(await band.find({ text: 'engine band' })).toBeDefined()
-})
-
-test('It takes the band down when a task notification starts the next turn', ASK, async ($, on) => {
-  const world = install($, on)
-  await startSession($)
-  await finishedTaskTurn($, world)
-  await notify($, 'bg1')
-  const band = await mountBand($)
-  expect(await band.find({ text: 'engine band' })).toBeDefined()
-})
-
 test('It adds a dim line about act mode to the band', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await finishedTaskTurn($, world)
   const band = await mountBand($)
-  expect(await band.find({ text: BAND_HINT })).toBeDefined()
+  const hint = await band.find({
+    type: 'Text',
+    text: /^ctrl\+x Tab, then Enter to hand off\. 0 to dismiss\. Set handoffMode to act in \/config to skip /,
+  })
+  expect(hint?.props.dimColor).toBe(true)
 })
 
 test('It offers Hand off, Compact, and Not now for a weak signal', ASK, async ($, on) => {
@@ -288,4 +271,45 @@ test('It starts the session when the band from before a reload cannot be read', 
   await startSession($)
   expect(world.debugLines.join('\n')).toContain('could not read the band')
   expect(world.effects).toContain('register:handoff')
+})
+
+const buttonProps = async (band: Awaited<ReturnType<typeof mountBand>>) =>
+  (await band.findAll({ type: 'Button' })).map(({ props }) => ({
+    hotkey: props.hotkey,
+    plain: props.plain,
+    variant: props.variant,
+    autoFocus: props.autoFocus,
+    role: props.role,
+  }))
+
+test('It draws a weak band as plain buttons with hotkeys h, c and 0', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  const band = await mountBand($)
+  expect(await buttonProps(band)).toEqual([
+    { hotkey: 'h', plain: true, variant: undefined, autoFocus: undefined, role: undefined },
+    { hotkey: 'c', plain: true, variant: 'primary', autoFocus: true, role: undefined },
+    { hotkey: '0', plain: true, variant: undefined, autoFocus: undefined, role: 'dismiss' },
+  ])
+})
+
+test('It draws the finished-task band with a focused primary h and a dismiss 0', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  const band = await mountBand($)
+  expect(await buttonProps(band)).toEqual([
+    { hotkey: 'h', plain: true, variant: 'primary', autoFocus: true, role: undefined },
+    { hotkey: '0', plain: true, variant: undefined, autoFocus: undefined, role: 'dismiss' },
+  ])
+})
+
+test('It shades the band with the subtle theme color', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  const band = await mountBand($)
+  expect((await band.find({ type: 'Box' }))?.props.backgroundColor).toBe('subtle')
 })

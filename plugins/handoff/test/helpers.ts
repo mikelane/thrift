@@ -242,6 +242,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     return next(e)
   })
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', (_$, e) => {
     if (world.toolMode === 'deny') return { deny: 'blocked' }
@@ -263,6 +264,8 @@ export const runStep = async ($: Engine, world: World, { usage, advisorCalls = 0
   while (!item.done) item = await stream.next()
   return item.value
 }
+
+export const startTurn = ($: Engine) => $.turn.start({ text: 'work', turnId: 't1' })
 
 type Completion = { usage?: TurnUsage; reason?: 'answer' | 'aborted' | 'error'; agentId?: string }
 

@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND_HINT, BUTTON_LABELS, bandMessage } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer } from '../hooks/band-text'
+import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
   [
@@ -41,6 +42,10 @@ const questionCases = [
     'Hand off to a fresh session now?',
   ],
   [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    'A handoff would orphan that work, so send it here?',
+  ],
+  [
     { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
     'A handoff would orphan that work, so compact instead?',
   ],
@@ -75,7 +80,137 @@ for (const [button, label] of labelCases) {
   })
 }
 
-test('It points to handoffMode act in BAND_HINT', () => {
-  expect(BAND_HINT).toContain('handoffMode')
-  expect(BAND_HINT).toContain('act')
+const hintCases = [
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    'ctrl+x Tab, then Enter to compact or h to hand off. 0 to dismiss.',
+  ],
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    'ctrl+x Tab, then Enter to compact. 0 to dismiss.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    'ctrl+x Tab, then Enter to hand off. 0 to dismiss.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    'ctrl+x Tab, then Enter to hand off and send it, or s to send it here.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    'ctrl+x Tab, then Enter to send it here.',
+  ],
+] as const
+
+for (const [offer, hint] of hintCases) {
+  test(`It starts with "${hint}" from bandHint for ${JSON.stringify(offer)}`, () => {
+    expect(bandHint(offer)).toStartWith(hint)
+  })
+
+  test(`It points to handoffMode act from bandHint for ${JSON.stringify(offer)}`, () => {
+    expect(bandHint(offer)).toEndWith('Set handoffMode to act in /config to skip asking.')
+  })
+}
+
+test('It never tells a held-prompt band to type 0 from bandHint', () => {
+  expect(bandHint({ signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false })).not.toContain('0')
 })
+
+const controlCases = [
+  ['strong', ['handoff', 'not-now'], ['h', '0'], 'handoff'],
+  ['weak', ['handoff', 'compact', 'not-now'], ['h', 'c', '0'], 'compact'],
+  ['weak', ['compact', 'not-now'], ['c', '0'], 'compact'],
+  ['strong', ['handoff-send', 'send-here'], ['h', 's'], 'handoff-send'],
+  ['strong', ['send-here'], ['s'], 'send-here'],
+] as const
+
+for (const [signal, buttons, hotkeys, primary] of controlCases) {
+  test(`It returns hotkeys ${hotkeys.join(',')} from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    expect(bandControls(buttons, signal).map(control => control.hotkey)).toEqual(hotkeys)
+  })
+
+  test(`It returns unique hotkeys from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    const keys = bandControls(buttons, signal).map(control => control.hotkey)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  test(`It marks only ${primary} primary from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    expect(bandControls(buttons, signal).filter(control => control.isPrimary).map(control => control.button)).toEqual([primary])
+  })
+}
+
+test('It gives only Not now a digit hotkey from bandControls', () => {
+  const digits = bandControls(['handoff', 'compact', 'not-now'], 'weak').filter(control => /\d/.test(control.hotkey))
+  expect(digits.map(control => control.button)).toEqual(['not-now'])
+})
+
+test('It marks Not now as the dismiss with hotkey 0 from bandControls', () => {
+  const dismiss = bandControls(['handoff', 'not-now'], 'strong').find(control => control.button === 'not-now')
+  expect(dismiss).toEqual({ button: 'not-now', hotkey: '0', isPrimary: false, isDismiss: true })
+})
+
+test('It marks no held-prompt button as dismiss from bandControls', () => {
+  expect(bandControls(['handoff-send', 'send-here'], 'strong').some(control => control.isDismiss)).toBe(false)
+})
+
+const everyShape = [
+  { signal: 'strong', heldPrompt: true, isBusy: false },
+  { signal: 'strong', heldPrompt: true, isBusy: true },
+  { signal: 'strong', heldPrompt: false, isBusy: false },
+  { signal: 'weak', heldPrompt: false, isBusy: true },
+  { signal: 'weak', heldPrompt: false, isBusy: false },
+] as const
+
+for (const shape of everyShape) {
+  test(`It gives every button bandButtons returns a unique hotkey for ${JSON.stringify(shape)}`, () => {
+    const hotkeys = bandControls(bandButtons(shape), shape.signal).map(control => control.hotkey)
+    expect(new Set(hotkeys).size).toBe(bandButtons(shape).length)
+  })
+}
+
+const clearsSessionCases = [
+  ['handoff', true],
+  ['handoff-send', true],
+  ['send-here', false],
+  ['compact', false],
+  ['not-now', false],
+] as const
+
+for (const [button, clears] of clearsSessionCases) {
+  test(`It returns ${clears} for ${button} from clearsSession`, () => {
+    expect(clearsSession(button)).toBe(clears)
+  })
+}
+
+const strongOffer = { signal: 'strong', contextTokens: 150_000, heldPrompt: false, isBusy: false } as const
+
+test('It returns a weak signal for a busy band with no held prompt from offerWithBusyState', () => {
+  expect(offerWithBusyState(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
+})
+
+test('It keeps the signal of a busy band holding a prompt from offerWithBusyState', () => {
+  const held = { ...strongOffer, heldPrompt: true }
+  expect(offerWithBusyState(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
+})
+
+test('It keeps the signal of a band that is not busy from offerWithBusyState', () => {
+  expect(offerWithBusyState({ ...strongOffer, isBusy: true }, 160_000, false)).toEqual({ ...strongOffer, contextTokens: 160_000 })
+})
+
+test('It returns true for offers with equal fields from isSameOffer', () => {
+  expect(isSameOffer(strongOffer, { ...strongOffer })).toBe(true)
+})
+
+const differingOffers = [
+  { ...strongOffer, signal: 'weak' },
+  { ...strongOffer, contextTokens: 1 },
+  { ...strongOffer, heldPrompt: true },
+  { ...strongOffer, isBusy: true },
+] as const
+
+for (const other of differingOffers) {
+  test(`It returns false for ${JSON.stringify(other)} against a strong offer from isSameOffer`, () => {
+    expect(isSameOffer(strongOffer, other)).toBe(false)
+  })
+}

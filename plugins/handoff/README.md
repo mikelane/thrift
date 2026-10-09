@@ -134,12 +134,46 @@ Special cases:
 
 The band draws above the prompt from a typed atom. It states the context in thousands, says that
 accuracy drops as context grows, and varies its wording for a held prompt, a finished task,
-background work, or plain size. In `ask` mode a dim line says that `handoffMode` `act` does this
+background work, or plain size. In `ask` mode a dim hint line says how to answer and that `handoffMode` `act` does this
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
 from being evaluated.
 
-- The band comes down when the next prompt or task notification starts a turn, so a button press
-  can never clear a session in the middle of a turn.
+- The band is shaded and its buttons are drawn plain, like the built-in "Heads up" survey:
+  `h: Hand off and clear`, `c: Compact`, `0: Not now`. Hand off is `h`, Compact is `c`, Send here is
+  `s`, and Not now is `0`. A held-prompt band has `h: Hand off and send it` and `s: Send here`, and no
+  `0`.
+- Only Not now is a digit. A bare digit typed into an empty prompt presses a band button, so a digit
+  on an action would start a handoff when you type `1` to answer one of Claude's numbered
+  questions. Typing `0` into an empty prompt dismisses. The letters work once the band has the
+  keyboard: press ctrl+x Tab, or click a button (fullscreen). The held-prompt band never takes `0`,
+  because the box holds the prompt.
+- The recommended button (Hand off for a strong signal, Compact for a weak one) has `autoFocus` and
+  `variant="primary"`, so ctrl+x Tab then Enter runs it. A plain terminal button draws the same with
+  or without `variant`, so the recommendation shows as the button focus lands on and as the action
+  the hint line names, not as a highlight. A desktop surface draws it as the primary button.
+- The dim hint line is per band and says ctrl+x Tab is required, for example "ctrl+x Tab, then Enter
+  to compact or h to hand off. 0 to dismiss." In `ask` mode it ends by saying `handoffMode` `act`
+  does this without asking.
+- The band stays up while a turn runs. A press that hands off, sends or compacts, made during a
+  turn, is held: a toast says so, the band stays up, and the choice runs once when that turn ends
+  (however it ends), so a `/clear` or compaction never lands mid-turn. Not now has no such hazard
+  and runs at once. The first held press wins; further presses before it runs are ignored. The held
+  press runs in place of the end-of-turn evaluation, so a new offer never replaces a choice you made.
+  If a handoff or compaction is already pending when it would run (for example `/handoff` ran
+  mid-turn), a toast says so and the press is dropped. Ending the session drops a held press.
+- The first press wins in the same instant: a second press, Not now included, is dropped until the
+  first settles. A held press for a prompt that is no longer held says so and takes the band down.
+- Background work is checked again when a press runs. If work started since the band was drawn and
+  the press would clear (Hand off and clear, Hand off and send it), nothing is cleared: a toast says
+  a handoff would cut the work off, the band is redrawn in its busy shape (Compact and Not now, or
+  Send here alone for a held prompt), and a `none` record with reason `background_busy` is written. The record's signal is `weak`, which is what
+  a busy session classifies as. A band that was taken down or replaced since the press is not redrawn.
+  A turn that ends interrupted or in error likewise refreshes a standing band's busy state.
+- The decision record of a press is the one the button always writes (`point` `button`), written when
+  it runs, with `is_background_busy` and `cache_read_tokens` read at that moment.
+- The band comes down when you press a button that runs, when the turn-end evaluation offers
+  nothing, or when you press Enter again on a held prompt. A task notification or your next
+  prompt no longer takes it down.
 - A band still up when the plugin reloads (a code change, or a setting changed in `/config`) comes
   down when the reload fires `session.start` (not yet verified live for a `/config` change).
 - Pressing Send here or Hand off and send it takes the held prompt out of the box and leaves any
@@ -205,8 +239,8 @@ the log, and nothing from it is written into the session.
 | `trigger_values.threshold` | `handoffContextTokens` |
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode` (the plugin may act as `off` anyway; see Compatibility) |
-| `trigger_values.cache_read_tokens` | Cache-read tokens of the last answered turn |
-| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, or `send_here` |
+| `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
+| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press that would clear was refused because background work is running) |
 
 A prompt is evaluated, and so logged, only when it names new work.
 
@@ -242,7 +276,16 @@ plugin without any error. Four layers guard against that:
 Everything above is covered by tests against the engine's own test kit. These need a live
 terminal and have not been watched yet:
 
-- How the band renders, and that each button does what its label says.
+- How the band renders (its `subtle` shading, the `h:` labels, whether the colour reads well in light
+  and dark themes), that `0` in an empty prompt, ctrl+x Tab then a letter or Enter, and a click each
+  press a button, and that each button does what its label says.
+- How the band lays out in a narrow terminal (around 40 columns), in fullscreen and on the main
+  screen: that the buttons wrap onto new rows rather than clip, and that the message and hint lines
+  wrap.
+- A press that waited colliding with a prompt queued mid-turn: the queued prompt may start the next
+  turn before the scheduled clear or compaction runs.
+- That `turn.start` and `turn.complete` bracket every model turn, so a press made mid-turn is held and
+  then released.
 - That `/handoff` survives a `/clear`, and that the plugin's re-registration after a clear works.
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.

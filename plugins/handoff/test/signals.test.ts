@@ -354,6 +354,7 @@ for (const [input, expected] of thresholdCases) {
 
 const bandButtonCases = [
   [{ signal: 'strong', heldPrompt: true, isBusy: false }, ['handoff-send', 'send-here']],
+  [{ signal: 'strong', heldPrompt: true, isBusy: true }, ['send-here']],
   [{ signal: 'strong', heldPrompt: false, isBusy: false }, ['handoff', 'not-now']],
   [{ signal: 'weak', heldPrompt: false, isBusy: true }, ['compact', 'not-now']],
   [{ signal: 'weak', heldPrompt: false, isBusy: false }, ['handoff', 'compact', 'not-now']],
