@@ -62,7 +62,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       at most 400 words of plain Markdown.
    3. If a turn is running (one a peer or a finished background task started, or one that was queued
       before the handoff), wait for it to end, however long that takes. The wait has no limit. When
-      the wait begins, the status line changes to the waiting text and a toast shows it once. Person
+      the wait begins, the status line changes to the waiting text and a toast shows it once, unless
+      the person has already cleared, in which case nothing shows. Person
       prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
       the debug log when it begins and when it ends.
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
@@ -79,8 +80,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       - A turn started during this check: go back to step 3.
       - Otherwise run `/clear` in the same tick as the last check for a running turn.
    6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
-      (&lt;id&gt;), written by Claude just before a /clear". If a turn ran after the note began to
-      be written, the message ends with one more line saying so ("A turn ran in the previous session
+      (&lt;id&gt;), written by Claude just before a /clear". If a turn ran in the old session after the
+      note began to be written, the message ends with one more line saying so ("A turn ran in the previous session
       while or after this note was written, so the note may not cover it. To see that turn:
       `claude --resume <id>`"); the note itself is not rewritten.
    7. Say what happened to the note, in a transcript line and a toast with the same text. If it was
