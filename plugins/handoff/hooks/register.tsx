@@ -487,7 +487,9 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   }
 }
 
+// A session end already decided the outcome, so the wait is no longer about a clear the handoff will issue.
 const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
+  if (state.sessionEndBeforeClear !== null) return
   await redrawBand($, state, WAITING)
   $.ui.toast(WAITING_STATUS)
 }

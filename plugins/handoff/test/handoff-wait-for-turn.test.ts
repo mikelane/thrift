@@ -745,6 +745,12 @@ test('It takes the waiting status down once the note is delivered into the sessi
   expect(await shownText(await mountBand($))).toEqual(['engine band'])
 })
 
+test('It does not show the waiting status once the person has cleared, while a turn runs in the fresh session', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  expect(await shownText(await mountBand($))).toEqual(['engine band'])
+  expect(world.appended).toEqual([])
+})
+
 test('It takes the waiting status down when the session is resumed during the wait', async ($, on) => {
   const world = await waitingForATurn($, on)
   await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
