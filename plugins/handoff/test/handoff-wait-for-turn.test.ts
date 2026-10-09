@@ -183,11 +183,11 @@ test('It leaves the line out when no turn started after the note began', async (
   expect(world.appended).toEqual([BASE_MESSAGE])
 })
 
-test('It leaves the line out when the turn it waited for began before the note', async ($, on) => {
+test('It adds the turn-after-note line when the turn it waited for was already running when the note began', async ($, on) => {
   const { world, finishNote } = await turnRunningWhenTheNoteIsWritten($, on)
   await finishNote()
   await endTurn($, world)
-  expect(world.appended).toEqual([BASE_MESSAGE])
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
 })
 
 test('It leaves the line out when the turn ran before the handoff started', async ($, on) => {

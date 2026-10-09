@@ -40,7 +40,7 @@ export type SessionState = Settings & {
   isTurnRunning: boolean
   isPressRunning: boolean
   deferredPress: ButtonPress | null
-  hasTurnStartedSinceNote: boolean
+  hasTurnMissingFromNote: boolean
   turnEndWaiter: (() => void) | null
 }
 
@@ -63,7 +63,7 @@ export const createState = (settings: Settings): SessionState => ({
   isTurnRunning: false,
   isPressRunning: false,
   deferredPress: null,
-  hasTurnStartedSinceNote: false,
+  hasTurnMissingFromNote: false,
   turnEndWaiter: null,
 })
 
@@ -136,16 +136,16 @@ export const endHandoffHold = (state: SessionState): void => {
 
 export const startMainTurn = (state: SessionState): void => {
   state.isTurnRunning = true
-  state.hasTurnStartedSinceNote = true
+  state.hasTurnMissingFromNote = true
 }
 
 export const endMainTurn = (state: SessionState): void => {
   state.isTurnRunning = false
 }
 
-// A turn already running when the note begins is not counted: only a turn that starts after it can be missing from the note.
+// The note's fork sees the conversation only up to here, so a turn already running now is missing from the note too.
 export const beginNoteWindow = (state: SessionState): void => {
-  state.hasTurnStartedSinceNote = false
+  state.hasTurnMissingFromNote = state.isTurnRunning
 }
 
 const waitForTurnEnd = (state: SessionState): Promise<void> =>

@@ -65,7 +65,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       Writing status stays up and person prompts stay held meanwhile. The wait has no limit, and
       the check and the clear happen in the same tick. Otherwise run `/clear` at once.
    5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
-      (&lt;id&gt;), written by Claude just before a /clear". If a turn started after the note began to
+      (&lt;id&gt;), written by Claude just before a /clear". If a turn ran after the note began to
       be written, the message ends with one more line saying so and giving `claude --resume <id>`
       for the details; the note itself is not rewritten.
    6. Say what happened to the note, in a transcript line and a toast with the same text. If it was

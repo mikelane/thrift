@@ -43,7 +43,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     isTurnRunning: false,
     isPressRunning: false,
     deferredPress: null,
-    hasTurnStartedSinceNote: false,
+    hasTurnMissingFromNote: false,
     turnEndWaiter: null,
   })
 })
@@ -245,14 +245,22 @@ const isPending = async (promise: Promise<void>): Promise<boolean> =>
 test('It marks a turn running and started since the note from startMainTurn', () => {
   const state = createState(settings)
   startMainTurn(state)
-  expect(state).toMatchObject({ isTurnRunning: true, hasTurnStartedSinceNote: true })
+  expect(state).toMatchObject({ isTurnRunning: true, hasTurnMissingFromNote: true })
 })
 
-test('It forgets a turn that started before the note began in beginNoteWindow', () => {
+test('It counts a turn already running when the note began as missing from the note in beginNoteWindow', () => {
   const state = createState(settings)
   startMainTurn(state)
   beginNoteWindow(state)
-  expect(state.hasTurnStartedSinceNote).toBe(false)
+  expect(state.hasTurnMissingFromNote).toBe(true)
+})
+
+test('It forgets a turn that ended before the note began in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.hasTurnMissingFromNote).toBe(false)
 })
 
 test('It keeps a running turn running in beginNoteWindow', () => {
@@ -269,11 +277,11 @@ test('It marks no turn running from endMainTurn', () => {
   expect(state.isTurnRunning).toBe(false)
 })
 
-test('It keeps hasTurnStartedSinceNote after the turn ends in endMainTurn', () => {
+test('It keeps hasTurnMissingFromNote after the turn ends in endMainTurn', () => {
   const state = createState(settings)
   startMainTurn(state)
   endMainTurn(state)
-  expect(state.hasTurnStartedSinceNote).toBe(true)
+  expect(state.hasTurnMissingFromNote).toBe(true)
 })
 
 test('It resolves at once in waitUntilNoTurnRuns when no turn runs', async () => {

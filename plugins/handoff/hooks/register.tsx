@@ -489,7 +489,7 @@ const runHandoff = async (
     if (prepared === null) return
     // A turn that is running now would have /clear land inside it, so the check and the clear share one tick.
     if (state.isTurnRunning) await waitUntilNoTurnRuns(state)
-    const hasTurnAfterNote = state.hasTurnStartedSinceNote
+    const hasTurnAfterNote = state.hasTurnMissingFromNote
     const isCleared = await clearSession($)
     const settledHandoff = settleHandoff(state, request)
     if (!isCleared) {
