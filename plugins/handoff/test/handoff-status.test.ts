@@ -158,7 +158,7 @@ test('It ignores a Not now press while the note is written', ASK, async ($, on) 
   holdFork(world)
   const band = await pressedAskBand($, world)
   const recordsBefore = world.records.length
-  await expect(band.press({ key: 'not-now' })).rejects.toThrow()
+  await expect(band.press({ key: 'not-now' })).rejects.toThrow('no Button of handoff keyed "not-now"')
   expect(world.records).toHaveLength(recordsBefore)
   expect(await shownText(band)).toEqual([STATUS])
 })
@@ -167,7 +167,7 @@ test('It starts no second handoff from a press while the note is written', ASK, 
   const world = install($, on)
   holdFork(world)
   const band = await pressedAskBand($, world)
-  await expect(band.press({ key: 'handoff' })).rejects.toThrow()
+  await expect(band.press({ key: 'handoff' })).rejects.toThrow('no Button of handoff keyed "handoff"')
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
 })
 
@@ -204,6 +204,14 @@ const holdPrompt = async ($: Engine, world: World) => {
   await world.clock.settle()
 }
 
+const handoffFromBridge = ($: Engine) =>
+  $.command.run({
+    command: 'handoff',
+    args: '',
+    origin: { kind: 'bridge' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
+
 const holdPromptThenRunHandoff = async ($: Engine, world: World) => {
   await holdPrompt($, world)
   world.box = { text: '', cursor: 0 }
@@ -214,7 +222,9 @@ const holdPromptThenRunHandoff = async ($: Engine, world: World) => {
 test('It submits a held prompt in the fresh session when /handoff runs over it', ASK, async ($, on) => {
   const world = install($, on)
   await holdPromptThenRunHandoff($, world)
-  expect(world.effects.slice(world.effects.indexOf('clear'))).toContain('entered:plugin:now ENG-2')
+  const clearAt = world.effects.indexOf('clear')
+  expect(clearAt).toBeGreaterThan(-1)
+  expect(world.effects.indexOf('entered:plugin:now ENG-2')).toBeGreaterThan(clearAt)
 })
 
 test('It puts a held prompt back in the box when /handoff cannot write the note', ASK, async ($, on) => {
@@ -224,9 +234,9 @@ test('It puts a held prompt back in the box when /handoff cannot write the note'
   expect(world.box.text).toBe('now ENG-2')
 })
 
-const HELD = 'now ENG-2'
+const HELD_PROMPT = 'now ENG-2'
 
-const sentHeldPrompts = (world: World) => world.effects.filter(effect => effect === `entered:plugin:${HELD}`)
+const sentHeldPrompts = (world: World) => world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)
 
 test('It submits a held prompt exactly once when /handoff runs over it', ASK, async ($, on) => {
   const world = install($, on)
@@ -240,7 +250,8 @@ test('It puts a held prompt back in the box and sends nothing when the fork thro
     throw new Error('fork down')
   }
   await holdPromptThenRunHandoff($, world)
-  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+  expect(world.box.text).toBe(HELD_PROMPT)
+  expect(sentHeldPrompts(world)).toHaveLength(0)
 })
 
 test('It puts a held prompt back in the box and sends nothing when session.id is denied under /handoff', ASK, async ($, on) => {
@@ -250,14 +261,16 @@ test('It puts a held prompt back in the box and sends nothing when session.id is
   world.sessionIdDenials = 1
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+  expect(world.box.text).toBe(HELD_PROMPT)
+  expect(sentHeldPrompts(world)).toHaveLength(0)
 })
 
 test('It puts a held prompt back in the box and sends nothing when the clear throws under /handoff', ASK, async ($, on) => {
   const world = install($, on)
   world.clearThrows = true
   await holdPromptThenRunHandoff($, world)
-  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+  expect(world.box.text).toBe(HELD_PROMPT)
+  expect(sentHeldPrompts(world)).toHaveLength(0)
 })
 
 test('It submits nothing in the fresh session when /handoff runs with no prompt held', ASK, async ($, on) => {
@@ -272,23 +285,11 @@ test('It submits nothing in the fresh session when /handoff runs with no prompt 
 test('It empties the box of a held prompt when /handoff arrives from the bridge', ASK, async ($, on) => {
   const world = install($, on)
   await holdPrompt($, world)
-  await $.command.run({
-    command: 'handoff',
-    args: '',
-    origin: { kind: 'bridge' },
-    presentation: { isFullscreen: false, columns: 80 },
-  })
+  expect(world.box.text).toBe(HELD_PROMPT)
+  await handoffFromBridge($)
   await world.clock.settle()
   expect(world.box.text).toBe('')
 })
-
-const handoffFromBridge = ($: Engine) =>
-  $.command.run({
-    command: 'handoff',
-    args: '',
-    origin: { kind: 'bridge' },
-    presentation: { isFullscreen: false, columns: 80 },
-  })
 
 // A background task finishes while a prompt is held; its turn ends on a weak signal and redraws the band with
 // Compact, the person presses it, and while the compaction runs /handoff arrives from the bridge.
@@ -308,7 +309,7 @@ test('It leaves a held prompt in the box when /handoff from the bridge is refuse
   await compactingOverHeldPrompt($, world)
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.box.text).toBe(HELD)
+  expect(world.box.text).toBe(HELD_PROMPT)
 })
 
 test('It never empties the box when /handoff answers that a compaction is already in progress', ASK, async ($, on) => {
@@ -325,7 +326,7 @@ test('It still hands off a held prompt when the box cannot be read under /handof
   world.boxReadDenied = true
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD}`)).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)).toHaveLength(1)
 })
 
 test('It still hands off a held prompt when the box refuses the fill under /handoff from the bridge', ASK, async ($, on) => {
@@ -334,13 +335,13 @@ test('It still hands off a held prompt when the box refuses the fill under /hand
   world.fillRefusal = 'no_composer'
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD}`)).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)).toHaveLength(1)
 })
 
 test('It keeps what else the person typed when /handoff from the bridge empties a held prompt', ASK, async ($, on) => {
   const world = install($, on)
   await holdPrompt($, world)
-  world.box = { text: `${HELD}\nalso this`, cursor: 0 }
+  world.box = { text: `${HELD_PROMPT}\nalso this`, cursor: 0 }
   await handoffFromBridge($)
   await world.clock.settle()
   expect(world.box.text).toBe('also this')
@@ -349,10 +350,10 @@ test('It keeps what else the person typed when /handoff from the bridge empties 
 test('It leaves an edited held prompt in the box under /handoff from the bridge', ASK, async ($, on) => {
   const world = install($, on)
   await holdPrompt($, world)
-  world.box = { text: `${HELD} and ENG-3`, cursor: 0 }
+  world.box = { text: `${HELD_PROMPT} and ENG-3`, cursor: 0 }
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.box.text).toBe(`${HELD} and ENG-3`)
+  expect(world.box.text).toBe(`${HELD_PROMPT} and ENG-3`)
 })
 
 test('It restores a held prompt to the box once when the clear throws under /handoff from the bridge', ASK, async ($, on) => {
@@ -361,14 +362,17 @@ test('It restores a held prompt to the box once when the clear throws under /han
   world.clearThrows = true
   await handoffFromBridge($)
   await world.clock.settle()
-  expect([world.box.text, world.effects.filter(effect => effect === `fill:${HELD}`).length]).toEqual([HELD, 2])
+  expect(world.box.text).toBe(HELD_PROMPT)
+  expect(world.effects.filter(effect => effect === `fill:${HELD_PROMPT}`)).toHaveLength(2)
 })
 
 test('It answers /handoff from the bridge with already-in-progress while the compaction runs over a held prompt', ASK, async ($, on) => {
   const world = install($, on)
   await compactingOverHeldPrompt($, world)
-  const before = world.box.text
-  const ran = await handoffFromBridge($)
+  const boxTextBefore = world.box.text
+  const commandReply = await handoffFromBridge($)
   await world.clock.settle()
-  expect([before, world.effects.includes('fork'), ran]).toEqual([HELD, false, { text: 'A handoff or compaction is already in progress.' }])
+  expect(boxTextBefore).toBe(HELD_PROMPT)
+  expect(world.effects).not.toContain('fork')
+  expect(commandReply).toEqual({ text: 'A handoff or compaction is already in progress.' })
 })
