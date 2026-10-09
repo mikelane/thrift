@@ -70,7 +70,7 @@ test('It tells the person a press made during a turn waits for the turn to end',
   const band = await bandAfterFinishedTask($, world)
   await startTurn($)
   await band.press({ key: 'handoff' })
-  expect(world.effects).toContain('toast:handoff: this turn is still running, so your choice will run when it ends.')
+  expect(world.effects).toContain('toast:This turn is still running, so your choice will run when it ends.')
 })
 
 test('It keeps the band up until a press made during a turn runs', ASK, async ($, on) => {
@@ -267,7 +267,7 @@ const heldPromptBand = async ($: Parameters<typeof mountBand>[0], world: Paramet
   await growTo200k($, world)
   await submitPerson($, 'start on ENG-1')
   const dropped = await submitPerson($, 'now ENG-2')
-  expect(dropOf(dropped)).toContain('held your prompt')
+  expect(dropOf(dropped)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
   return mountBand($)
 }
 
@@ -359,7 +359,7 @@ test('It does not tell the person to type 0 in an empty prompt while the held pr
   expect(await band.find({ text: /0 to dismiss|empty prompt/ })).toBeUndefined()
 })
 
-const BUSY_REFUSAL = 'handoff: background work started, and a handoff would cut it off. Nothing was cleared.'
+const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
 
 test('It refuses to clear and says why when background work started before an immediate press', ASK, async ($, on) => {
   const world = install($, on)
@@ -477,7 +477,7 @@ const heldBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<ty
   await growTo200k($, world)
   await submitPerson($, 'start on ENG-1')
   const dropped = await submitPerson($, 'now ENG-2')
-  expect(dropOf(dropped)).toContain('held your prompt')
+  expect(dropOf(dropped)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
   await world.clock.settle()
   return mountBand($)
 }
@@ -599,7 +599,7 @@ test('It says so and takes the band down when a held press finds the prompt no l
   world.fillRefusal = 'dialog'
   await world.clock.settle()
   await completeTurn($)
-  expect(world.effects).toContain('toast:handoff: that prompt is no longer held, so there is nothing to send.')
+  expect(world.effects).toContain('toast:That prompt is no longer held, so there is nothing to send.')
   const after = await mountBand($)
   expect(await after.find({ text: 'engine band' })).toBeDefined()
 })

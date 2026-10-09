@@ -9,11 +9,32 @@ import type {
   TurnCompleteInput,
 } from 'claude-code'
 
-import type { Offer } from '../types'
-import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer } from './band-text'
+import type { BandState, Offer } from '../types'
+import {
+  BUTTON_LABELS,
+  WRITING,
+  WRITING_STATUS,
+  bandControls,
+  bandHint,
+  bandMessage,
+  clearsSession,
+  isSameOffer,
+  isWriting,
+  offerWithBusyState,
+} from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
-import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
+import {
+  HANDOFF_PROMPT,
+  handedOffMessage,
+  handoffMessage,
+  holdsPrompt,
+  joinPrompts,
+  noteInBoxMessage,
+  noteNotCarriedMessage,
+  withoutPrompt,
+  type NoteDelivery,
+} from './handoff-note'
 import { createState, resetForNewSession, type ButtonPress, type SessionState } from './session-state'
 import {
   asMode,
@@ -37,14 +58,14 @@ const BACKOFF_TOKENS = 50_000
 const BRANCH_READ_TIMEOUT_MS = 5000
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
-const WRITING_TOAST = 'Writing a handoff for a fresh session...'
-const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
-const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
-const PRESS_WAITS_FOR_TURN = 'handoff: this turn is still running, so your choice will run when it ends.'
-const BUSY_REFUSAL = 'handoff: background work started, and a handoff would cut it off. Nothing was cleared.'
-const PROMPT_NOT_HELD = 'handoff: that prompt is no longer held, so there is nothing to send.'
+const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
+const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
+const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
+const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
+const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
-const UNSENT_PROMPT = 'handoff: your prompt could not be sent or put back in the box. Here it is:'
+const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
@@ -59,6 +80,7 @@ type Trigger = {
 type Evaluation = Trigger & {
   action: DecisionAction
   reason?: string
+  note?: NoteDelivery
   sessionId?: string
 }
 
@@ -79,7 +101,7 @@ const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, sessionId } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
@@ -104,6 +126,7 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
         setting: state.setting,
         cache_read_tokens: cacheReadTokens,
         ...(reason ? { reason } : {}),
+        ...(note ? { note } : {}),
       },
     })
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
@@ -265,13 +288,21 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
+// A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of rejecting.
+const submitEntered = async ($: EngineInterface, text: string, failureLabel: string): Promise<boolean> => {
   try {
-    await $.prompt.submit({ text })
+    const result = await $.prompt.submit({ text })
+    if (result.drop === undefined) return true
+    debug($, `${failureLabel}: ${result.drop}`)
+    return false
   } catch (error) {
-    debug($, `could not restore the held prompt: ${String(error)}`)
-    keepInTranscript($, text)
+    debug($, `${failureLabel}: ${String(error)}`)
+    return false
   }
+}
+
+const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
+  if (!(await submitEntered($, text, 'could not restore the held prompt'))) keepInTranscript($, text)
 }
 
 const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
@@ -286,6 +317,7 @@ const abandonHandoff = async (
   reason: string,
   message: string,
 ) => {
+  await takeDownBand($, state)
   $.ui.toast(message)
   await writeRecord($, state, { ...request.trigger, action: 'none', reason })
   if (request.heldPrompt !== undefined) await restorePrompt($, request.heldPrompt, request.isUnattended)
@@ -324,7 +356,9 @@ const clearSession = async ($: EngineInterface): Promise<boolean> => {
 const appendNote = async ($: EngineInterface, message: string): Promise<boolean> => {
   try {
     const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: message }] } })
-    return appended.deny === undefined
+    if (appended.deny === undefined) return true
+    debug($, `append denied: ${appended.deny}`)
+    return false
     // The test kit cannot make the default append reject: a throwing session.append hook is treated as a hook failure,
     // and the plugin sees a successful append. Whether the live default append can reject is unverified.
     // Keep it: without it, a rejected append skips the prompt fallback and drops the handoff note.
@@ -334,14 +368,31 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean) => {
-  try {
-    await $.prompt.submit({ text })
-  } catch (error) {
-    debug($, `could not send the prompt: ${String(error)}`)
-    if (isUnattended || !(await refillBox($, text))) keepInTranscript($, text)
-  }
+type Carried = Exclude<NoteDelivery, 'appended'>
+
+const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
+  if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
+  if (!isUnattended && (await refillBox($, text))) return 'in_box'
+  keepInTranscript($, text)
+  return 'not_carried'
 }
+
+const FINAL_MESSAGES: Record<NoteDelivery, (oldId: string) => string> = {
+  appended: handedOffMessage,
+  submitted: handedOffMessage,
+  in_box: noteInBoxMessage,
+  not_carried: noteNotCarriedMessage,
+}
+
+const announce = ($: EngineInterface, message: string) => {
+  $.ui.log(message)
+  $.ui.toast(message)
+}
+
+const deliverNote = async ($: EngineInterface, request: HandoffRequest, message: string): Promise<NoteDelivery> =>
+  (await appendNote($, message))
+    ? 'appended'
+    : sendOrKeepInBox($, joinPrompts(message, request.heldPrompt), request.isUnattended)
 
 const continueInFreshSession = async (
   $: EngineInterface,
@@ -351,21 +402,18 @@ const continueInFreshSession = async (
   note: string,
 ) => {
   await registerHandoffCommand($)
-  const message = handoffMessage(oldId, note)
-  const isStored = await appendNote($, message)
-  const resume = resumeCommand(oldId)
-  $.ui.log(`handoff: the previous session is ${oldId}. Reopen it with ${resume}`)
-  $.ui.toast(`Handoff written. Reopen ${oldId} with ${resume}`)
-  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
-  if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
-  const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)
-  if (prompt !== undefined) await sendOrKeepInBox($, prompt, request.isUnattended)
+  const noteDelivery = await deliverNote($, request, handoffMessage(oldId, note))
+  announce($, FINAL_MESSAGES[noteDelivery](oldId))
+  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
+  if (request.heldPrompt === undefined) return
+  await inspectPrompt($, state, request.heldPrompt)
+  if (noteDelivery === 'appended') await sendOrKeepInBox($, request.heldPrompt, request.isUnattended)
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   try {
-    await takeDownBand($, state)
-    $.ui.toast(WRITING_TOAST)
+    await redrawBand($, state, WRITING)
+    $.ui.toast(WRITING_STATUS)
     const oldId = await $.session.id()
     const note = await writeNote($)
     if (note === null) {
@@ -381,8 +429,16 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   }
 }
 
-const runHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+const runHandoff = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  beforeRun?: () => Promise<void>,
+) => {
   try {
+    // SAFETY: beforeRun is emptyBoxIfHolding, which catches its own failures, so no test can make it throw.
+    // It runs inside the try so a future beforeRun that throws still releases the claim.
+    await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     if (!(await clearSession($))) {
@@ -400,10 +456,16 @@ const runHandoff = async ($: EngineInterface, state: SessionState, request: Hand
   }
 }
 
-const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest): boolean => {
+const scheduleHandoff = (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  beforeRun?: () => Promise<void>,
+): boolean => {
   if (!claim(state, 'handoff')) return false
+  state.heldPrompt = null
   $.clock.after(0, () => {
-    void logFailure($, runHandoff($, state, request))
+    void logFailure($, runHandoff($, state, request, beforeRun))
   })
   return true
 }
@@ -523,25 +585,25 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
 }
 
 const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, trigger: Trigger, button: Button) => {
-  const held = state.heldPrompt
-  if (held === null) {
+  const heldPrompt = state.heldPrompt
+  if (heldPrompt === null) {
     debug($, `dropped a ${button} press: no prompt is held`)
     $.ui.toast(PROMPT_NOT_HELD)
     return takeDownBand($, state)
   }
   state.heldPrompt = null
   await takeDownBand($, state)
-  await emptyBoxIfHolding($, held)
-  if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt: held, isUnattended: false })) return
+  await emptyBoxIfHolding($, heldPrompt)
+  if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void logFailure($, sendOrKeepInBox($, held, false))
+    void logFailure($, sendOrKeepInBox($, heldPrompt, false))
   })
 }
 
-const redrawBand = async ($: EngineInterface, state: SessionState, offer: Offer) => {
+const redrawBand = async ($: EngineInterface, state: SessionState, band: BandState) => {
   try {
-    await update($, offerAtom, () => offer)
+    await update($, offerAtom, () => band)
     state.hasBand = true
   } catch (error) {
     debug($, `could not redraw the band: ${String(error)}`)
@@ -575,9 +637,9 @@ const runPress = async ($: EngineInterface, state: SessionState, { offer, button
   const trigger = snapshot(state, 'button', offer.signal, isBusy)
   if (isBusy && clearsSession(button)) return refuseToClear($, state, offer, trigger)
   if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
-  if (button === 'compact') scheduleCompaction($, state, trigger)
-  else if (button !== 'not-now') scheduleHandoff($, state, { trigger, isUnattended: false })
-  else state.backoffFrom = state.contextTokens
+  if (button === 'not-now') state.backoffFrom = state.contextTokens
+  else if (button === 'compact') scheduleCompaction($, state, trigger)
+  else return void scheduleHandoff($, state, { trigger, isUnattended: false })
   await takeDownBand($, state)
   if (button === 'not-now') await writeRecord($, state, { ...trigger, action: 'none', reason: 'not_now' })
 }
@@ -610,12 +672,21 @@ const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer
 const refreshBandBusyState = async ($: EngineInterface, state: SessionState) => {
   try {
     const offer = await read($, offerAtom)
-    if (offer === null) return
+    if (offer === null || isWriting(offer)) return
     const isBusy = await isBackgroundBusy($, state)
     if (offer.isBusy !== isBusy) await redrawBand($, state, offerWithBusyState(offer, state.contextTokens, isBusy))
   } catch (error) {
     debug($, `could not read the band: ${String(error)}`)
   }
+}
+
+const drawWritingStatus = ($: EngineInterface, e: RenderInput<'AbovePrompt'>) => {
+  const { Box, Text } = $.ui.resolve(e)
+  return (
+    <Box flexDirection="column" backgroundColor="subtle">
+      <Text>{WRITING_STATUS}</Text>
+    </Box>
+  )
 }
 
 const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'AbovePrompt'>, offer: Offer) => {
@@ -643,8 +714,15 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
-  const isClaimed = scheduleHandoff($, state, { trigger, isUnattended: false })
-  return { text: isClaimed ? WRITING_TOAST : ALREADY_PENDING }
+  const heldPrompt = state.heldPrompt
+  const emptyBox = heldPrompt === null ? undefined : () => emptyBoxIfHolding($, heldPrompt)
+  const isClaimed = scheduleHandoff(
+    $,
+    state,
+    { trigger, ...(heldPrompt === null ? {} : { heldPrompt }), isUnattended: false },
+    emptyBox,
+  )
+  return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
 export const register: Register = (on, options) => {
@@ -664,7 +742,7 @@ export const register: Register = (on, options) => {
     state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
-      if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
+      if (setting !== 'off') $.ui.toast(`Untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
       await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
@@ -724,13 +802,14 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const offer = await read($, offerAtom)
-    return e.props.hasSurvey || offer === null ? next(e) : drawBand($, state, e, offer)
+    if (e.props.hasSurvey || offer === null) return next(e)
+    return isWriting(offer) ? drawWritingStatus($, e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
   // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.
   // Keep it: every hook must never break a turn.
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
-    text: 'handoff: could not start a handoff.',
+    text: 'Could not start a handoff.',
   }))
 
   on('session.end', async ($, e, next) => {

@@ -1,3 +1,4 @@
+import type { NoteDelivery } from './handoff-note'
 import type { Mode, Signal } from './signals'
 
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
@@ -11,6 +12,7 @@ export type TriggerValues = {
   setting: Mode
   cache_read_tokens: number
   reason?: string
+  note?: NoteDelivery
 }
 
 type RecordInput = {

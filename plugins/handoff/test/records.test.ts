@@ -6,7 +6,17 @@ import {
   logLocation,
   type TriggerValues,
 } from '../hooks/decision-record'
-import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from '../hooks/handoff-note'
+import {
+  HANDOFF_PROMPT,
+  handedOffMessage,
+  handoffMessage,
+  holdsPrompt,
+  joinPrompts,
+  noteInBoxMessage,
+  noteNotCarriedMessage,
+  resumeCommand,
+  withoutPrompt,
+} from '../hooks/handoff-note'
 
 const triggerValues: TriggerValues = {
   point: 'turn-end',
@@ -114,6 +124,24 @@ test('It names the old session and the note from handoffMessage', () => {
 
 test('It returns the command that reopens the old session from resumeCommand', () => {
   expect(resumeCommand('old-id')).toBe('claude --resume old-id')
+})
+
+test('It leads with continuing here and ends with the resume command from handedOffMessage', () => {
+  expect(handedOffMessage('old-id')).toBe(
+    'Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-id',
+  )
+})
+
+test('It says the note is in the prompt box, to send with Enter, from noteInBoxMessage', () => {
+  expect(noteInBoxMessage('old-id')).toBe(
+    'Handed off. The note summarizing the previous session is in your prompt box. Press Enter to send it. To reopen the full previous conversation: claude --resume old-id',
+  )
+})
+
+test('It says the note could not be added to this session, with the resume command, from noteNotCarriedMessage', () => {
+  expect(noteNotCarriedMessage('old-id')).toBe(
+    'The handoff note could not be added to this session. The previous conversation is unchanged: claude --resume old-id',
+  )
 })
 
 const joinCases = [
