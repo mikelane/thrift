@@ -2,7 +2,6 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { BAND_HINT } from '../hooks/band-text'
 import {
   bash,
   completeTurn,
@@ -62,7 +61,7 @@ test('It offers Hand off and send it and Send here for a held prompt', ASK, asyn
   const labels = (await band.findAll({ type: 'Button' })).map(button => button.props.label)
   expect(labels).toEqual(['Hand off and send it', 'Send here'])
   expect(await band.find({ text: 'Context is 200k and this prompt starts new work.' })).toBeDefined()
-  expect(await band.find({ text: BAND_HINT })).toBeDefined()
+  expect(await band.find({ text: /^ctrl\+x Tab, then Enter to hand off and send it, or s to send it here\./ })).toBeDefined()
 })
 
 test('It sends the held prompt here when the person presses Enter again', ASK, async ($, on) => {

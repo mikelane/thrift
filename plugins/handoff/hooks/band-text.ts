@@ -9,7 +9,20 @@ export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
   'not-now': 'Not now',
 }
 
-export const BAND_HINT = 'Type a digit in an empty prompt to choose. Set handoffMode to act in /config to skip this.'
+const ACT_MODE_HINT = 'Set handoffMode to act in /config to skip this.'
+
+const hintFor = ({ signal, heldPrompt, isBusy }: Offer): string => {
+  if (heldPrompt) {
+    return isBusy
+      ? 'ctrl+x Tab, then Enter to send it here.'
+      : 'ctrl+x Tab, then Enter to hand off and send it, or s to send it here.'
+  }
+  if (isBusy) return 'ctrl+x Tab, then Enter to compact. 0 to dismiss.'
+  if (signal === 'strong') return 'ctrl+x Tab, then Enter to hand off. 0 to dismiss.'
+  return 'ctrl+x Tab, then Enter to compact or h to hand off. 0 to dismiss.'
+}
+
+export const bandHint = (offer: Offer): string => `${hintFor(offer)} ${ACT_MODE_HINT}`
 
 export type BandControl = {
   button: Button
@@ -18,17 +31,26 @@ export type BandControl = {
   isDismiss: boolean
 }
 
-const DISMISS_HOTKEY = '0'
+// Actions take letters, which work only once the band holds focus; a bare digit in an empty prompt presses a
+// band button, so the digit is reserved for the dismiss and cannot be hit by answering Claude's numbered questions.
+const HOTKEYS: Readonly<Record<Button, string>> = {
+  handoff: 'h',
+  'handoff-send': 'h',
+  'send-here': 's',
+  compact: 'c',
+  'not-now': '0',
+}
 
-// Hotkeys follow display order; the highlight follows the plugin's own pick: compact for a weak signal.
+// The highlight follows the plugin's own pick (compact for a weak signal), whatever the display order.
 export const bandControls = (buttons: readonly Button[], signal: Signal): readonly BandControl[] => {
   const actions = buttons.filter(button => button !== 'not-now')
   const recommended = signal === 'weak' ? 'compact' : actions[0]
-  return buttons.map(button =>
-    button === 'not-now'
-      ? { button, hotkey: DISMISS_HOTKEY, isPrimary: false, isDismiss: true }
-      : { button, hotkey: String(actions.indexOf(button) + 1), isPrimary: button === recommended, isDismiss: false },
-  )
+  return buttons.map(button => ({
+    button,
+    hotkey: HOTKEYS[button],
+    isPrimary: button === recommended,
+    isDismiss: button === 'not-now',
+  }))
 }
 
 const question = ({ signal, heldPrompt, isBusy }: Offer): string => {

@@ -1,6 +1,5 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND_HINT } from '../hooks/band-text'
 import {
   bash,
   completeTurn,
@@ -66,7 +65,7 @@ test('It adds a dim line about act mode to the band', ASK, async ($, on) => {
   await startSession($)
   await finishedTaskTurn($, world)
   const band = await mountBand($)
-  expect(await band.find({ text: BAND_HINT })).toBeDefined()
+  expect(await band.find({ text: /^ctrl\+x Tab, then Enter to hand off\. 0 to dismiss\./ })).toBeDefined()
 })
 
 test('It offers Hand off, Compact, and Not now for a weak signal', ASK, async ($, on) => {
@@ -277,28 +276,29 @@ const buttonProps = async (band: Awaited<ReturnType<typeof mountBand>>) =>
     hotkey: props.hotkey,
     plain: props.plain,
     variant: props.variant,
+    autoFocus: props.autoFocus,
     role: props.role,
   }))
 
-test('It draws a weak band as plain buttons with hotkeys 1, 2 and 0', ASK, async ($, on) => {
+test('It draws a weak band as plain buttons with hotkeys h, c and 0', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   const band = await mountBand($)
   expect(await buttonProps(band)).toEqual([
-    { hotkey: '1', plain: true, variant: undefined, role: undefined },
-    { hotkey: '2', plain: true, variant: 'primary', role: undefined },
-    { hotkey: '0', plain: true, variant: undefined, role: 'dismiss' },
+    { hotkey: 'h', plain: true, variant: undefined, autoFocus: undefined, role: undefined },
+    { hotkey: 'c', plain: true, variant: 'primary', autoFocus: true, role: undefined },
+    { hotkey: '0', plain: true, variant: undefined, autoFocus: undefined, role: 'dismiss' },
   ])
 })
 
-test('It gives the finished-task band hotkeys 1 and 0', ASK, async ($, on) => {
+test('It gives the finished-task band hotkeys h and 0', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await finishedTaskTurn($, world)
   const band = await mountBand($)
-  expect((await buttonProps(band)).map(button => button.hotkey)).toEqual(['1', '0'])
+  expect((await buttonProps(band)).map(button => button.hotkey)).toEqual(['h', '0'])
 })
 
 test('It shades the band with the subtle theme color', ASK, async ($, on) => {

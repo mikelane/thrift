@@ -10,7 +10,7 @@ import type {
 } from 'claude-code'
 
 import type { Offer } from '../types'
-import { BAND_HINT, BUTTON_LABELS, bandControls, bandMessage } from './band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
@@ -561,13 +561,13 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
             label={BUTTON_LABELS[button]}
             hotkey={hotkey}
             plain
-            {...(isPrimary ? { variant: 'primary' as const } : {})}
+            {...(isPrimary ? { variant: 'primary' as const, autoFocus: true as const } : {})}
             {...(isDismiss ? { role: 'dismiss' as const } : {})}
             onPress={() => logFailure($, pressButton($, state, offer, button))}
           />
         ))}
       </Box>
-      <Text dimColor>{BAND_HINT}</Text>
+      <Text dimColor>{bandHint(offer)}</Text>
     </Box>
   )
 }

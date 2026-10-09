@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BAND_HINT, BUTTON_LABELS, bandControls, bandMessage } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
@@ -76,20 +76,49 @@ for (const [button, label] of labelCases) {
   })
 }
 
-test('It points to handoffMode act in BAND_HINT', () => {
-  expect(BAND_HINT).toContain('handoffMode')
-  expect(BAND_HINT).toContain('act')
-})
+const hintCases = [
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    'ctrl+x Tab, then Enter to compact or h to hand off. 0 to dismiss.',
+  ],
+  [
+    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    'ctrl+x Tab, then Enter to compact. 0 to dismiss.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    'ctrl+x Tab, then Enter to hand off. 0 to dismiss.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    'ctrl+x Tab, then Enter to hand off and send it, or s to send it here.',
+  ],
+  [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    'ctrl+x Tab, then Enter to send it here.',
+  ],
+] as const
 
-test('It tells the person to type a digit in BAND_HINT', () => {
-  expect(BAND_HINT).toContain('Type a digit')
+for (const [offer, hint] of hintCases) {
+  test(`It starts with "${hint}" from bandHint for ${JSON.stringify(offer)}`, () => {
+    expect(bandHint(offer)).toStartWith(hint)
+  })
+
+  test(`It points to handoffMode act from bandHint for ${JSON.stringify(offer)}`, () => {
+    expect(bandHint(offer)).toEndWith('Set handoffMode to act in /config to skip this.')
+  })
+}
+
+test('It never tells a held-prompt band to type 0 from bandHint', () => {
+  expect(bandHint({ signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false })).not.toContain('0')
 })
 
 const controlCases = [
-  ['strong', ['handoff', 'not-now'], ['1', '0'], 'handoff'],
-  ['weak', ['handoff', 'compact', 'not-now'], ['1', '2', '0'], 'compact'],
-  ['weak', ['compact', 'not-now'], ['1', '0'], 'compact'],
-  ['strong', ['handoff-send', 'send-here'], ['1', '2'], 'handoff-send'],
+  ['strong', ['handoff', 'not-now'], ['h', '0'], 'handoff'],
+  ['weak', ['handoff', 'compact', 'not-now'], ['h', 'c', '0'], 'compact'],
+  ['weak', ['compact', 'not-now'], ['c', '0'], 'compact'],
+  ['strong', ['handoff-send', 'send-here'], ['h', 's'], 'handoff-send'],
+  ['strong', ['send-here'], ['s'], 'send-here'],
 ] as const
 
 for (const [signal, buttons, hotkeys, primary] of controlCases) {
@@ -106,6 +135,11 @@ for (const [signal, buttons, hotkeys, primary] of controlCases) {
     expect(bandControls(buttons, signal).filter(control => control.isPrimary).map(control => control.button)).toEqual([primary])
   })
 }
+
+test('It gives only Not now a digit hotkey from bandControls', () => {
+  const digits = bandControls(['handoff', 'compact', 'not-now'], 'weak').filter(control => /\d/.test(control.hotkey))
+  expect(digits.map(control => control.button)).toEqual(['not-now'])
+})
 
 test('It marks Not now as the dismiss with hotkey 0 from bandControls', () => {
   const dismiss = bandControls(['handoff', 'not-now'], 'strong').find(control => control.button === 'not-now')
