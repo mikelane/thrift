@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
-import { groupHeldPrompts } from '../hooks/handoff-note'
+import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend } from '../hooks/handoff-note'
 import {
   answered,
   compacted,
@@ -502,4 +502,38 @@ test('It runs a carried prompt the person re-sends from the box after the append
     undefined,
     ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
   ])
+})
+
+const personGroup = { text: 'person says', isUnattended: false }
+const scheduledGroup = { text: 'nightly job', isUnattended: true }
+
+test('It picks the group that shares the handoff origin in groupJoiningNote', () => {
+  expect([
+    groupJoiningNote([personGroup, scheduledGroup], false),
+    groupJoiningNote([personGroup, scheduledGroup], true),
+  ]).toEqual([personGroup, scheduledGroup])
+})
+
+test('It picks no group in groupJoiningNote when none shares the handoff origin', () => {
+  expect(groupJoiningNote([scheduledGroup], false)).toBeUndefined()
+})
+
+test('It leaves every group to send in groupsLeftToSend when the note was appended', () => {
+  expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'appended')).toEqual([personGroup, scheduledGroup])
+})
+
+test('It leaves only the other origin to send in groupsLeftToSend when the note was submitted', () => {
+  expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'submitted')).toEqual([scheduledGroup])
+})
+
+test('It leaves only the other origin to send in groupsLeftToSend when the note was in_box', () => {
+  expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'in_box')).toEqual([scheduledGroup])
+})
+
+test('It leaves only the other origin to send in groupsLeftToSend when the note was not_carried', () => {
+  expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'not_carried')).toEqual([scheduledGroup])
+})
+
+test('It leaves no groups to send in groupsLeftToSend for no groups', () => {
+  expect(groupsLeftToSend([], false, 'submitted')).toEqual([])
 })
