@@ -147,7 +147,7 @@ from being evaluated.
   questions. Typing `0` into an empty prompt dismisses. The letters work once the band has the
   keyboard: press ctrl+x Tab, or click a button (fullscreen). The held-prompt band never takes `0`,
   because the box holds the prompt.
-- The recommended button (Hand off for a strong signal, Compact for a weak one) has `autoFocus` and
+- The recommended button is the first one on every band. It has `autoFocus` and
   `variant="primary"`, so ctrl+x Tab then Enter runs it. A plain terminal button draws the same with
   or without `variant`, so the recommendation shows as the button focus lands on and as the action
   the hint line names, not as a highlight. A desktop surface draws it as the primary button.

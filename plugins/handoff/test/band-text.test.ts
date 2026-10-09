@@ -118,24 +118,24 @@ test('It never tells a held-prompt band to type 0 from bandHint', () => {
 })
 
 const controlCases = [
-  ['strong', ['handoff', 'not-now'], ['h', '0'], 'handoff'],
-  ['weak', ['compact', 'handoff', 'not-now'], ['c', 'h', '0'], 'compact'],
-  ['weak', ['compact', 'not-now'], ['c', '0'], 'compact'],
-  ['strong', ['handoff-send', 'send-here'], ['h', 's'], 'handoff-send'],
-  ['strong', ['send-here'], ['s'], 'send-here'],
+  [['handoff', 'not-now'], ['h', '0'], 'handoff'],
+  [['compact', 'handoff', 'not-now'], ['c', 'h', '0'], 'compact'],
+  [['compact', 'not-now'], ['c', '0'], 'compact'],
+  [['handoff-send', 'send-here'], ['h', 's'], 'handoff-send'],
+  [['send-here'], ['s'], 'send-here'],
 ] as const
 
-for (const [signal, buttons, hotkeys, primary] of controlCases) {
-  test(`It returns hotkeys ${hotkeys.join(',')} from bandControls for ${signal} ${buttons.join(',')}`, () => {
+for (const [buttons, hotkeys, primary] of controlCases) {
+  test(`It returns hotkeys ${hotkeys.join(',')} from bandControls for ${buttons.join(',')}`, () => {
     expect(bandControls(buttons).map(control => control.hotkey)).toEqual(hotkeys)
   })
 
-  test(`It returns unique hotkeys from bandControls for ${signal} ${buttons.join(',')}`, () => {
+  test(`It returns unique hotkeys from bandControls for ${buttons.join(',')}`, () => {
     const keys = bandControls(buttons).map(control => control.hotkey)
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  test(`It marks only ${primary} primary from bandControls for ${signal} ${buttons.join(',')}`, () => {
+  test(`It marks only ${primary} primary from bandControls for ${buttons.join(',')}`, () => {
     expect(bandControls(buttons).filter(control => control.isPrimary).map(control => control.button)).toEqual([primary])
   })
 }
@@ -167,15 +167,8 @@ for (const shape of everyShape) {
     const hotkeys = bandControls(bandButtons(shape)).map(control => control.hotkey)
     expect(new Set(hotkeys).size).toBe(bandButtons(shape).length)
   })
-}
 
-for (const shape of everyShape) {
-  test(`It marks the first action primary from bandControls for ${JSON.stringify(shape)}`, () => {
-    const buttons = bandButtons(shape)
-    const primary = bandControls(buttons).find(control => control.isPrimary)
-    expect(primary?.button).toBe(buttons.find(button => button !== 'not-now'))
-  })
-
+  // Focus lands on the first button, so the primary must be first for every band bandButtons draws.
   test(`It lists the primary button first from bandControls for ${JSON.stringify(shape)}`, () => {
     expect(bandControls(bandButtons(shape))[0]?.isPrimary).toBe(true)
   })
