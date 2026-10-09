@@ -65,15 +65,20 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
       turn started during the compaction, go back to step 3.
    5. Check for background work again, because a turn may have started some while the handoff
-      waited. If work is running and the handoff did not come from a typed `/handoff`, stop: nothing
-      is cleared, a toast says a handoff would cut the work off, held prompts go back as they do on
-      any failure, and a `none` record with reason `background_busy` is written. A typed `/handoff`
-      goes through, as it does when it starts while work is busy. If a turn started during this check,
-      go back to step 3. Then run `/clear` in the same tick as the last check for a running turn.
+      waited.
+      - Work is running and the handoff did not come from a typed `/handoff`: stop. Nothing is
+        cleared. A toast and a transcript line say a handoff would cut the work off and that
+        typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
+        `none` record with reason `background_busy` is written.
+      - Work is running and the handoff came from a typed `/handoff`: go on, as it does when it
+        starts while work is busy.
+      - A turn started during this check: go back to step 3.
+      - Otherwise run `/clear` in the same tick as the last check for a running turn.
    6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
       (&lt;id&gt;), written by Claude just before a /clear". If a turn ran after the note began to
-      be written, the message ends with one more line saying so and giving `claude --resume <id>`
-      for the details; the note itself is not rewritten.
+      be written, the message ends with one more line saying so ("A turn ran in the previous session
+      while or after this note was written, so the note may not cover it. To see that turn:
+      `claude --resume <id>`"); the note itself is not rewritten.
    7. Say what happened to the note, in a transcript line and a toast with the same text. If it was
       appended, or the append was refused and it was submitted as a prompt: "Handed off. This session
       starts from a note summarizing the previous one. To reopen the full previous conversation:
@@ -178,8 +183,9 @@ Special cases:
     it applies) and the held prompts go into the fresh session you made, as they would after the
     handoff's own clear, and the record is `cleared`.
   - Any other end (`/resume` and so on): the handoff stops. Nothing is cleared and no note is added.
-    A toast says the handoff stopped because the session ended, held prompts go back as they do on
-    any failure, and a `none` record with reason `session_ended` is written.
+    A toast and a transcript line say the handoff stopped because the session ended and no note was
+    carried over, held prompts go back as they do on any failure, and a `none` record with reason
+    `session_ended` is written.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 
@@ -218,7 +224,7 @@ from being evaluated.
   first settles. A held press for a prompt that is no longer held says so and takes the band down.
 - Background work is checked again when a press runs. If work started since the band was drawn and
   the press would clear (Hand off and clear, Hand off and send it), nothing is cleared: a toast says
-  a handoff would cut the work off, the band is redrawn in its busy shape (Compact and Not now, or
+  a handoff would cut the work off and that typing `/handoff` hands off anyway, the band is redrawn in its busy shape (Compact and Not now, or
   Send here alone for a held prompt), and a `none` record with reason `background_busy` is written. The record's signal is `weak`, which is what
   a busy session classifies as. A band that was taken down or replaced since the press is not redrawn.
   A turn that ends interrupted or in error likewise refreshes a standing band's busy state.
@@ -242,11 +248,11 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 ### When something fails
 
 - **The fork returns no answer, or anything throws before the clear.** Nothing is cleared. A toast
-  says no handoff was written and the session is unchanged. A held prompt goes back in the box
+  and a transcript line say no handoff was written and the session is unchanged. A held prompt goes back in the box
   when someone is at the prompt. When nobody is, or the box will not take it, the prompt is
   submitted in the unchanged session.
-- **`/clear` throws after the fork succeeded.** The session is unchanged and the prompt is handled
-  the same way. A scheduled prompt still runs.
+- **`/clear` throws after the fork succeeded.** The session is unchanged, a toast and a transcript
+  line say so, and the prompt is handled the same way. A scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
   a prompt, joined to any held prompt.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at

@@ -88,9 +88,10 @@ const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
-const SESSION_ENDED = 'The session ended, so the handoff stopped. Nothing was cleared.'
+const SESSION_ENDED = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
-const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const BUSY_REFUSAL =
+  'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
@@ -359,7 +360,7 @@ const abandonHandoff = async (
   sessionId?: string,
 ) => {
   await takeDownBand($, state)
-  $.ui.toast(message)
+  announce($, message)
   await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason, sessionId })
   for (const { text, isUnattended } of settledHandoff.heldGroups) {
     await restorePrompt($, text, isUnattended)

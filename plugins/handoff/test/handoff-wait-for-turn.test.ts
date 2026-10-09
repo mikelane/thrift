@@ -6,8 +6,12 @@ import { turnAfterNoteLine } from '../hooks/handoff-note'
 import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
-const BUSY_TOAST = 'toast:Background work started, and a handoff would cut it off. Nothing was cleared.'
-const SESSION_ENDED_TOAST = 'toast:The session ended, so the handoff stopped. Nothing was cleared.'
+const BUSY_MESSAGE = 'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
+const BUSY_TOAST = `toast:${BUSY_MESSAGE}`
+const BUSY_LOG = `log:${BUSY_MESSAGE}`
+const SESSION_ENDED_MESSAGE = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
+const SESSION_ENDED_TOAST = `toast:${SESSION_ENDED_MESSAGE}`
+const SESSION_ENDED_LOG = `log:${SESSION_ENDED_MESSAGE}`
 const COMPACTING = { options: { compactBeforeClear: true } } as const
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
@@ -302,6 +306,11 @@ test('It tells the person nothing was cleared when background work stops an act-
   expect(world.effects).toContain(BUSY_TOAST)
 })
 
+test('It writes the busy message to the transcript when background work stops an act-mode handoff', ACT, async ($, on) => {
+  const world = await turnStartsBackgroundWork($, on)
+  expect(world.effects).toContain(BUSY_LOG)
+})
+
 test('It records background_busy when background work stops an act-mode handoff after the wait', ACT, async ($, on) => {
   const world = await turnStartsBackgroundWork($, on)
   expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'background_busy' } })
@@ -371,6 +380,13 @@ test('It tells the person the handoff stopped when the session ends while it wai
   await endSession($, 'resume')
   await world.clock.settle()
   expect(world.effects).toContain(SESSION_ENDED_TOAST)
+})
+
+test('It writes the session-ended message to the transcript when the session ends while the handoff waits', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await endSession($, 'resume')
+  await world.clock.settle()
+  expect(world.effects).toContain(SESSION_ENDED_LOG)
 })
 
 test('It records session_ended when the session ends while the handoff waits', async ($, on) => {

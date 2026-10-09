@@ -133,7 +133,7 @@ test('It adds the turn-after-note line after the note in handoffMessage when a t
 
 test('It says a turn ran after the note and points at the resume command from turnAfterNoteLine', () => {
   expect(turnAfterNoteLine('old-id')).toBe(
-    'A turn ran in the previous session after this note was written, so the note may miss it. For what it did: claude --resume old-id',
+    'A turn ran in the previous session while or after this note was written, so the note may not cover it. To see that turn: claude --resume old-id',
   )
 })
 
