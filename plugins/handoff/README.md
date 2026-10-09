@@ -70,8 +70,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       new session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
-   7. If a prompt was held and the handoff was started by handing it off first, submit it in the
-      fresh session. Running `/handoff` while a prompt is held leaves that prompt in the box.
+   7. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
+      started by handing it off first or by running `/handoff` while the prompt was held.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.

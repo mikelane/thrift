@@ -192,16 +192,28 @@ test('It keeps the status line when a held prompt is sent again while /handoff w
   expect(await shownText(await mountBand($))).toEqual([STATUS])
 })
 
-test('It leaves a held prompt in the box when /handoff runs instead of sending it', ASK, async ($, on) => {
-  const world = install($, on)
+// A typed /handoff is entered from the box the held prompt was refilled into, so the box is empty by then.
+const holdPromptThenRunHandoff = async ($: Engine, world: World) => {
   world.branch = 'alice/eng-1-start'
-  holdFork(world)
   await startSession($)
   await growTo200k($, world)
   await submitPerson($, 'start on ENG-1')
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
+  world.box = { text: '', cursor: 0 }
   await runCommand($, 'handoff')
   await world.clock.settle()
+}
+
+test('It submits a held prompt in the fresh session when /handoff runs over it', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPromptThenRunHandoff($, world)
+  expect(world.effects.slice(world.effects.indexOf('clear'))).toContain('entered:plugin:now ENG-2')
+})
+
+test('It puts a held prompt back in the box when /handoff cannot write the note', ASK, async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
+  await holdPromptThenRunHandoff($, world)
   expect(world.box.text).toBe('now ENG-2')
 })

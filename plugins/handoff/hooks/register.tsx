@@ -681,7 +681,11 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
-  const isClaimed = scheduleHandoff($, state, { trigger, isUnattended: false })
+  const isClaimed = scheduleHandoff($, state, {
+    trigger,
+    ...(state.heldPrompt === null ? {} : { heldPrompt: state.heldPrompt }),
+    isUnattended: false,
+  })
   return { text: isClaimed ? WRITING_TOAST : ALREADY_PENDING }
 }
 
