@@ -148,15 +148,11 @@ export const beginNoteWindow = (state: SessionState): void => {
   state.hasTurnMissingFromNote = state.isTurnRunning
 }
 
-const waitForTurnEnd = (state: SessionState): Promise<void> =>
+// Resolves when the turn-end waiter is released. The caller re-checks isTurnRunning after each wake-up.
+export const waitForTurnEnd = (state: SessionState): Promise<void> =>
   new Promise(resolve => {
     state.turnEndWaiter = resolve
   })
-
-// Checks again after each wake-up: a new turn may start before the waiter runs.
-export const waitUntilNoTurnRuns = async (state: SessionState): Promise<void> => {
-  while (state.isTurnRunning) await waitForTurnEnd(state)
-}
 
 export const releaseTurnEndWaiter = (state: SessionState): void => {
   const waiter = state.turnEndWaiter

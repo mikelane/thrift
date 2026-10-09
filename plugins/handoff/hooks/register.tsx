@@ -53,7 +53,7 @@ import {
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
-  waitUntilNoTurnRuns,
+  waitForTurnEnd,
   type ButtonPress,
   type HeldPromptGroup,
   type SessionState,
@@ -487,8 +487,10 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    // A turn that is running now would have /clear land inside it, so the check and the clear share one tick.
-    if (state.isTurnRunning) await waitUntilNoTurnRuns(state)
+    // SAFETY: no await sits between the last isTurnRunning read and the $.command.run inside clearSession. The loop
+    // resumes straight from waitForTurnEnd, and clearSession's first step is the synchronous command call, so a
+    // turn.start cannot land in the gap. Do not add an await here, or move the clear behind a helper that awaits first.
+    while (state.isTurnRunning) await waitForTurnEnd(state)
     const hasTurnAfterNote = state.hasTurnMissingFromNote
     const isCleared = await clearSession($)
     const settledHandoff = settleHandoff(state, request)
