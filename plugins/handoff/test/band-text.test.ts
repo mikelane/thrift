@@ -51,7 +51,7 @@ const questionCases = [
   ],
   [
     { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
-    'Hand off to a fresh session, or compact?',
+    'Compact, or hand off to a fresh session?',
   ],
 ] as const
 

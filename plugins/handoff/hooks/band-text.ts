@@ -79,7 +79,7 @@ const question = ({ signal, heldPrompt, isBusy }: Offer): string => {
   if (heldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
   if (signal === 'strong') return 'Hand off to a fresh session now?'
   if (isBusy) return 'A handoff would orphan that work, so compact instead?'
-  return 'Hand off to a fresh session, or compact?'
+  return 'Compact, or hand off to a fresh session?'
 }
 
 const situation = ({ signal, contextTokens, heldPrompt, isBusy }: Offer): string => {
