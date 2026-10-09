@@ -131,10 +131,11 @@ test('It keeps holding a person prompt while the handoff waits for the turn', as
   expect(dropOf(await submitPerson($, 'next thing'))).toContain('A handoff is in progress')
 })
 
-test('It keeps the Writing status up while the handoff waits for the turn', async ($, on) => {
+test('It shows the waiting status on the band while the handoff waits for the turn', async ($, on) => {
   const { world, finishNote } = await writingTheNote($, on)
   await startTurn($)
   await finishNote()
+  expect(await shownText(await mountBand($))).toEqual([WAITING])
   expect(world.effects).not.toContain('log:Handed off.')
   expect(world.records).toHaveLength(0)
 })
