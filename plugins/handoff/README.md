@@ -49,7 +49,11 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
 3. **It responds by mode.** Over the threshold, a quiet moment is a strong signal and anything else
    is a weak one.
 4. **It hands off.** The steps, in order:
-   1. Take down the band and show the toast "Writing a handoff for a fresh session...".
+   1. Replace the band's content with a status line, "Writing a handoff note — this takes a few
+      seconds…", with no buttons and no hotkeys, and show the toast "Writing a handoff for a fresh
+      session...". The status line shows whatever started the handoff: a band press, act mode,
+      `/handoff`, or a held prompt handed off first. Presses and hotkeys do nothing while it is up.
+      It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open
       threads, the next concrete step, and facts the next session would otherwise rediscover, in
@@ -59,7 +63,10 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    4. Run `/clear`.
    5. Append the handoff as a message the model reads and you do not see, prefixed "Handoff from
       the previous session (&lt;id&gt;), written by Claude just before a /clear".
-   6. Write a transcript line and a toast naming the old session id and `claude --resume <id>`.
+   6. Write a transcript line and a toast with the same text: "Handed off. This session starts from
+      a note summarizing the previous one. To reopen the full previous conversation:
+      `claude --resume <id>`". Claude Code puts the plugin's name in front of its toasts and
+      transcript lines, so the plugin's own strings carry no `handoff:` prefix.
    7. If a prompt was held, submit it in the fresh session.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
@@ -290,6 +297,10 @@ terminal and have not been watched yet:
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
 - That `claude --resume <old id>` reopens the old session after a handoff.
+- That the status line shows during the wait and is gone after the clear, and that no `handoff:`
+  appears twice in a transcript line or toast.
+- Whether the appended note shows in the fresh session's transcript, or only in its context. If it
+  does not show, a "note loaded" line would be needed; none is written yet.
 - That a held prompt refills the box, and what the box does across a `/clear`.
 - That a background shell turns a handoff into a compact.
 
@@ -314,4 +325,4 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
 | `hooks/session-state.ts` | The per-session state object |
-| `types/index.d.ts` | The band's `Offer` atom |
+| `types/index.d.ts` | The band's atom: an `Offer`, or the writing status |
