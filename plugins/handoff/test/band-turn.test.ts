@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
+import { bandControls } from '../hooks/band-text'
+import { bandButtons } from '../hooks/signals'
 import { dropOf } from './helpers'
 import {
   bash,
@@ -463,4 +465,159 @@ test('It tells the person when a held press is dropped because a handoff is alre
   await runCommand($, 'handoff')
   await completeTurn($)
   expect(world.effects).toContain('toast:A handoff or compaction is already in progress.')
+})
+
+const BUSY_START = { result: { backgroundTaskId: 'bg1' } }
+
+const heldBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
+  world.branch = 'alice/eng-1-start'
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  const dropped = await submitPerson($, 'now ENG-2')
+  expect(dropOf(dropped)).toContain('held your prompt')
+  await world.clock.settle()
+  return mountBand($)
+}
+
+const acted = (world: Parameters<typeof growTo200k>[1]) =>
+  world.records.filter(r => r.trigger_values.point === 'button').map(r => `${r.action}:${String(r.trigger_values.reason ?? '')}`)
+
+test('It runs only the first of Not now and Hand off pressed together at idle', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await weakBand($, world)
+  await Promise.all([band.press({ key: 'not-now' }), band.press({ key: 'handoff' })])
+  await world.clock.settle()
+  expect(acted(world)).toHaveLength(1)
+})
+
+test('It runs only one of Hand off and Compact pressed together at idle', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await weakBand($, world)
+  await Promise.all([band.press({ key: 'handoff' }), band.press({ key: 'compact' })])
+  await world.clock.settle()
+  expect(world.effects.filter(e => e === 'clear' || e === 'compact')).toHaveLength(1)
+})
+
+test('It does not leave a held-prompt band up after the held prompt was replaced and a busy refusal ran', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await heldBand($, world)
+  await notify($, 'bgX')
+  await startTurn($)
+  await band.press({ key: 'handoff-send' })
+  await bash($, world, 'npm run dev', BUSY_START)
+  await submitPerson($, 'actually do this instead', { turnId: 't1' })
+  await completeTurn($)
+  await world.clock.settle()
+  const after = await mountBand($)
+  expect(await after.find({ text: 'engine band' })).toBeDefined()
+})
+
+test('It does not record a strong signal with background work running for a refused held press', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await heldBand($, world)
+  await bash($, world, 'npm run dev', BUSY_START)
+  await band.press({ key: 'handoff-send' })
+  expect(world.records.at(-1)).toMatchObject({ trigger_values: { reason: 'background_busy', is_background_busy: true } })
+  expect(world.records.at(-1)?.trigger_values.signal).not.toBe('strong')
+})
+
+test('It offers Hand off again after an interrupted turn once the background work it refused over finished', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await weakBand($, world)
+  await bash($, world, 'npm run dev', BUSY_START)
+  await band.press({ key: 'handoff' })
+  expect(await buttonLabels(band)).toEqual(['Compact', 'Not now'])
+  await notify($, 'bg1')
+  await startTurn($)
+  await completeTurn($, { reason: 'aborted' })
+  expect(await buttonLabels(band)).toEqual(['Hand off and clear', 'Compact', 'Not now'])
+})
+
+test('It refreshes the band on a refusal turn end', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await weakBand($, world)
+  await startTurn($)
+  await bash($, world, 'npm run dev', BUSY_START)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'refusal' } as never)
+  expect(await buttonLabels(band)).toEqual(['Compact', 'Not now'])
+})
+
+const SHAPES = [
+  { signal: 'strong', heldPrompt: false, isBusy: false },
+  { signal: 'strong', heldPrompt: true, isBusy: false },
+  { signal: 'strong', heldPrompt: true, isBusy: true },
+  { signal: 'weak', heldPrompt: false, isBusy: false },
+  { signal: 'weak', heldPrompt: false, isBusy: true },
+] as const
+
+for (const shape of SHAPES) {
+  test(`It gives unique hotkeys and one primary for ${JSON.stringify(shape)}`, () => {
+    const controls = bandControls(bandButtons(shape), shape.signal)
+    expect(new Set(controls.map(c => c.hotkey)).size).toBe(controls.length)
+    expect(controls.filter(c => c.isPrimary)).toHaveLength(1)
+  })
+}
+
+
+test('It does not redraw the old held offer when the band was taken down since the press', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await heldBand($, world)
+  await notify($, 'bgX')
+  await startTurn($)
+  await band.press({ key: 'handoff-send' })
+  await submitPerson($, 'actually do this instead', { turnId: 't1' })
+  await bash($, world, 'npm run dev', BUSY_START)
+  await completeTurn($)
+  expect(world.records.at(-1)).toMatchObject({ trigger_values: { reason: 'background_busy' } })
+  expect(world.effects).toContain(`toast:${BUSY_REFUSAL}`)
+})
+
+test('It says so and takes the band down when a held press finds the prompt no longer held', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.branch = 'alice/eng-1-start'
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  const band = await mountBand($)
+  await startTurn($)
+  await band.press({ key: 'send-here' })
+  world.fillRefusal = 'dialog'
+  await world.clock.settle()
+  await completeTurn($)
+  expect(world.effects).toContain('toast:handoff: that prompt is no longer held, so there is nothing to send.')
+})
+
+test('It leaves a newer band alone when a refused press was made on an older one', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.branch = 'alice/eng-1-start'
+  await submitPerson($, 'start on ENG-1')
+  const band = await weakBand($, world)
+  await startTurn($)
+  await band.press({ key: 'handoff' })
+  await submitPerson($, 'now ENG-2')
+  await bash($, world, 'npm run dev', BUSY_START)
+  await completeTurn($)
+  expect(await buttonLabels(band)).toEqual(['Hand off and send it', 'Send here'])
+})
+
+test('It still refuses and records when the band cannot be read for the redraw', ASK, async ($, on) => {
+  const world = install($, on)
+  let isStoreGone = false
+  on('state.get', (_$, e, next) => (isStoreGone ? { deny: 'store gone' } : next(e)))
+  await startSession($)
+  const band = await weakBand($, world)
+  await bash($, world, 'npm run dev', BUSY_START)
+  isStoreGone = true
+  await band.press({ key: 'handoff' })
+  expect(world.debugLines.join('\n')).toContain('could not read the band')
+  expect(world.records.at(-1)).toMatchObject({ trigger_values: { reason: 'background_busy' } })
 })

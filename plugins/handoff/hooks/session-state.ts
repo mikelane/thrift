@@ -24,6 +24,7 @@ export type SessionState = Settings & {
   heldPrompt: string | null
   hasBand: boolean
   isTurnRunning: boolean
+  isPressing: boolean
   deferredPress: DeferredPress | null
 }
 
@@ -43,6 +44,7 @@ export const createState = (settings: Settings): SessionState => ({
   heldPrompt: null,
   hasBand: false,
   isTurnRunning: false,
+  isPressing: false,
   deferredPress: null,
 })
 

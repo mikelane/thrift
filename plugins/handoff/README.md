@@ -161,10 +161,13 @@ from being evaluated.
   press runs in place of the end-of-turn evaluation, so a new offer never replaces a choice you made.
   If a handoff or compaction is already pending when it would run (for example `/handoff` ran
   mid-turn), a toast says so and the press is dropped. Ending the session drops a held press.
+- The first press wins in the same instant: a second press, Not now included, is dropped until the
+  first settles. A held press for a prompt that is no longer held says so and takes the band down.
 - Background work is checked again when a press runs. If work started since the band was drawn and
   the press would clear (Hand off and clear, Hand off and send it), nothing is cleared: a toast says
   a handoff would cut the work off, the band is redrawn in its busy shape (Compact and Not now, or
-  Send here alone for a held prompt), and a `none` record with reason `background_busy` is written.
+  Send here alone for a held prompt), and a `none` record with reason `background_busy` is written. The record's signal is `weak`, which is what
+  a busy session classifies as. A band that was taken down or replaced since the press is not redrawn.
   A turn that ends interrupted or in error likewise refreshes a standing band's busy state.
 - The decision record of a press is the one the button always writes (`point` `button`), written when
   it runs, with `is_background_busy` and `cache_read_tokens` read at that moment.
@@ -236,7 +239,7 @@ the log, and nothing from it is written into the session.
 | `trigger_values.threshold` | `handoffContextTokens` |
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode` (the plugin may act as `off` anyway; see Compatibility) |
-| `trigger_values.cache_read_tokens` | Cache-read tokens of the last answered turn |
+| `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press that would clear was refused because background work is running) |
 
 A prompt is evaluated, and so logged, only when it names new work.
