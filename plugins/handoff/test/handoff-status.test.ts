@@ -193,13 +193,17 @@ test('It keeps the status line when a held prompt is sent again while /handoff w
 })
 
 // A typed /handoff is entered from the box the held prompt was refilled into, so the box is empty by then.
-const holdPromptThenRunHandoff = async ($: Engine, world: World) => {
+const holdPrompt = async ($: Engine, world: World) => {
   world.branch = 'alice/eng-1-start'
   await startSession($)
   await growTo200k($, world)
   await submitPerson($, 'start on ENG-1')
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
+}
+
+const holdPromptThenRunHandoff = async ($: Engine, world: World) => {
+  await holdPrompt($, world)
   world.box = { text: '', cursor: 0 }
   await runCommand($, 'handoff')
   await world.clock.settle()
@@ -216,4 +220,62 @@ test('It puts a held prompt back in the box when /handoff cannot write the note'
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await holdPromptThenRunHandoff($, world)
   expect(world.box.text).toBe('now ENG-2')
+})
+
+const HELD = 'now ENG-2'
+
+const sentHeldPrompts = (world: World) => world.effects.filter(effect => effect === `entered:plugin:${HELD}`)
+
+test('It submits a held prompt exactly once when /handoff runs over it', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPromptThenRunHandoff($, world)
+  expect(sentHeldPrompts(world)).toHaveLength(1)
+})
+
+test('It puts a held prompt back in the box and sends nothing when the fork throws under /handoff', ASK, async ($, on) => {
+  const world = install($, on)
+  world.fork = async () => {
+    throw new Error('fork down')
+  }
+  await holdPromptThenRunHandoff($, world)
+  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+})
+
+test('It puts a held prompt back in the box and sends nothing when session.id is denied under /handoff', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.box = { text: '', cursor: 0 }
+  world.sessionIdDenials = 1
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+})
+
+test('It puts a held prompt back in the box and sends nothing when the clear throws under /handoff', ASK, async ($, on) => {
+  const world = install($, on)
+  world.clearThrows = true
+  await holdPromptThenRunHandoff($, world)
+  expect([world.box.text, sentHeldPrompts(world).length]).toEqual([HELD, 0])
+})
+
+test('It submits nothing in the fresh session when /handoff runs with no prompt held', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect.startsWith('entered:'))).toEqual([])
+})
+
+// The Remote Control bridge enters /handoff without touching the terminal box, which still holds the refilled prompt.
+test('It empties the box of a held prompt when /handoff arrives from the bridge', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  await $.command.run({
+    command: 'handoff',
+    args: '',
+    origin: { kind: 'bridge' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
+  await world.clock.settle()
+  expect(world.box.text).toBe('')
 })
