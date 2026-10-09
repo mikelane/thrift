@@ -7,10 +7,8 @@ import {
   install,
   lastRecord,
   mountBand,
-  notify,
   runStep,
   startSession,
-  submitPerson,
   usageOf,
 } from './helpers'
 
@@ -65,7 +63,11 @@ test('It adds a dim line about act mode to the band', ASK, async ($, on) => {
   await startSession($)
   await finishedTaskTurn($, world)
   const band = await mountBand($)
-  expect(await band.find({ text: /^ctrl\+x Tab, then Enter to hand off\. 0 to dismiss\./ })).toBeDefined()
+  const hint = await band.find({
+    type: 'Text',
+    text: /^ctrl\+x Tab, then Enter to hand off\. 0 to dismiss\. Set handoffMode to act in \/config to skip /,
+  })
+  expect(hint?.props.dimColor).toBe(true)
 })
 
 test('It offers Hand off, Compact, and Not now for a weak signal', ASK, async ($, on) => {
@@ -293,12 +295,15 @@ test('It draws a weak band as plain buttons with hotkeys h, c and 0', ASK, async
   ])
 })
 
-test('It gives the finished-task band hotkeys h and 0', ASK, async ($, on) => {
+test('It draws the finished-task band with a focused primary h and a dismiss 0', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await finishedTaskTurn($, world)
   const band = await mountBand($)
-  expect((await buttonProps(band)).map(button => button.hotkey)).toEqual(['h', '0'])
+  expect(await buttonProps(band)).toEqual([
+    { hotkey: 'h', plain: true, variant: 'primary', autoFocus: true, role: undefined },
+    { hotkey: '0', plain: true, variant: undefined, autoFocus: undefined, role: 'dismiss' },
+  ])
 })
 
 test('It shades the band with the subtle theme color', ASK, async ($, on) => {

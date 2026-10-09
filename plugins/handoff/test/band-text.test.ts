@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BUTTON_LABELS, bandControls, bandHint, bandMessage } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage, busyOffer, clearsSession, isSameOffer } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
@@ -109,7 +109,7 @@ for (const [offer, hint] of hintCases) {
   })
 
   test(`It points to handoffMode act from bandHint for ${JSON.stringify(offer)}`, () => {
-    expect(bandHint(offer)).toEndWith('Set handoffMode to act in /config to skip this.')
+    expect(bandHint(offer)).toEndWith('Set handoffMode to act in /config to skip asking.')
   })
 }
 
@@ -166,5 +166,51 @@ for (const shape of everyShape) {
   test(`It gives every button bandButtons returns a unique hotkey for ${JSON.stringify(shape)}`, () => {
     const hotkeys = bandControls(bandButtons(shape), shape.signal).map(control => control.hotkey)
     expect(new Set(hotkeys).size).toBe(bandButtons(shape).length)
+  })
+}
+
+const clearsSessionCases = [
+  ['handoff', true],
+  ['handoff-send', true],
+  ['send-here', false],
+  ['compact', false],
+  ['not-now', false],
+] as const
+
+for (const [button, clears] of clearsSessionCases) {
+  test(`It returns ${clears} for ${button} from clearsSession`, () => {
+    expect(clearsSession(button)).toBe(clears)
+  })
+}
+
+const strongOffer = { signal: 'strong', contextTokens: 150_000, heldPrompt: false, isBusy: false } as const
+
+test('It returns a weak signal for a busy band with no held prompt from busyOffer', () => {
+  expect(busyOffer(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
+})
+
+test('It keeps the signal of a busy band holding a prompt from busyOffer', () => {
+  const held = { ...strongOffer, heldPrompt: true }
+  expect(busyOffer(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
+})
+
+test('It keeps the signal of a band that is not busy from busyOffer', () => {
+  expect(busyOffer({ ...strongOffer, isBusy: true }, 160_000, false)).toEqual({ ...strongOffer, contextTokens: 160_000 })
+})
+
+test('It returns true for offers with equal fields from isSameOffer', () => {
+  expect(isSameOffer(strongOffer, { ...strongOffer })).toBe(true)
+})
+
+const differingOffers = [
+  { ...strongOffer, signal: 'weak' },
+  { ...strongOffer, contextTokens: 1 },
+  { ...strongOffer, heldPrompt: true },
+  { ...strongOffer, isBusy: true },
+] as const
+
+for (const other of differingOffers) {
+  test(`It returns false for ${JSON.stringify(other)} against a strong offer from isSameOffer`, () => {
+    expect(isSameOffer(strongOffer, other)).toBe(false)
   })
 }

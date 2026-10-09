@@ -279,6 +279,9 @@ terminal and have not been watched yet:
 - How the band renders (its `subtle` shading, the `h:` labels, whether the colour reads well in light
   and dark themes), that `0` in an empty prompt, ctrl+x Tab then a letter or Enter, and a click each
   press a button, and that each button does what its label says.
+- How the band lays out in a narrow terminal (around 40 columns), in fullscreen and on the main
+  screen: that the buttons wrap onto new rows rather than clip, and that the message and hint lines
+  wrap.
 - A press that waited colliding with a prompt queued mid-turn: the queued prompt may start the next
   turn before the scheduled clear or compaction runs.
 - That `turn.start` and `turn.complete` bracket every model turn, so a press made mid-turn is held and

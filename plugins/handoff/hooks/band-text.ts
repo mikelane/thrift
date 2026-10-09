@@ -9,7 +9,7 @@ export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
   'not-now': 'Not now',
 }
 
-const ACT_MODE_HINT = 'Set handoffMode to act in /config to skip this.'
+const ACT_MODE_HINT = 'Set handoffMode to act in /config to skip asking.'
 
 const hintFor = ({ signal, heldPrompt, isBusy }: Offer): string => {
   if (heldPrompt) {
@@ -24,7 +24,7 @@ const hintFor = ({ signal, heldPrompt, isBusy }: Offer): string => {
 
 export const bandHint = (offer: Offer): string => `${hintFor(offer)} ${ACT_MODE_HINT}`
 
-export type BandControl = {
+type BandControl = {
   button: Button
   hotkey: string
   isPrimary: boolean
@@ -52,6 +52,27 @@ export const bandControls = (buttons: readonly Button[], signal: Signal): readon
     isDismiss: button === 'not-now',
   }))
 }
+
+const CLEARS_SESSION: Readonly<Record<Button, boolean>> = {
+  handoff: true,
+  'handoff-send': true,
+  'send-here': false,
+  compact: false,
+  'not-now': false,
+}
+
+export const clearsSession = (button: Button): boolean => CLEARS_SESSION[button]
+
+// classify() gives a weak signal whenever work is busy; a held prompt keeps its own signal.
+export const busyOffer = (offer: Offer, contextTokens: number, isBusy: boolean): Offer => ({
+  ...offer,
+  contextTokens,
+  isBusy,
+  signal: isBusy && !offer.heldPrompt ? 'weak' : offer.signal,
+})
+
+export const isSameOffer = (a: Offer, b: Offer): boolean =>
+  a.signal === b.signal && a.contextTokens === b.contextTokens && a.heldPrompt === b.heldPrompt && a.isBusy === b.isBusy
 
 const question = ({ signal, heldPrompt, isBusy }: Offer): string => {
   if (heldPrompt && isBusy) return 'A handoff would orphan that work, so send it here?'

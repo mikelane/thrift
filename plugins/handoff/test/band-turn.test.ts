@@ -209,6 +209,9 @@ test('It keeps a press waiting when an agent finishes its turn', ASK, async ($, 
   await completeTurn($, { agentId: 'agent1' })
   await world.clock.settle()
   expect(clears(world)).toHaveLength(0)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(clears(world)).toHaveLength(1)
 })
 
 test('It presses at once when no turn is running', ASK, async ($, on) => {
@@ -246,7 +249,7 @@ test('It takes the band down when the session ends during a turn', ASK, async ($
 test('It forgets a running turn when the session ends', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
-  const band = await bandAfterFinishedTask($, world)
+  await bandAfterFinishedTask($, world)
   await startTurn($)
   await $.session.end({ reason: 'other', sessionId: 'old-session', resume: { id: 'old-session' } })
   await startSession($)
@@ -257,7 +260,6 @@ test('It forgets a running turn when the session ends', ASK, async ($, on) => {
   await fresh.press({ key: 'handoff' })
   await world.clock.settle()
   expect(clears(world)).toHaveLength(1)
-  expect(band).toBeDefined()
 })
 
 const heldPromptBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
@@ -415,6 +417,7 @@ test('It refuses Hand off and send it and leaves Send here when background work 
   await world.clock.settle()
   expect(clears(world)).toHaveLength(0)
   expect(await buttonLabels(band)).toEqual(['Send here'])
+  expect((await band.find({ type: 'Button' }))?.props).toMatchObject({ variant: 'primary', autoFocus: true })
 })
 
 test('It does not refuse Compact when background work is running', ASK, async ($, on) => {
@@ -488,7 +491,8 @@ test('It runs only the first of Not now and Hand off pressed together at idle', 
   const band = await weakBand($, world)
   await Promise.all([band.press({ key: 'not-now' }), band.press({ key: 'handoff' })])
   await world.clock.settle()
-  expect(acted(world)).toHaveLength(1)
+  expect(acted(world)).toEqual(['none:not_now'])
+  expect(clears(world)).toHaveLength(0)
 })
 
 test('It runs only one of Hand off and Compact pressed together at idle', ASK, async ($, on) => {
@@ -497,7 +501,7 @@ test('It runs only one of Hand off and Compact pressed together at idle', ASK, a
   const band = await weakBand($, world)
   await Promise.all([band.press({ key: 'handoff' }), band.press({ key: 'compact' })])
   await world.clock.settle()
-  expect(world.effects.filter(e => e === 'clear' || e === 'compact')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'clear' || effect === 'compact')).toHaveLength(1)
 })
 
 test('It does not leave a held-prompt band up after the held prompt was replaced and a busy refusal ran', ASK, async ($, on) => {
@@ -544,7 +548,8 @@ test('It refreshes the band on a refusal turn end', ASK, async ($, on) => {
   const band = await weakBand($, world)
   await startTurn($)
   await bash($, world, 'npm run dev', BUSY_START)
-  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'refusal' } as never)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'refusal',
+    refusal: { category: null, explanation: null } })
   expect(await buttonLabels(band)).toEqual(['Compact', 'Not now'])
 })
 
@@ -577,6 +582,8 @@ test('It does not redraw the old held offer when the band was taken down since t
   await completeTurn($)
   expect(world.records.at(-1)).toMatchObject({ trigger_values: { reason: 'background_busy' } })
   expect(world.effects).toContain(`toast:${BUSY_REFUSAL}`)
+  const after = await mountBand($)
+  expect(await after.find({ text: 'engine band' })).toBeDefined()
 })
 
 test('It says so and takes the band down when a held press finds the prompt no longer held', ASK, async ($, on) => {
@@ -633,7 +640,7 @@ test('It runs a second idle press after the first one settled', ASK, async ($, o
   const second = await weakBand($, world)
   await second.press({ key: 'handoff' })
   await world.clock.settle()
-  expect(world.effects.filter(e => e === 'clear')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
 })
 
 test('It runs a press after a /clear that a press caused', ASK, async ($, on) => {
@@ -645,7 +652,7 @@ test('It runs a press after a /clear that a press caused', ASK, async ($, on) =>
   const second = await weakBand($, world)
   await second.press({ key: 'compact' })
   await world.clock.settle()
-  expect(world.effects.filter(e => e === 'compact')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
 })
 
 test('It runs an idle press after a held press ran at a turn end', ASK, async ($, on) => {
@@ -659,7 +666,7 @@ test('It runs an idle press after a held press ran at a turn end', ASK, async ($
   const second = await weakBand($, world)
   await second.press({ key: 'handoff' })
   await world.clock.settle()
-  expect(world.effects.filter(e => e === 'clear')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
 })
 
 test('It runs a press after a busy refusal settled', ASK, async ($, on) => {
@@ -670,7 +677,7 @@ test('It runs a press after a busy refusal settled', ASK, async ($, on) => {
   await band.press({ key: 'handoff' })
   await band.press({ key: 'compact' })
   await world.clock.settle()
-  expect(world.effects.filter(e => e === 'compact')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
 })
 
 test('It redraws the busy shape when the band was redrawn with equal content since the press', ASK, async ($, on) => {
@@ -681,7 +688,7 @@ test('It redraws the busy shape when the band was redrawn with equal content sin
   await band.press({ key: 'handoff' })
   await bash($, world, 'npm run dev', BUSY_START)
   await completeTurn($)
-  expect((await band.findAll({ type: 'Button' })).map(b => b.props.label)).toEqual(['Compact', 'Not now'])
+  expect((await band.findAll({ type: 'Button' })).map(button => button.props.label)).toEqual(['Compact', 'Not now'])
 })
 
 test('It takes down the held band after a busy refusal once the prompt is sent', ASK, async ($, on) => {
