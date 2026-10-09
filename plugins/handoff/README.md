@@ -50,9 +50,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    is a weak one.
 4. **It hands off.** The steps, in order:
    1. Replace the band's content with a status line, "Writing a handoff note — this takes a few
-      seconds…", with no buttons and no hotkeys, and show the toast "Writing a handoff for a fresh
-      session...". The status line shows whatever started the handoff: a band press, act mode,
-      `/handoff`, or a held prompt handed off first. Presses and hotkeys do nothing while it is up.
+      seconds…", with no buttons and no hotkeys, and show the same text as a toast. The status line shows
+      whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
+      first. Presses and hotkeys do nothing while it is up.
       It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open

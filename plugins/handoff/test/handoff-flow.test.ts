@@ -34,7 +34,7 @@ const handedOff = async ($: Engine, on: On) => {
   return world
 }
 
-const WRITING = 'toast:Writing a handoff for a fresh session...'
+const WRITING = 'toast:Writing a handoff note — this takes a few seconds…'
 
 test('It does not hand off inside the hook the turn is waiting on', ACT, async ($, on) => {
   const world = install($, on)

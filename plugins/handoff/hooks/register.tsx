@@ -57,7 +57,7 @@ const BACKOFF_TOKENS = 50_000
 const BRANCH_READ_TIMEOUT_MS = 5000
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
-const WRITING_TOAST = 'Writing a handoff for a fresh session...'
+const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
@@ -403,7 +403,7 @@ const continueInFreshSession = async (
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   try {
     await redrawBand($, state, WRITING)
-    $.ui.toast(WRITING_TOAST)
+    $.ui.toast(WRITING_STATUS)
     const oldId = await $.session.id()
     const note = await writeNote($)
     if (note === null) {
@@ -707,7 +707,7 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
     { trigger, ...(held === null ? {} : { heldPrompt: held }), isUnattended: false },
     emptyBox,
   )
-  return { text: isClaimed ? WRITING_TOAST : ALREADY_PENDING }
+  return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
 export const register: Register = (on, options) => {
