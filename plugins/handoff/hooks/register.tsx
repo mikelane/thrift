@@ -428,11 +428,19 @@ const runHandoff = async ($: EngineInterface, state: SessionState, request: Hand
   }
 }
 
-const scheduleHandoff = ($: EngineInterface, state: SessionState, request: HandoffRequest): boolean => {
+const scheduleHandoff = (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  beforeRun?: () => Promise<void>,
+): boolean => {
   if (!claim(state, 'handoff')) return false
   state.heldPrompt = null
   $.clock.after(0, () => {
-    void logFailure($, runHandoff($, state, request))
+    void logFailure($, (async () => {
+      await beforeRun?.()
+      await runHandoff($, state, request)
+    })())
   })
   return true
 }
@@ -682,12 +690,13 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
   const held = state.heldPrompt
-  if (held !== null) await emptyBoxIfHolding($, held)
-  const isClaimed = scheduleHandoff($, state, {
-    trigger,
-    ...(held === null ? {} : { heldPrompt: held }),
-    isUnattended: false,
-  })
+  const emptyBox = held === null ? undefined : () => emptyBoxIfHolding($, held)
+  const isClaimed = scheduleHandoff(
+    $,
+    state,
+    { trigger, ...(held === null ? {} : { heldPrompt: held }), isUnattended: false },
+    emptyBox,
+  )
   return { text: isClaimed ? WRITING_TOAST : ALREADY_PENDING }
 }
 
@@ -772,7 +781,7 @@ export const register: Register = (on, options) => {
     return isWriting(offer) ? drawStatus($, e) : drawBand($, state, e, offer)
   }).catch(($, e, next) => next(e))
 
-  // SAFETY: startHandoffCommand's only awaits are isBackgroundBusy and emptyBoxIfHolding, which catch their own failures, so no test reaches this catch.
+  // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.
   // Keep it: every hook must never break a turn.
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
     text: 'Could not start a handoff.',

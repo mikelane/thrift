@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult } from 'claude-code'
+import type { ModelForkResult, SessionCompactResult } from 'claude-code'
 
 import {
   answered,
@@ -9,8 +9,10 @@ import {
   growTo200k,
   install,
   mountBand,
+  notify,
   runCommand,
   startSession,
+  startTurn,
   submitPerson,
   type World,
 } from './helpers'
@@ -278,4 +280,95 @@ test('It empties the box of a held prompt when /handoff arrives from the bridge'
   })
   await world.clock.settle()
   expect(world.box.text).toBe('')
+})
+
+const handoffFromBridge = ($: Engine) =>
+  $.command.run({
+    command: 'handoff',
+    args: '',
+    origin: { kind: 'bridge' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
+
+// A background task finishes while a prompt is held; its turn ends on a weak signal and redraws the band with
+// Compact, the person presses it, and while the compaction runs /handoff arrives from the bridge.
+const compactingOverHeldPrompt = async ($: Engine, world: World) => {
+  await holdPrompt($, world)
+  world.compact = () => new Promise<SessionCompactResult>(() => undefined)
+  await notify($, 'task-1')
+  await startTurn($)
+  await completeTurn($)
+  const band = await mountBand($)
+  await band.press({ key: 'compact' })
+  await world.clock.settle()
+}
+
+test('It leaves a held prompt in the box when /handoff from the bridge is refused because a compaction is running', ASK, async ($, on) => {
+  const world = install($, on)
+  await compactingOverHeldPrompt($, world)
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.box.text).toBe(HELD)
+})
+
+test('It never empties the box when /handoff answers that a compaction is already in progress', ASK, async ($, on) => {
+  const world = install($, on)
+  await compactingOverHeldPrompt($, world)
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'fill:')).toEqual([])
+})
+
+test('It still hands off a held prompt when the box cannot be read under /handoff from the bridge', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.boxReadDenied = true
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD}`)).toHaveLength(1)
+})
+
+test('It still hands off a held prompt when the box refuses the fill under /handoff from the bridge', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.fillRefusal = 'no_composer'
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD}`)).toHaveLength(1)
+})
+
+test('It keeps what else the person typed when /handoff from the bridge empties a held prompt', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.box = { text: `${HELD}\nalso this`, cursor: 0 }
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.box.text).toBe('also this')
+})
+
+test('It leaves an edited held prompt in the box under /handoff from the bridge', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.box = { text: `${HELD} and ENG-3`, cursor: 0 }
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect(world.box.text).toBe(`${HELD} and ENG-3`)
+})
+
+test('It restores a held prompt to the box once when the clear throws under /handoff from the bridge', ASK, async ($, on) => {
+  const world = install($, on)
+  await holdPrompt($, world)
+  world.clearThrows = true
+  await handoffFromBridge($)
+  await world.clock.settle()
+  expect([world.box.text, world.effects.filter(effect => effect === `fill:${HELD}`).length]).toEqual([HELD, 2])
+})
+
+test('It answers /handoff from the bridge with already-in-progress while the compaction runs over a held prompt', ASK, async ($, on) => {
+  const world = install($, on)
+  await compactingOverHeldPrompt($, world)
+  const before = world.box.text
+  const ran = await handoffFromBridge($)
+  await world.clock.settle()
+  expect([before, world.effects.includes('fork'), ran]).toEqual([HELD, false, { text: 'A handoff or compaction is already in progress.' }])
 })
