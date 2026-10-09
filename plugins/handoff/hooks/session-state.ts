@@ -185,9 +185,10 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
 
+// A turn in the session the person cleared to is not one the note missed, so it does not count.
 export const startMainTurn = (state: SessionState): void => {
   state.isTurnRunning = true
-  state.hasTurnAfterNote = true
+  if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
 }
 
 export const endMainTurn = (state: SessionState): void => {

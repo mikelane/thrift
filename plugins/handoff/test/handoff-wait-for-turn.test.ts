@@ -751,6 +751,13 @@ test('It does not show the waiting status once the person has cleared, while a t
   expect(world.appended).toEqual([])
 })
 
+test('It leaves the turn-after-note line out when the only later turn ran in the session the person cleared to', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toEqual([BASE_MESSAGE])
+})
+
 test('It takes the waiting status down when the session is resumed during the wait', async ($, on) => {
   const world = await waitingForATurn($, on)
   await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
