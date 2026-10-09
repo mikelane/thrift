@@ -58,12 +58,13 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open
       threads, the next concrete step, and facts the next session would otherwise rediscover, in
       at most 400 words of plain Markdown.
-   3. If `compactBeforeClear` is on, compact the old session. A failed or vetoed compaction is
-      logged and the handoff goes on.
-   4. If a turn is running (one a peer or a finished background task started, or one that was queued
-      before the handoff), wait for it to end, however long that takes, then run `/clear`. The
-      Writing status stays up and person prompts stay held meanwhile. The wait has no limit, and
-      the check and the clear happen in the same tick. Otherwise run `/clear` at once.
+   3. If a turn is running (one a peer or a finished background task started, or one that was queued
+      before the handoff), wait for it to end, however long that takes. The Writing status stays up
+      and person prompts stay held meanwhile. The wait has no limit.
+   4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
+      never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
+      turn started during the compaction, go back to step 3. Then run `/clear` in the same tick as the
+      last check for a running turn.
    5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
       (&lt;id&gt;), written by Claude just before a /clear". If a turn ran after the note began to
       be written, the message ends with one more line saying so and giving `claude --resume <id>`
@@ -148,9 +149,9 @@ Special cases:
   that arrives while a compaction is pending.
 - **Turns started by something other than a person.** A peer prompt or a finished background
   task is not held, and a finished task is still marked done. If it starts a turn while the handoff
-  is pending, the handoff waits for that turn to end before it clears (step 4).
-- **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
-  session is compacted before the clear) is held, so `/clear` never runs inside its turn.
+  is pending, the handoff waits for that turn to end before it clears (step 3).
+- **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while the handoff waits for a turn, or
+  while the session is compacted before the clear is held, so `/clear` never runs inside its turn.
   - Held: after the clear it is sent in the fresh session, after the note.
   - Grouped by sender: prompts from the same kind of sender (a person, or a scheduled trigger) are
     joined with a blank line, in the order they arrived, and sent as one. Each kind follows its own

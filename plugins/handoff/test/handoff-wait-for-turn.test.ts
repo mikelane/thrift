@@ -3,7 +3,9 @@ import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
-import { answered, completeTurn, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
+import { answered, compacted, completeTurn, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
+
+const COMPACTING = { options: { compactBeforeClear: true } } as const
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
 const LATE_TURN_MESSAGE = `${BASE_MESSAGE}\n\n${turnAfterNoteLine('old-session')}`
@@ -215,4 +217,48 @@ test('It does not offer a band over the handoff when the awaited turn ends', asy
   await finishNote()
   await endTurn($, world)
   expect(world.records.map(record => record.action)).toEqual(['cleared'])
+})
+
+test('It does not compact before the clear while a turn that started during the note is running', COMPACTING, async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await finishNote()
+  expect(world.effects).not.toContain('compact')
+})
+
+test('It compacts once the turn that started during the note ends', COMPACTING, async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects).toContain('compact')
+})
+
+test('It compacts before it clears once the awaited turn ends', COMPACTING, async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects.filter(effect => effect === 'compact' || effect === 'clear')).toEqual(['compact', 'clear'])
+})
+
+test('It waits again when a turn starts during the compaction', COMPACTING, async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.compact = async () => {
+    await startTurn($)
+    return compacted(48_000)
+  }
+  await finishNote()
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It clears once the turn that started during the compaction ends', COMPACTING, async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.compact = async () => {
+    await startTurn($)
+    return compacted(48_000)
+  }
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects).toContain('clear')
 })
