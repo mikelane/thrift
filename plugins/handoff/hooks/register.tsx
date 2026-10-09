@@ -41,14 +41,19 @@ import {
 import {
   addHeldPrompt,
   beginHandoffHold,
+  beginNoteWindow,
   createState,
   endHandoffHold,
+  endMainTurn,
   isCarriedByHandoff,
   isHoldingForHandoff,
   releaseCarried,
   releaseCarriedGroup,
+  releaseTurnEndWaiter,
   resetForNewSession,
+  startMainTurn,
   takeHeldPrompts,
+  waitUntilNoTurnRuns,
   type ButtonPress,
   type HeldPromptGroup,
   type SessionState,
@@ -434,9 +439,10 @@ const continueInFreshSession = async (
   settledHandoff: SettledHandoff,
   oldId: string,
   note: string,
+  hasTurnAfterNote: boolean,
 ) => {
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note))
+  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
@@ -454,6 +460,7 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
     await redrawBand($, state, WRITING)
     $.ui.toast(WRITING_STATUS)
     const oldId = await $.session.id()
+    beginNoteWindow(state)
     const note = await writeNote($)
     if (note === null) {
       await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.')
@@ -480,6 +487,9 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
+    // A turn that is running now would have /clear land inside it, so the check and the clear share one tick.
+    if (state.isTurnRunning) await waitUntilNoTurnRuns(state)
+    const hasTurnAfterNote = state.hasTurnStartedSinceNote
     const isCleared = await clearSession($)
     const settledHandoff = settleHandoff(state, request)
     if (!isCleared) {
@@ -491,7 +501,7 @@ const runHandoff = async (
         'The handoff was written but /clear failed. This session is unchanged.',
       )
     }
-    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note)
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote)
   } finally {
     endHandoffHold(state)
     state.pending = null
@@ -870,7 +880,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    state.isTurnRunning = true
+    startMainTurn(state)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -879,7 +889,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     const hasFinishedTask = state.hasFinishedTask
     state.hasFinishedTask = false
-    state.isTurnRunning = false
+    endMainTurn(state)
     const deferredPress = state.deferredPress
     state.deferredPress = null
     if (deferredPress !== null) {
@@ -887,6 +897,8 @@ export const register: Register = (on, options) => {
       await claimAndRunPress($, state, deferredPress)
     } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     else await refreshBandBusyState($, state)
+    // The handoff clears in a later tick: /clear inside the hook the turn is waiting on is refused.
+    $.clock.after(0, () => releaseTurnEndWaiter(state))
     return result
   }).catch(($, e, next) => next(e))
 

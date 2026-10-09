@@ -80,7 +80,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnRunning = false
   state.isPressRunning = false
   state.deferredPress = null
-  resolveTurnEndWaiter(state)
+  releaseTurnEndWaiter(state)
 }
 
 // The prompts a handoff holds and carries survive resetForNewSession: the clear happens in the middle of the handoff.
@@ -141,7 +141,6 @@ export const startMainTurn = (state: SessionState): void => {
 
 export const endMainTurn = (state: SessionState): void => {
   state.isTurnRunning = false
-  resolveTurnEndWaiter(state)
 }
 
 // A turn already running when the note begins is not counted: only a turn that starts after it can be missing from the note.
@@ -149,12 +148,17 @@ export const beginNoteWindow = (state: SessionState): void => {
   state.hasTurnStartedSinceNote = false
 }
 
-export const waitForTurnEnd = (state: SessionState): Promise<void> =>
+const waitForTurnEnd = (state: SessionState): Promise<void> =>
   new Promise(resolve => {
     state.turnEndWaiter = resolve
   })
 
-const resolveTurnEndWaiter = (state: SessionState): void => {
+// Checks again after each wake-up: a new turn may start before the waiter runs.
+export const waitUntilNoTurnRuns = async (state: SessionState): Promise<void> => {
+  while (state.isTurnRunning) await waitForTurnEnd(state)
+}
+
+export const releaseTurnEndWaiter = (state: SessionState): void => {
   const waiter = state.turnEndWaiter
   state.turnEndWaiter = null
   waiter?.()

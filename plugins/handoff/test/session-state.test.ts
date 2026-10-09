@@ -11,7 +11,8 @@ import {
   beginNoteWindow,
   endMainTurn,
   startMainTurn,
-  waitForTurnEnd,
+  releaseTurnEndWaiter,
+  waitUntilNoTurnRuns,
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
@@ -275,30 +276,48 @@ test('It keeps hasTurnStartedSinceNote after the turn ends in endMainTurn', () =
   expect(state.hasTurnStartedSinceNote).toBe(true)
 })
 
-test('It stays pending in waitForTurnEnd until endMainTurn runs', async () => {
+test('It resolves at once in waitUntilNoTurnRuns when no turn runs', async () => {
   const state = createState(settings)
-  startMainTurn(state)
-  expect(await isPending(waitForTurnEnd(state))).toBe(true)
+  expect(await isPending(waitUntilNoTurnRuns(state))).toBe(false)
 })
 
-test('It resolves waitForTurnEnd when endMainTurn runs', async () => {
+test('It stays pending in waitUntilNoTurnRuns while a turn runs and the waiter is not released', async () => {
   const state = createState(settings)
   startMainTurn(state)
-  const waiting = waitForTurnEnd(state)
+  const waiting = waitUntilNoTurnRuns(state)
   endMainTurn(state)
+  expect(await isPending(waiting)).toBe(true)
+})
+
+test('It resolves waitUntilNoTurnRuns when the turn ended and the waiter is released', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitUntilNoTurnRuns(state)
+  endMainTurn(state)
+  releaseTurnEndWaiter(state)
   await waiting
   expect(state.turnEndWaiter).toBeNull()
 })
 
-test('It does nothing in endMainTurn when no one is waiting', () => {
+test('It waits again in waitUntilNoTurnRuns when a new turn started before the waiter ran', async () => {
   const state = createState(settings)
-  expect(() => endMainTurn(state)).not.toThrow()
+  startMainTurn(state)
+  const waiting = waitUntilNoTurnRuns(state)
+  endMainTurn(state)
+  startMainTurn(state)
+  releaseTurnEndWaiter(state)
+  expect(await isPending(waiting)).toBe(true)
+})
+
+test('It does nothing in releaseTurnEndWaiter when no one is waiting', () => {
+  const state = createState(settings)
+  expect(() => releaseTurnEndWaiter(state)).not.toThrow()
 })
 
 test('It resolves a waiter in resetForNewSession so none dangles', async () => {
   const state = createState(settings)
   startMainTurn(state)
-  const waiting = waitForTurnEnd(state)
+  const waiting = waitUntilNoTurnRuns(state)
   resetForNewSession(state)
   await waiting
   expect(state.turnEndWaiter).toBeNull()
