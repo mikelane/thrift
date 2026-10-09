@@ -111,7 +111,7 @@ into a weak one.
 | Strong, finished task | Log only | Band: Hand off and clear, Not now | Hand off |
 | Strong, prompt names new work | Log only | Hold the prompt and refill the box. Band: Hand off and send it, Send here. Enter again sends it here. | Drop the prompt, hand off, resend it in the fresh session |
 | Weak, background work running | Log only | Band: Compact, Not now. No handoff button. | Compact |
-| Weak, otherwise | Log only | Band: Hand off and clear, Compact, Not now | Compact |
+| Weak, otherwise | Log only | Band: Compact, Hand off and clear, Not now | Compact |
 
 A weak signal is acted on at the end of a turn. A prompt that names new work while the signal is
 weak only logs.
@@ -139,7 +139,7 @@ without asking. It yields to a survey. A band that cannot be taken down does not
 from being evaluated.
 
 - The band is shaded and its buttons are drawn plain, like the built-in "Heads up" survey:
-  `h: Hand off and clear`, `c: Compact`, `0: Not now`. Hand off is `h`, Compact is `c`, Send here is
+  `c: Compact`, `h: Hand off and clear`, `0: Not now`. Hand off is `h`, Compact is `c`, Send here is
   `s`, and Not now is `0`. A held-prompt band has `h: Hand off and send it` and `s: Send here`, and no
   `0`.
 - Only Not now is a digit. A bare digit typed into an empty prompt presses a band button, so a digit

@@ -1,5 +1,5 @@
 import type { Offer } from '../types'
-import { formatTokens, type Button, type Signal } from './signals'
+import { formatTokens, type Button } from './signals'
 
 export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
   handoff: 'Hand off and clear',
@@ -42,10 +42,9 @@ type BandControl = {
   isDismiss: boolean
 }
 
-// The highlight follows the plugin's own pick (compact for a weak signal), whatever the display order.
-export const bandControls = (buttons: readonly Button[], signal: Signal): readonly BandControl[] => {
-  const actions = buttons.filter(button => button !== 'not-now')
-  const recommended = signal === 'weak' ? 'compact' : actions[0]
+// The recommended button is the first action, so focus lands on the first button of every band.
+export const bandControls = (buttons: readonly Button[]): readonly BandControl[] => {
+  const recommended = buttons.find(button => button !== 'not-now')
   return buttons.map(button => ({
     button,
     hotkey: HOTKEYS[button],
