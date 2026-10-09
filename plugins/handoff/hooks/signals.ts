@@ -253,7 +253,7 @@ const NONE: Response = { kind: 'none' }
 type BandShape = { signal: Signal; heldPrompt: boolean; isBusy: boolean }
 
 export const bandButtons = ({ signal, heldPrompt, isBusy }: BandShape): readonly Button[] => {
-  if (heldPrompt) return ['handoff-send', 'send-here']
+  if (heldPrompt) return isBusy ? ['send-here'] : ['handoff-send', 'send-here']
   if (signal === 'strong') return ['handoff', 'not-now']
   return isBusy ? ['compact', 'not-now'] : ['handoff', 'compact', 'not-now']
 }

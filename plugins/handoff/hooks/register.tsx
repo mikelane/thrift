@@ -41,6 +41,8 @@ const WRITING_TOAST = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'handoff: this turn is still running, so your choice will run when it ends.'
+const BUSY_REFUSAL = 'handoff: background work started, and a handoff would cut it off. Nothing was cleared.'
+const CLEARING_BUTTONS: ReadonlySet<Button> = new Set(['handoff', 'handoff-send'])
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'handoff: your prompt could not be sent or put back in the box. Here it is:'
 
@@ -406,6 +408,10 @@ const scheduleHandoff = ($: EngineInterface, state: SessionState, request: Hando
   return true
 }
 
+const noteCacheReads = (state: SessionState, e: TurnCompleteInput) => {
+  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
+}
+
 const evaluateTurnEnd = async (
   $: EngineInterface,
   state: SessionState,
@@ -413,7 +419,7 @@ const evaluateTurnEnd = async (
   hasFinishedTask: boolean,
 ) => {
   if (state.pending !== null) return
-  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
+  noteCacheReads(state, e)
   const isBusy = await isBackgroundBusy($, state)
   const signal = classify({
     contextTokens: state.contextTokens,
@@ -529,9 +535,34 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   })
 }
 
+const busyOffer = (offer: Offer, contextTokens: number, isBusy: boolean): Offer => ({
+  ...offer,
+  contextTokens,
+  isBusy,
+  signal: isBusy && !offer.heldPrompt ? 'weak' : offer.signal,
+})
+
+const redrawBand = async ($: EngineInterface, offer: Offer) => {
+  try {
+    await update($, offerAtom, () => offer)
+  } catch (error) {
+    debug($, `could not redraw the band: ${String(error)}`)
+  }
+}
+
+const refuseToClear = async ($: EngineInterface, state: SessionState, offer: Offer, trigger: Trigger) => {
+  const redrawn = busyOffer(offer, state.contextTokens, true)
+  $.ui.toast(BUSY_REFUSAL)
+  await redrawBand($, redrawn)
+  await writeRecord($, state, { ...trigger, signal: redrawn.signal, action: 'none', reason: 'background_busy' })
+}
+
+// Busyness is read when the press runs, not taken from the offer: a shell may have started since the band was drawn.
 const runPress = async ($: EngineInterface, state: SessionState, { offer, button }: DeferredPress) => {
-  if (state.pending !== null) return
-  const trigger = snapshot(state, 'button', offer.signal, offer.isBusy)
+  const isBusy = await isBackgroundBusy($, state)
+  if (state.pending !== null) return $.ui.toast(ALREADY_PENDING)
+  const trigger = snapshot(state, 'button', offer.signal, isBusy)
+  if (isBusy && CLEARING_BUTTONS.has(button)) return refuseToClear($, state, offer, trigger)
   if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
   if (button === 'compact') scheduleCompaction($, state, trigger)
   else if (button !== 'not-now') scheduleHandoff($, state, { trigger, isUnattended: false })
@@ -540,13 +571,27 @@ const runPress = async ($: EngineInterface, state: SessionState, { offer, button
   if (button === 'not-now') await writeRecord($, state, { ...trigger, action: 'none', reason: 'not_now' })
 }
 
-// A press made mid-turn waits, so /clear and compaction never land inside a turn. The first press wins; the band
-// stays up until it runs, and it runs at the end of that turn in place of a fresh evaluation.
+// A press that clears or compacts made mid-turn waits, so /clear and compaction never land inside a turn. The first
+// press wins; the band stays up until it runs, and it runs at the end of that turn in place of a fresh evaluation.
+// Not now has no such hazard, so it runs at once.
 const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer, button: Button) => {
   if (state.pending !== null || state.deferredPress !== null) return
-  if (!state.isTurnRunning) return runPress($, state, { offer, button })
+  if (!state.isTurnRunning || button === 'not-now') return runPress($, state, { offer, button })
   state.deferredPress = { offer, button }
   $.ui.toast(PRESS_WAITS_FOR_TURN)
+}
+
+// A turn that ends without an answer gets no evaluation, so a band left up could still offer a handoff over work
+// that started during it.
+const refreshBandBusyState = async ($: EngineInterface, state: SessionState) => {
+  try {
+    const offer = await read($, offerAtom)
+    if (offer === null) return
+    const isBusy = await isBackgroundBusy($, state)
+    if (offer.isBusy !== isBusy) await redrawBand($, busyOffer(offer, state.contextTokens, isBusy))
+  } catch (error) {
+    debug($, `could not read the band: ${String(error)}`)
+  }
 }
 
 const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'AbovePrompt'>, offer: Offer) => {
@@ -645,8 +690,11 @@ export const register: Register = (on, options) => {
     state.isTurnRunning = false
     const held = state.deferredPress
     state.deferredPress = null
-    if (held !== null) await runPress($, state, held)
-    else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
+    if (held !== null) {
+      noteCacheReads(state, e)
+      await runPress($, state, held)
+    } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
+    else await refreshBandBusyState($, state)
     return result
   }).catch(($, e, next) => next(e))
 

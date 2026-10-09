@@ -42,6 +42,10 @@ const questionCases = [
     'Hand off to a fresh session now?',
   ],
   [
+    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    'A handoff would orphan that work, so send it here?',
+  ],
+  [
     { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
     'A handoff would orphan that work, so compact instead?',
   ],
@@ -152,6 +156,7 @@ test('It marks no held-prompt button as dismiss from bandControls', () => {
 
 const everyShape = [
   { signal: 'strong', heldPrompt: true, isBusy: false },
+  { signal: 'strong', heldPrompt: true, isBusy: true },
   { signal: 'strong', heldPrompt: false, isBusy: false },
   { signal: 'weak', heldPrompt: false, isBusy: true },
   { signal: 'weak', heldPrompt: false, isBusy: false },
