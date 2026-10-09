@@ -534,3 +534,18 @@ test('It puts the held prompt back when the person resumes during the wait in ac
   await world.clock.settle()
   expect(world.effects).not.toContain('clear')
 })
+
+test('It logs session_ended against the session the handoff started in', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  world.sessionId = 'resumed-session'
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'session_ended' } })
+})

@@ -354,10 +354,11 @@ const abandonHandoff = async (
   settledHandoff: SettledHandoff,
   reason: string,
   message: string,
+  sessionId?: string,
 ) => {
   await takeDownBand($, state)
   $.ui.toast(message)
-  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason })
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason, sessionId })
   for (const { text, isUnattended } of settledHandoff.heldGroups) {
     await restorePrompt($, text, isUnattended)
     releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
@@ -511,13 +512,13 @@ const runHandoff = async (
     }
     const sessionEnd = state.sessionEndBeforeClear
     if (sessionEnd === 'other') {
-      return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED)
+      return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED, prepared.oldId)
     }
     if (sessionEnd === null && isBusy) {
       // The decision-time snapshot predates the wait, so it says not busy; record the refusal as refuseToClear does.
       const busyTrigger = { ...request.trigger, isBusy: true, signal: 'weak' as const }
       const busySettled = { ...settleHandoff(state, request), trigger: busyTrigger }
-      return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL)
+      return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL, prepared.oldId)
     }
     const hasTurnAfterNote = state.hasTurnMissingFromNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
@@ -534,6 +535,7 @@ const runHandoff = async (
         settledHandoff,
         'clear_failed',
         'The handoff was written but /clear failed. This session is unchanged.',
+        prepared.oldId,
       )
     }
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote)
