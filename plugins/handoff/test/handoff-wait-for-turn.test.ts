@@ -3,8 +3,10 @@ import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
-import { answered, compacted, completeTurn, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
+import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
 
+const ACT = { options: { handoffMode: 'act' } } as const
+const BUSY_TOAST = 'toast:Background work started, and a handoff would cut it off. Nothing was cleared.'
 const COMPACTING = { options: { compactBeforeClear: true } } as const
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
@@ -258,6 +260,72 @@ test('It clears once the turn that started during the compaction ends', COMPACTI
     await startTurn($)
     return compacted(48_000)
   }
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects).toContain('clear')
+})
+
+// In act mode the handoff starts on its own, and a busy session is never handed off. A turn that runs during the
+// wait can start background work after that decision was made.
+const actHandoffWhileWritingTheNote = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  await startTurn($)
+  const finishNote = async () => {
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+  }
+  return { world, finishNote }
+}
+
+const turnStartsBackgroundWork = async ($: Engine, on: On) => {
+  const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  await finishNote()
+  await endTurn($, world)
+  return world
+}
+
+test('It does not clear over background work that a turn started while an act-mode handoff waited', ACT, async ($, on) => {
+  const world = await turnStartsBackgroundWork($, on)
+  expect(world.effects).not.toContain('clear')
+})
+
+test('It tells the person nothing was cleared when background work stops an act-mode handoff', ACT, async ($, on) => {
+  const world = await turnStartsBackgroundWork($, on)
+  expect(world.effects).toContain(BUSY_TOAST)
+})
+
+test('It records background_busy when background work stops an act-mode handoff after the wait', ACT, async ($, on) => {
+  const world = await turnStartsBackgroundWork($, on)
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'background_busy' } })
+})
+
+test('It puts a held prompt back in the box when background work stops the handoff', ACT, async ($, on) => {
+  const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  await submitPerson($, 'next thing')
+  await finishNote()
+  await endTurn($, world)
+  expect(world.box.text).toBe('next thing')
+})
+
+test('It clears a typed /handoff over background work that a turn started during the wait', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects).toContain('clear')
+})
+
+test('It clears an act-mode handoff when no background work started during the wait', ACT, async ($, on) => {
+  const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
   await finishNote()
   await endTurn($, world)
   expect(world.effects).toContain('clear')

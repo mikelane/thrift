@@ -63,13 +63,18 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       and person prompts stay held meanwhile. The wait has no limit.
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
-      turn started during the compaction, go back to step 3. Then run `/clear` in the same tick as the
-      last check for a running turn.
-   5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
+      turn started during the compaction, go back to step 3.
+   5. Check for background work again, because a turn may have started some while the handoff
+      waited. If work is running and the handoff did not come from a typed `/handoff`, stop: nothing
+      is cleared, a toast says a handoff would cut the work off, held prompts go back as they do on
+      any failure, and a `none` record with reason `background_busy` is written. A typed `/handoff`
+      goes through, as it does when it starts while work is busy. If a turn started during this check,
+      go back to step 3. Then run `/clear` in the same tick as the last check for a running turn.
+   6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
       (&lt;id&gt;), written by Claude just before a /clear". If a turn ran after the note began to
       be written, the message ends with one more line saying so and giving `claude --resume <id>`
       for the details; the note itself is not rewritten.
-   6. Say what happened to the note, in a transcript line and a toast with the same text. If it was
+   7. Say what happened to the note, in a transcript line and a toast with the same text. If it was
       appended, or the append was refused and it was submitted as a prompt: "Handed off. This session
       starts from a note summarizing the previous one. To reopen the full previous conversation:
       `claude --resume <id>`". If both were refused and it was put in the prompt box instead, the
@@ -79,7 +84,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       this session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
-   7. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
+   8. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
       started by handing it off first or by running `/handoff` while the prompt was held.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
@@ -280,7 +285,7 @@ the log, and nothing from it is written into the session.
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode` (the plugin may act as `off` anyway; see Compatibility) |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
-| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press that would clear was refused because background work is running) |
+| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 
 A prompt is evaluated, and so logged, only when it names new work.

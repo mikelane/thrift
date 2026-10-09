@@ -487,16 +487,24 @@ const runHandoff = async (
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     // SAFETY: no await sits between the last isTurnRunning read and the $.command.run inside clearSession. Every awaited
-    // step before the clear (the compaction) is followed by another pass through the wait, and the loop resumes straight
-    // from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's first step is the synchronous command
-    // call. Do not add an await after the loop, or move the clear behind a helper that awaits first.
+    // step before the clear (the compaction, the busy check) is followed by another pass through the wait, and the loop
+    // resumes straight from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's first step is the
+    // synchronous command call. Do not add an await after the loop, or move the clear behind a helper that awaits first.
+    const mustRefuseWhenBusy = request.trigger.point !== 'command'
     let isCompacted = !state.compactBeforeClear
+    let isBusy = false
     for (;;) {
       while (state.isTurnRunning) await waitForTurnEnd(state)
-      if (isCompacted) break
-      isCompacted = true
-      await compactBeforeClearing($, state, request.trigger)
+      if (!isCompacted) {
+        isCompacted = true
+        await compactBeforeClearing($, state, request.trigger)
+        continue
+      }
+      if (!mustRefuseWhenBusy) break
+      isBusy = await isBackgroundBusy($, state)
+      if (!state.isTurnRunning) break
     }
+    if (isBusy) return await abandonHandoff($, state, settleHandoff(state, request), 'background_busy', BUSY_REFUSAL)
     const hasTurnAfterNote = state.hasTurnMissingFromNote
     const isCleared = await clearSession($)
     const settledHandoff = settleHandoff(state, request)
