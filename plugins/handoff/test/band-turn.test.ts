@@ -705,3 +705,22 @@ test('It takes down the held band after a busy refusal once the prompt is sent',
   const after = await mountBand($)
   expect(await after.find({ text: 'engine band' })).toBeDefined()
 })
+
+test('It takes down a held band left up by a failed takedown when Send here finds no held prompt', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.branch = 'alice/eng-1-start'
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  const band = await mountBand($)
+  world.stateSetThrows = true
+  await submitPerson($, 'mid-turn note', { turnId: 't1' })
+  world.stateSetThrows = false
+  expect(await band.find({ text: 'engine band' })).toBeUndefined()
+  await band.press({ key: 'send-here' })
+  await world.clock.settle()
+  const after = await mountBand($)
+  expect(await after.find({ text: 'engine band' })).toBeDefined()
+})
