@@ -5,6 +5,7 @@ import type {
   On,
   SessionCompactResult,
   SessionVersion,
+  ToolCallResult,
   TurnUsage,
 } from 'claude-code'
 
@@ -295,6 +296,14 @@ export const notify = ($: Engine, taskId: string) =>
     origin: { kind: 'task-notification' },
   })
 
+type LooseToolCall = { tool: string; [argument: string]: unknown }
+
+// `$.tool.call`'s parameter type is a union over every built-in and MCP tool, and resolving it
+// overflows the compiler once many MCP servers' types are generated (TS2589). Casting the
+// function, not the input, keeps that union from ever being instantiated.
+const callTool = ($: Engine, input: LooseToolCall) =>
+  ($.tool.call as unknown as (input: LooseToolCall) => Promise<ToolCallResult>)(input)
+
 type ToolRun = { result?: unknown; mode?: World['toolMode']; agentId?: string }
 
 export const bash = (
@@ -305,7 +314,7 @@ export const bash = (
 ) => {
   world.toolResult = result
   world.toolMode = mode
-  return $.tool.call({ tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
+  return callTool($, { tool: 'Bash', command, ...(agentId ? { agentId } : {}) })
 }
 
 export const tool = (
@@ -317,7 +326,7 @@ export const tool = (
 ) => {
   world.toolResult = result
   world.toolMode = mode
-  return $.tool.call({ tool: name, ...input } as never)
+  return callTool($, { tool: name, ...input })
 }
 
 export const runCommand = ($: Engine, command: string) =>
