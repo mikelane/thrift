@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On, SessionCompactResult } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
-import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
+import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const BUSY_MESSAGE = 'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
@@ -12,9 +12,11 @@ const BUSY_LOG = `log:${BUSY_MESSAGE}`
 const SESSION_ENDED_MESSAGE = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
 const SESSION_ENDED_TOAST = `toast:${SESSION_ENDED_MESSAGE}`
 const SESSION_ENDED_LOG = `log:${SESSION_ENDED_MESSAGE}`
+const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
+const SECOND_MESSAGE = 'Handoff from the previous session (new-session), written by Claude just before a /clear:\n\nSecond note.'
 const LATE_TURN_MESSAGE = `${BASE_MESSAGE}\n\n${turnAfterNoteLine('old-session')}`
 
 const holdFork = (world: World) => {
@@ -489,7 +491,7 @@ test('It runs one clear and delivers the note when the person clears during the 
   await runCommand($, 'handoff')
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
-  expect(world.appended).toHaveLength(1)
+  expect(world.appended).toEqual([BASE_MESSAGE])
 })
 
 test('It abandons as session_ended when the session is resumed during the compaction', COMPACTING, async ($, on) => {
@@ -518,7 +520,7 @@ test('It clears normally on the handoff after one the person cleared during', as
   await runCommand($, 'handoff')
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(2)
-  expect(world.appended).toHaveLength(2)
+  expect(world.appended).toEqual([BASE_MESSAGE, SECOND_MESSAGE])
 })
 
 test('It clears normally on the handoff after one abandoned as session_ended', async ($, on) => {
@@ -536,12 +538,14 @@ test('It clears normally on the handoff after one abandoned as session_ended', a
   expect(world.effects).toContain('clear')
 })
 
-test('It puts the held prompt back when the person resumes during the wait in act-mode prompt handoff', ACT, async ($, on) => {
+test('It puts the held prompt back in the box when the person resumes during the wait in act-mode prompt handoff', ACT, async ($, on) => {
   const world = install($, on)
   const fork = holdFork(world)
   await startSession($)
+  world.branch = 'alice/eng-1-start'
   await growTo200k($, world)
-  await submitPerson($, 'Start on PROJ-42 next')
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
   await world.clock.settle()
   await startTurn($)
   fork.release(answered('The handoff note.'))
@@ -549,6 +553,7 @@ test('It puts the held prompt back when the person resumes during the wait in ac
   await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
   await world.clock.settle()
   expect(world.effects).not.toContain('clear')
+  expect(world.box.text).toBe('now ENG-2')
 })
 
 test('It logs session_ended against the session the handoff started in', async ($, on) => {
@@ -673,4 +678,39 @@ test('It logs the cleared record against the handoff session after compacting', 
   await runCommand($, 'handoff')
   await world.clock.settle()
   expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', action: 'cleared' })
+})
+
+// A band press made mid-turn runs when the turn ends. A handoff that claimed the session meanwhile drops it.
+test('It clears after the awaited turn ends when a held band press is dropped for the pending handoff', ASK, async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  const band = await mountBand($)
+  await startTurn($)
+  await band.press({ key: 'handoff' })
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  await endTurn($, world)
+  expect(world.effects).toContain('toast:A handoff or compaction is already in progress.')
+  expect(world.effects).toContain('clear')
+})
+
+test('It delivers the note into the fresh session when the person clears during the post-wait busy check', ACT, async ($, on) => {
+  const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
+  world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+  world.onAgentList = async () => {
+    world.onAgentList = undefined
+    await runCommand($, 'clear')
+  }
+  await finishNote()
+  await endTurn($, world)
+  expect(world.onAgentList).toBeUndefined()
+  expect(clearCount(world)).toBe(1)
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
 })

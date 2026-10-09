@@ -310,6 +310,7 @@ test('It resolves waitForTurnEnd once the waiter is released', async () => {
 test('It does nothing in releaseTurnEndWaiter when no one is waiting', () => {
   const state = createState(settings)
   expect(() => releaseTurnEndWaiter(state)).not.toThrow()
+  expect(state.turnEndWaiter).toBeNull()
 })
 
 test('It leaves the waiter pending in resetForNewSession so the handoff resumes after the session end hook', async () => {

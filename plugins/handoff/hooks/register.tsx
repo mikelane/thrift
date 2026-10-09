@@ -959,7 +959,10 @@ export const register: Register = (on, options) => {
       else await refreshBandBusyState($, state)
     } finally {
       // The handoff clears in a later tick: /clear inside the hook the turn is waiting on is refused.
-      // Released even when the work above throws, so a failure there cannot leave the handoff waiting forever.
+      // SAFETY: every call in the try block catches its own engine failures (isBackgroundBusy, takeDownBand, writeRecord,
+      // offerBand, refreshBandBusyState), and the toast and log calls return void, so the kit cannot make the block throw
+      // and no test reaches this finally on a throw. Keep it: it is the only thing that frees a waiting handoff if a
+      // future call in the block forgets to catch.
       $.clock.after(0, () => releaseTurnEndWaiter(state))
     }
     return result
