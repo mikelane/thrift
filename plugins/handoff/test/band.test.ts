@@ -289,3 +289,40 @@ test('It starts the session when the band from before a reload cannot be read', 
   expect(world.debugLines.join('\n')).toContain('could not read the band')
   expect(world.effects).toContain('register:handoff')
 })
+
+const buttonProps = async (band: Awaited<ReturnType<typeof mountBand>>) =>
+  (await band.findAll({ type: 'Button' })).map(({ props }) => ({
+    hotkey: props.hotkey,
+    plain: props.plain,
+    variant: props.variant,
+    role: props.role,
+  }))
+
+test('It draws a weak band as plain buttons with hotkeys 1, 2 and 0', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  const band = await mountBand($)
+  expect(await buttonProps(band)).toEqual([
+    { hotkey: '1', plain: true, variant: 'primary', role: undefined },
+    { hotkey: '2', plain: true, variant: undefined, role: undefined },
+    { hotkey: '0', plain: true, variant: undefined, role: 'dismiss' },
+  ])
+})
+
+test('It gives the finished-task band hotkeys 1 and 0', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  const band = await mountBand($)
+  expect((await buttonProps(band)).map(button => button.hotkey)).toEqual(['1', '0'])
+})
+
+test('It shades the band with the subtle theme color', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  const band = await mountBand($)
+  expect((await band.find({ type: 'Box' }))?.props.backgroundColor).toBe('subtle')
+})

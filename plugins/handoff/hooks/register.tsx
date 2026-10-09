@@ -10,7 +10,7 @@ import type {
 } from 'claude-code'
 
 import type { Offer } from '../types'
-import { BAND_HINT, BUTTON_LABELS, bandMessage } from './band-text'
+import { BAND_HINT, BUTTON_LABELS, bandControls, bandMessage } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
@@ -542,13 +542,17 @@ const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer
 const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'AbovePrompt'>, offer: Offer) => {
   const { Box, Text, Button } = $.ui.resolve(e)
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" backgroundColor="subtle">
       <Text>{bandMessage(offer)}</Text>
-      <Box flexWrap="wrap" columnGap={1}>
-        {bandButtons(offer).map(button => (
+      <Box flexWrap="wrap" columnGap={2}>
+        {bandControls(bandButtons(offer)).map(({ button, hotkey, isPrimary, isDismiss }) => (
           <Button
             key={button}
             label={BUTTON_LABELS[button]}
+            hotkey={hotkey}
+            plain
+            {...(isPrimary ? { variant: 'primary' as const } : {})}
+            {...(isDismiss ? { role: 'dismiss' as const } : {})}
             onPress={() => logFailure($, pressButton($, state, offer, button))}
           />
         ))}

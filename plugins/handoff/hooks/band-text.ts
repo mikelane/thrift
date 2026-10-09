@@ -9,7 +9,25 @@ export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
   'not-now': 'Not now',
 }
 
-export const BAND_HINT = 'Set handoffMode to act in /config to do this without asking.'
+export const BAND_HINT = 'Type a digit in an empty prompt to choose. Set handoffMode to act in /config to skip this.'
+
+export type BandControl = {
+  button: Button
+  hotkey: string
+  isPrimary: boolean
+  isDismiss: boolean
+}
+
+const DISMISS_HOTKEY = '0'
+
+export const bandControls = (buttons: readonly Button[]): readonly BandControl[] => {
+  const actions = buttons.filter(button => button !== 'not-now')
+  return buttons.map(button =>
+    button === 'not-now'
+      ? { button, hotkey: DISMISS_HOTKEY, isPrimary: false, isDismiss: true }
+      : { button, hotkey: String(actions.indexOf(button) + 1), isPrimary: button === actions[0], isDismiss: false },
+  )
+}
 
 const question = ({ signal, heldPrompt, isBusy }: Offer): string => {
   if (heldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
