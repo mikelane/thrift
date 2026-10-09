@@ -15,7 +15,7 @@ export type NoteDelivery = 'appended' | 'submitted' | 'in_box' | 'not_carried'
 export const turnAfterNoteLine = (oldSessionId: string): string =>
   `A turn ran in the previous session after this note was written, so the note may miss it. For what it did: ${resumeCommand(oldSessionId)}`
 
-export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterNote = false): string => {
+export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterNote: boolean): string => {
   const message = `Handoff from the previous session (${oldSessionId}), written by Claude just before a /clear:\n\n${note}`
   return hasTurnAfterNote ? `${message}\n\n${turnAfterNoteLine(oldSessionId)}` : message
 }

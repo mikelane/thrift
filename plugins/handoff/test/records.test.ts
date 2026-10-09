@@ -118,7 +118,7 @@ test('It forbids a preamble in HANDOFF_PROMPT', () => {
 })
 
 test('It names the old session and the note from handoffMessage', () => {
-  const message = handoffMessage('old-id', 'The note.')
+  const message = handoffMessage('old-id', 'The note.', false)
   expect(message).toStartWith('Handoff from the previous session (old-id), written by Claude just before a /clear')
   expect(message).toEndWith('The note.')
 })
