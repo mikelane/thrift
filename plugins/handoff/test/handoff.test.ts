@@ -185,7 +185,7 @@ for (const [name, version] of untestedBuilds) {
     world.version = version
     await startSession($)
     expect(world.records.map(record => record.action)).toEqual(['untested_engine'])
-    expect(world.effects.filter(effect => effect.startsWith('toast:handoff: untested on Claude Code'))).toHaveLength(1)
+    expect(world.effects.filter(effect => effect.startsWith('toast:Untested on Claude Code'))).toHaveLength(1)
   })
 
   test(`It treats act as off on ${name}`, ACT, async ($, on) => {
@@ -212,7 +212,7 @@ test('It names the base version in the untested toast', ACT, async ($, on) => {
   const world = install($, on)
   world.version = { version: '2.1.296', base: '2.1.296' }
   await startSession($)
-  expect(world.effects).toContain('toast:handoff: untested on Claude Code 2.1.296, so it only logs this session. /handoff still works.')
+  expect(world.effects).toContain('toast:Untested on Claude Code 2.1.296, so it only logs this session. /handoff still works.')
 })
 
 test('It records the version string when the base is missing', ACT, async ($, on) => {

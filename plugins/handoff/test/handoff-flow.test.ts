@@ -73,6 +73,11 @@ test('It names the old session and the resume command in a transcript line and a
   expect(named.map(effect => effect.split(':')[0])).toEqual(['log', 'toast'])
 })
 
+test('It writes the previous session line without a doubled plugin prefix', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.effects).toContain('log:The previous session is old-session. Reopen it with claude --resume old-session')
+})
+
 test('It logs a cleared record under the old session id with the values that triggered it', ACT, async ($, on) => {
   const world = await handedOff($, on)
   expect(world.records).toHaveLength(1)

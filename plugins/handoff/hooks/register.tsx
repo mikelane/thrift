@@ -38,13 +38,13 @@ const BRANCH_READ_TIMEOUT_MS = 5000
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_TOAST = 'Writing a handoff for a fresh session...'
-const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
-const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
-const PRESS_WAITS_FOR_TURN = 'handoff: this turn is still running, so your choice will run when it ends.'
-const BUSY_REFUSAL = 'handoff: background work started, and a handoff would cut it off. Nothing was cleared.'
-const PROMPT_NOT_HELD = 'handoff: that prompt is no longer held, so there is nothing to send.'
+const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
+const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
+const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
+const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
-const UNSENT_PROMPT = 'handoff: your prompt could not be sent or put back in the box. Here it is:'
+const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
@@ -354,7 +354,7 @@ const continueInFreshSession = async (
   const message = handoffMessage(oldId, note)
   const isStored = await appendNote($, message)
   const resume = resumeCommand(oldId)
-  $.ui.log(`handoff: the previous session is ${oldId}. Reopen it with ${resume}`)
+  $.ui.log(`The previous session is ${oldId}. Reopen it with ${resume}`)
   $.ui.toast(`Handoff written. Reopen ${oldId} with ${resume}`)
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
   if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
@@ -664,7 +664,7 @@ export const register: Register = (on, options) => {
     state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
-      if (setting !== 'off') $.ui.toast(`handoff: untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
+      if (setting !== 'off') $.ui.toast(`Untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
       await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
@@ -730,7 +730,7 @@ export const register: Register = (on, options) => {
   // SAFETY: startHandoffCommand's only await is isBackgroundBusy, which catches its own failures, so no test reaches this catch.
   // Keep it: every hook must never break a turn.
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
-    text: 'handoff: could not start a handoff.',
+    text: 'Could not start a handoff.',
   }))
 
   on('session.end', async ($, e, next) => {

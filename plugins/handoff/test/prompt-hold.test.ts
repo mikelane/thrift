@@ -32,7 +32,7 @@ const entered = (world: Awaited<ReturnType<typeof ready>>) => world.effects.filt
 test('It drops a prompt that names new work and holds it in ask mode', ASK, async ($, on) => {
   const world = await ready($, on)
   const result = await submitPerson($, 'now ENG-2')
-  expect(dropOf(result)).toContain('held your prompt')
+  expect(dropOf(result)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
 })
 
@@ -170,7 +170,7 @@ test('It does not hold a prompt when background work makes the signal weak', ASK
 test('It drops the prompt, hands off, and resends it in the fresh session in act mode', ACT, async ($, on) => {
   const world = await ready($, on)
   const result = await submitPerson($, 'now ENG-2')
-  expect(dropOf(result)).toContain('handing off first')
+  expect(dropOf(result)).toBe('Handing off first. Your prompt will be sent in the fresh session.')
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
   await world.clock.settle()
   const steps = world.effects.filter(effect => ['fork', 'clear', 'append', 'entered:plugin:now ENG-2'].includes(effect))
@@ -272,7 +272,7 @@ test('It does not drop a prompt that carries attachments in act mode', ACT, asyn
 test('It hands off for a scheduled prompt in ask mode without asking', ASK, async ($, on) => {
   const world = await ready($, on)
   const result = await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
-  expect(dropOf(result)).toContain('handing off first')
+  expect(dropOf(result)).toBe('Handing off first. Your prompt will be sent in the fresh session.')
   await world.clock.settle()
   expect(entered(world)).toContain('entered:plugin:now ENG-2')
 })
@@ -377,6 +377,15 @@ test('It writes a held prompt to the transcript when nobody is at the box and it
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
   expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
+})
+
+test('It heads the transcript copy of an unsent prompt without a doubled plugin prefix', ASK, async ($, on) => {
+  const world = await ready($, on)
+  world.fillRefusal = 'no_composer'
+  world.submitThrows = true
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  expect(world.effects).toContain('log:Your prompt could not be sent or put back in the box. Here it is:\nnow ENG-2')
 })
 
 test('It writes an unattended prompt to the transcript when it cannot be sent after the clear', ACT, async ($, on) => {
