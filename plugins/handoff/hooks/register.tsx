@@ -116,7 +116,7 @@ type HandoffRequest = {
 type SettledHandoff = {
   trigger: Trigger
   isUnattended: boolean
-  held: HeldPromptGroup[]
+  heldGroups: HeldPromptGroup[]
 }
 
 const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
@@ -342,16 +342,16 @@ const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boo
 const abandonHandoff = async (
   $: EngineInterface,
   state: SessionState,
-  settled: SettledHandoff,
+  settledHandoff: SettledHandoff,
   reason: string,
   message: string,
 ) => {
   await takeDownBand($, state)
   $.ui.toast(message)
-  await writeRecord($, state, { ...settled.trigger, action: 'none', reason })
-  for (const { text, isUnattended } of settled.held) {
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason })
+  for (const { text, isUnattended } of settledHandoff.heldGroups) {
     await restorePrompt($, text, isUnattended)
-    releaseCarriedGroup(state, { text, isUnattended }, settled.isUnattended)
+    releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
   }
 }
 
@@ -422,29 +422,30 @@ const announce = ($: EngineInterface, message: string) => {
 }
 
 // The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
-const deliverNote = async ($: EngineInterface, settled: SettledHandoff, message: string): Promise<NoteDelivery> => {
+const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
   if (await appendNote($, message)) return 'appended'
-  const alongside = groupJoiningNote(settled.held, settled.isUnattended)
-  return sendOrKeepInBox($, joinPrompts(message, alongside?.text), settled.isUnattended)
+  const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
+  return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
 }
 
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
-  settled: SettledHandoff,
+  settledHandoff: SettledHandoff,
   oldId: string,
   note: string,
 ) => {
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, settled, handoffMessage(oldId, note))
+  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
-  await writeRecord($, state, { ...settled.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
-  for (const { text } of settled.held) await inspectPrompt($, state, text)
-  for (const group of groupsLeftToSend(settled.held, settled.isUnattended, noteDelivery)) {
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
+  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
+  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  for (const group of groupsToSend) {
     await sendOrKeepInBox($, group.text, group.isUnattended)
-    releaseCarriedGroup(state, group, settled.isUnattended)
+    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
   }
 }
 
@@ -480,17 +481,17 @@ const runHandoff = async (
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     const isCleared = await clearSession($)
-    const settled = settleHandoff(state, request)
+    const settledHandoff = settleHandoff(state, request)
     if (!isCleared) {
       return await abandonHandoff(
         $,
         state,
-        settled,
+        settledHandoff,
         'clear_failed',
         'The handoff was written but /clear failed. This session is unchanged.',
       )
     }
-    await continueInFreshSession($, state, settled, prepared.oldId, prepared.note)
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note)
   } finally {
     endHandoffHold(state)
     state.pending = null
@@ -628,7 +629,7 @@ const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmit
 const settleHandoff = (state: SessionState, request: HandoffRequest): SettledHandoff => ({
   trigger: request.trigger,
   isUnattended: request.isUnattended,
-  held: groupHeldPrompts(takeHeldPrompts(state)),
+  heldGroups: groupHeldPrompts(takeHeldPrompts(state)),
 })
 
 const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } | undefined => {

@@ -28,8 +28,8 @@ export const noteNotCarriedMessage = (oldSessionId: string): string =>
 
 const PROMPT_SEPARATOR = '\n\n'
 
-export const joinPrompts = (handoff: string, held: string | undefined): string =>
-  held ? `${handoff}${PROMPT_SEPARATOR}${held}` : handoff
+export const joinPrompts = (handoff: string, heldPrompts: string | undefined): string =>
+  heldPrompts ? `${handoff}${PROMPT_SEPARATOR}${heldPrompts}` : handoff
 
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
