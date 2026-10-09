@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   addHeldPrompt,
+  preClearOutcome,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -382,4 +383,28 @@ test('It ignores a session end when no handoff is pending in recordSessionEnd', 
   const state = createState(settings)
   recordSessionEnd(state, 'resume')
   expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It abandons as session_ended when another session end came, even if work is busy, in preClearOutcome', () => {
+  expect(preClearOutcome('other', true)).toBe('abandon_session_ended')
+})
+
+test('It abandons as session_ended when another session end came and nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome('other', false)).toBe('abandon_session_ended')
+})
+
+test('It delivers to the person clear over busy work in preClearOutcome', () => {
+  expect(preClearOutcome('cleared_by_person', true)).toBe('deliver_to_person_clear')
+})
+
+test('It delivers to the person clear when nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome('cleared_by_person', false)).toBe('deliver_to_person_clear')
+})
+
+test('It abandons as busy when no session ended and work is busy in preClearOutcome', () => {
+  expect(preClearOutcome(null, true)).toBe('abandon_busy')
+})
+
+test('It clears when no session ended and nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome(null, false)).toBe('clear')
 })

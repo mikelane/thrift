@@ -45,6 +45,7 @@ import {
   beginOwnClear,
   beginNoteWindow,
   createState,
+  preClearOutcome,
   endHandoff,
   endMainTurn,
   isCarriedByHandoff,
@@ -65,6 +66,7 @@ import {
   asMode,
   asThreshold,
   bandButtons,
+  busyRefusalTrigger,
   branchTicketPrefix,
   classify,
   contextFromStep,
@@ -510,20 +512,18 @@ const runHandoff = async (
       isBusy = await isBackgroundBusy($, state)
       if (!state.isTurnRunning) break
     }
-    const sessionEnd = state.sessionEndBeforeClear
-    if (sessionEnd === 'other') {
+    const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
+    if (outcome === 'abandon_session_ended') {
       return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED, prepared.oldId)
     }
-    if (sessionEnd === null && isBusy) {
-      // The decision-time snapshot predates the wait, so it says not busy; record the refusal as refuseToClear does.
-      const busyTrigger = { ...request.trigger, isBusy: true, signal: 'weak' as const }
-      const busySettled = { ...settleHandoff(state, request), trigger: busyTrigger }
+    if (outcome === 'abandon_busy') {
+      const busySettled = { ...settleHandoff(state, request), trigger: busyRefusalTrigger(request.trigger) }
       return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL, prepared.oldId)
     }
     const hasTurnAfterNote = state.hasTurnAfterNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
-    if (sessionEnd === null) {
+    if (outcome === 'clear') {
       beginOwnClear(state)
       isCleared = await clearSession($)
     }
@@ -758,11 +758,10 @@ const redrawIfStillShown = async ($: EngineInterface, state: SessionState, shown
   }
 }
 
-// classify() gives a weak signal whenever work is busy, so the record says weak whatever the band's own signal.
 const refuseToClear = async ($: EngineInterface, state: SessionState, offer: Offer, trigger: Trigger) => {
   $.ui.toast(BUSY_REFUSAL)
   await redrawIfStillShown($, state, offer, offerWithBusyState(offer, state.contextTokens, true))
-  await writeRecord($, state, { ...trigger, signal: 'weak', action: 'none', reason: 'background_busy' })
+  await writeRecord($, state, { ...busyRefusalTrigger(trigger), action: 'none', reason: 'background_busy' })
 }
 
 // Busyness is read when the press runs, not taken from the offer: a shell may have started since the band was drawn.

@@ -275,3 +275,10 @@ export const respond = ({ mode, signal, stoppingPoint, isBackgroundBusy, isUnatt
   if (isUnattended) return signal === 'strong' ? { kind: 'handoff', holdsPrompt: stoppingPoint === 'new-work' } : NONE
   return signal === 'strong' ? respondToStrong(mode, stoppingPoint) : respondToWeak(mode, isBackgroundBusy)
 }
+
+// The decision-time snapshot predates a busy refusal, and classify() gives a weak signal whenever work is busy.
+export const busyRefusalTrigger = <T extends { isBusy: boolean; signal: Signal }>(trigger: T): T => ({
+  ...trigger,
+  isBusy: true,
+  signal: 'weak',
+})

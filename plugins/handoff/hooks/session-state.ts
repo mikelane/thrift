@@ -31,6 +31,26 @@ export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 // What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
 
+export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'deliver_to_person_clear' | 'clear'
+
+const assertNever = (value: never): never => {
+  throw new Error(`unhandled value: ${String(value)}`)
+}
+
+// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons.
+export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean): PreClearOutcome => {
+  switch (sessionEnd) {
+    case 'other':
+      return 'abandon_session_ended'
+    case 'cleared_by_person':
+      return 'deliver_to_person_clear'
+    case null:
+      return isBusy ? 'abandon_busy' : 'clear'
+    default:
+      return assertNever(sessionEnd)
+  }
+}
+
 export type SessionState = Settings & {
   mode: Mode
   engineVersion: string

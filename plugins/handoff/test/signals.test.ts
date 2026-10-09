@@ -4,6 +4,7 @@ import {
   asMode,
   asThreshold,
   bandButtons,
+  busyRefusalTrigger,
   branchTicketPrefix,
   classify,
   commandSegments,
@@ -383,3 +384,17 @@ for (const [step, expected] of contextCases) {
     expect(contextFromStep(step)).toBe(expected)
   })
 }
+
+const decidedTrigger = { point: 'turn-end', signal: 'strong', isBusy: false, contextTokens: 200_000, cacheReadTokens: 5 } as const
+
+test('It marks the trigger busy in busyRefusalTrigger', () => {
+  expect(busyRefusalTrigger(decidedTrigger).isBusy).toBe(true)
+})
+
+test('It makes the signal weak, as a busy session classifies, in busyRefusalTrigger', () => {
+  expect(busyRefusalTrigger(decidedTrigger).signal).toBe('weak')
+})
+
+test('It keeps the other fields of the trigger in busyRefusalTrigger', () => {
+  expect(busyRefusalTrigger(decidedTrigger)).toMatchObject({ point: 'turn-end', contextTokens: 200_000, cacheReadTokens: 5 })
+})
