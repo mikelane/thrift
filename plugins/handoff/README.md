@@ -141,6 +141,8 @@ from being evaluated.
 - The band is shaded and numbered like the built-in "Heads up" survey: `1: Hand off and clear`,
   `2: Compact`, `0: Not now`. Actions count up from 1 in the order shown, and Not now is always `0`.
   A held-prompt band has `1: Hand off and send it` and `2: Send here`, with no `0`.
+  The highlighted button is the one the plugin recommends: Hand off for a strong signal, Compact for
+  a weak one. The digits do not move with the highlight.
 - Type the digit into an empty prompt to press a button, with no focus step. If the prompt holds
   text, press ctrl+x Tab to give the band the keyboard first, or click a button (fullscreen).
 - The band stays up while a turn runs. A press made during a turn is held: a toast says so, the

@@ -287,8 +287,8 @@ test('It draws a weak band as plain buttons with hotkeys 1, 2 and 0', ASK, async
   await completeTurn($)
   const band = await mountBand($)
   expect(await buttonProps(band)).toEqual([
-    { hotkey: '1', plain: true, variant: 'primary', role: undefined },
-    { hotkey: '2', plain: true, variant: undefined, role: undefined },
+    { hotkey: '1', plain: true, variant: undefined, role: undefined },
+    { hotkey: '2', plain: true, variant: 'primary', role: undefined },
     { hotkey: '0', plain: true, variant: undefined, role: 'dismiss' },
   ])
 })

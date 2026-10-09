@@ -555,7 +555,7 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
     <Box flexDirection="column" backgroundColor="subtle">
       <Text>{bandMessage(offer)}</Text>
       <Box flexWrap="wrap" columnGap={2}>
-        {bandControls(bandButtons(offer)).map(({ button, hotkey, isPrimary, isDismiss }) => (
+        {bandControls(bandButtons(offer), offer.signal).map(({ button, hotkey, isPrimary, isDismiss }) => (
           <Button
             key={button}
             label={BUTTON_LABELS[button]}

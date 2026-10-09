@@ -86,34 +86,34 @@ test('It tells the person to type a digit in BAND_HINT', () => {
 })
 
 const controlCases = [
-  [['handoff', 'not-now'], ['1', '0']],
-  [['handoff', 'compact', 'not-now'], ['1', '2', '0']],
-  [['compact', 'not-now'], ['1', '0']],
-  [['handoff-send', 'send-here'], ['1', '2']],
+  ['strong', ['handoff', 'not-now'], ['1', '0'], 'handoff'],
+  ['weak', ['handoff', 'compact', 'not-now'], ['1', '2', '0'], 'compact'],
+  ['weak', ['compact', 'not-now'], ['1', '0'], 'compact'],
+  ['strong', ['handoff-send', 'send-here'], ['1', '2'], 'handoff-send'],
 ] as const
 
-for (const [buttons, hotkeys] of controlCases) {
-  test(`It returns hotkeys ${hotkeys.join(',')} from bandControls for ${buttons.join(',')}`, () => {
-    expect(bandControls(buttons).map(control => control.hotkey)).toEqual(hotkeys)
+for (const [signal, buttons, hotkeys, primary] of controlCases) {
+  test(`It returns hotkeys ${hotkeys.join(',')} from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    expect(bandControls(buttons, signal).map(control => control.hotkey)).toEqual(hotkeys)
   })
 
-  test(`It returns unique hotkeys from bandControls for ${buttons.join(',')}`, () => {
-    const hotkeys = bandControls(buttons).map(control => control.hotkey)
-    expect(new Set(hotkeys).size).toBe(hotkeys.length)
+  test(`It returns unique hotkeys from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    const keys = bandControls(buttons, signal).map(control => control.hotkey)
+    expect(new Set(keys).size).toBe(keys.length)
   })
 
-  test(`It marks only the first action primary from bandControls for ${buttons.join(',')}`, () => {
-    expect(bandControls(buttons).filter(control => control.isPrimary).map(control => control.button)).toEqual([buttons[0]])
+  test(`It marks only ${primary} primary from bandControls for ${signal} ${buttons.join(',')}`, () => {
+    expect(bandControls(buttons, signal).filter(control => control.isPrimary).map(control => control.button)).toEqual([primary])
   })
 }
 
 test('It marks Not now as the dismiss with hotkey 0 from bandControls', () => {
-  const dismiss = bandControls(['handoff', 'not-now']).find(control => control.button === 'not-now')
+  const dismiss = bandControls(['handoff', 'not-now'], 'strong').find(control => control.button === 'not-now')
   expect(dismiss).toEqual({ button: 'not-now', hotkey: '0', isPrimary: false, isDismiss: true })
 })
 
 test('It marks no held-prompt button as dismiss from bandControls', () => {
-  expect(bandControls(['handoff-send', 'send-here']).some(control => control.isDismiss)).toBe(false)
+  expect(bandControls(['handoff-send', 'send-here'], 'strong').some(control => control.isDismiss)).toBe(false)
 })
 
 const everyShape = [
@@ -125,7 +125,7 @@ const everyShape = [
 
 for (const shape of everyShape) {
   test(`It gives every button bandButtons returns a unique hotkey for ${JSON.stringify(shape)}`, () => {
-    const hotkeys = bandControls(bandButtons(shape)).map(control => control.hotkey)
+    const hotkeys = bandControls(bandButtons(shape), shape.signal).map(control => control.hotkey)
     expect(new Set(hotkeys).size).toBe(bandButtons(shape).length)
   })
 }
