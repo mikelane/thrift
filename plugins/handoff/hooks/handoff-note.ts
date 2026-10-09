@@ -1,3 +1,5 @@
+import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
+
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
 Cover, under short headings:
 - The task and its goal.
@@ -24,8 +26,34 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
   `The handoff note could not be added to this session. The previous conversation is unchanged: ${resumeCommand(oldSessionId)}`
 
-export const joinPrompts = (handoff: string, held: string | undefined): string =>
-  held ? `${handoff}\n\n${held}` : handoff
+const PROMPT_SEPARATOR = '\n\n'
+
+export const joinPrompts = (handoff: string, heldPrompts: string | undefined): string =>
+  heldPrompts ? `${handoff}${PROMPT_SEPARATOR}${heldPrompts}` : handoff
+
+// Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
+export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
+  const groups: HeldPromptGroup[] = []
+  for (const { text, isUnattended } of prompts) {
+    const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
+    const group = groups[index]
+    if (group === undefined) groups.push({ text, isUnattended })
+    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended }
+  }
+  return groups
+}
+
+// The note rides with the group that shares the handoff's own origin.
+export const groupJoiningNote = (groups: readonly HeldPromptGroup[], handoffIsUnattended: boolean): HeldPromptGroup | undefined =>
+  groups.find(group => isGroupOfOrigin(group, handoffIsUnattended))
+
+// A note that was appended to the session leaves every group to send; a note that was sent as a prompt already carried its group.
+export const groupsLeftToSend = (
+  groups: readonly HeldPromptGroup[],
+  handoffIsUnattended: boolean,
+  noteDelivery: NoteDelivery,
+): HeldPromptGroup[] =>
+  noteDelivery === 'appended' ? [...groups] : groups.filter(group => !isGroupOfOrigin(group, handoffIsUnattended))
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

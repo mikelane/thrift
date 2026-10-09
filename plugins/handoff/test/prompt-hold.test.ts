@@ -251,14 +251,14 @@ test('It drops only one of two prompts that name new work at once', ACT, async (
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
 })
 
-test('It lets a second prompt through while a handoff is scheduled', ACT, async ($, on) => {
+test('It holds a second prompt and sends it once with the first while a handoff is scheduled', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
   const second = await submitPerson($, 'also ENG-3')
-  expect(second).toMatchObject({ text: 'also ENG-3' })
+  expect(dropOf(second)).toBe('A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.')
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
-  expect(entered(world)).toContain('entered:composer:also ENG-3')
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso ENG-3'])
 })
 
 test('It does not drop a prompt that carries attachments in act mode', ACT, async ($, on) => {

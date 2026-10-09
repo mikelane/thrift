@@ -140,7 +140,24 @@ Special cases:
 - **Prompts never held.** A prompt that carries context or attachments (only its text can be
   resent), a prompt typed while a turn is running, a prompt from a plugin or another session (only
   the person origins `composer`, `bridge`, `sdk`, and `scheduled-trigger` count), and any prompt
-  that arrives while a handoff or compaction is pending.
+  that arrives while a compaction is pending.
+- **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
+  session is compacted before the clear) is held, so `/clear` never runs inside its turn.
+  - Held: after the clear it is sent in the fresh session, after the note.
+  - Grouped by sender: prompts from the same kind of sender (a person, or a scheduled trigger) are
+    joined with a blank line, in the order they arrived, and sent as one. Each kind follows its own
+    rule if delivery fails. When the note has to be sent as a prompt, it carries the prompts of the
+    handoff's own kind and the others follow it.
+  - Repeats of the carried prompt: a prompt is dropped as a duplicate only when its text matches the
+    prompt the handoff is already carrying (say, "Hand off and send it" sent again). The drop says
+    the repeat was not added. Every other prompt is kept, so two identical prompts sent on purpose
+    are both sent.
+  - On failure: if the handoff fails, a person prompt goes back in the box and a scheduled one is
+    submitted here, whichever kind of sender started the handoff.
+  - Refused: a prompt with attachments or context can't be held, because it can't be sent again. It
+    is dropped with a short toast and is not sent in the fresh session. Its text is put back in the
+    prompt box, or shown in the transcript if the box can't take it. After the handoff, send it
+    again and add the attachments or context again.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 

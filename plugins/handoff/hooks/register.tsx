@@ -28,14 +28,31 @@ import {
   HANDOFF_PROMPT,
   handedOffMessage,
   handoffMessage,
+  groupHeldPrompts,
   holdsPrompt,
   joinPrompts,
   noteInBoxMessage,
   noteNotCarriedMessage,
+  groupJoiningNote,
+  groupsLeftToSend,
   withoutPrompt,
   type NoteDelivery,
 } from './handoff-note'
-import { createState, resetForNewSession, type ButtonPress, type SessionState } from './session-state'
+import {
+  addHeldPrompt,
+  beginHandoffHold,
+  createState,
+  endHandoffHold,
+  isCarriedByHandoff,
+  isHoldingForHandoff,
+  releaseCarried,
+  releaseCarriedGroup,
+  resetForNewSession,
+  takeHeldPrompts,
+  type ButtonPress,
+  type HeldPromptGroup,
+  type SessionState,
+} from './session-state'
 import {
   asMode,
   asThreshold,
@@ -63,6 +80,11 @@ const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fr
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
+const REFUSED_DURING_HANDOFF =
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
@@ -88,6 +110,13 @@ type HandoffRequest = {
   trigger: Trigger
   heldPrompt?: string
   isUnattended: boolean
+}
+
+// What a handoff delivers once its held prompts are taken: one group per origin, each following its own flag.
+type SettledHandoff = {
+  trigger: Trigger
+  isUnattended: boolean
+  heldGroups: HeldPromptGroup[]
 }
 
 const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
@@ -313,14 +342,17 @@ const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boo
 const abandonHandoff = async (
   $: EngineInterface,
   state: SessionState,
-  request: HandoffRequest,
+  settledHandoff: SettledHandoff,
   reason: string,
   message: string,
 ) => {
   await takeDownBand($, state)
   $.ui.toast(message)
-  await writeRecord($, state, { ...request.trigger, action: 'none', reason })
-  if (request.heldPrompt !== undefined) await restorePrompt($, request.heldPrompt, request.isUnattended)
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason })
+  for (const { text, isUnattended } of settledHandoff.heldGroups) {
+    await restorePrompt($, text, isUnattended)
+    releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
+  }
 }
 
 const writeNote = async ($: EngineInterface): Promise<string | null> => {
@@ -389,25 +421,32 @@ const announce = ($: EngineInterface, message: string) => {
   $.ui.toast(message)
 }
 
-const deliverNote = async ($: EngineInterface, request: HandoffRequest, message: string): Promise<NoteDelivery> =>
-  (await appendNote($, message))
-    ? 'appended'
-    : sendOrKeepInBox($, joinPrompts(message, request.heldPrompt), request.isUnattended)
+// The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
+const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
+  if (await appendNote($, message)) return 'appended'
+  const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
+  return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
+}
 
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
-  request: HandoffRequest,
+  settledHandoff: SettledHandoff,
   oldId: string,
   note: string,
 ) => {
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, request, handoffMessage(oldId, note))
+  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note))
+  // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
+  if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
-  await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
-  if (request.heldPrompt === undefined) return
-  await inspectPrompt($, state, request.heldPrompt)
-  if (noteDelivery === 'appended') await sendOrKeepInBox($, request.heldPrompt, request.isUnattended)
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
+  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
+  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  for (const group of groupsToSend) {
+    await sendOrKeepInBox($, group.text, group.isUnattended)
+    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
+  }
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
@@ -417,14 +456,14 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
     const oldId = await $.session.id()
     const note = await writeNote($)
     if (note === null) {
-      await abandonHandoff($, state, request, 'no_handoff_written', 'No handoff was written. This session is unchanged.')
+      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.')
       return null
     }
     if (state.compactBeforeClear) await compactBeforeClearing($, state, request.trigger)
     return { oldId, note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, request, 'handoff_failed', 'No handoff was written. This session is unchanged.')
+    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.')
     return null
   }
 }
@@ -441,17 +480,20 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    if (!(await clearSession($))) {
+    const isCleared = await clearSession($)
+    const settledHandoff = settleHandoff(state, request)
+    if (!isCleared) {
       return await abandonHandoff(
         $,
         state,
-        request,
+        settledHandoff,
         'clear_failed',
         'The handoff was written but /clear failed. This session is unchanged.',
       )
     }
-    await continueInFreshSession($, state, request, prepared.oldId, prepared.note)
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note)
   } finally {
+    endHandoffHold(state)
     state.pending = null
   }
 }
@@ -464,6 +506,10 @@ const scheduleHandoff = (
 ): boolean => {
   if (!claim(state, 'handoff')) return false
   state.heldPrompt = null
+  beginHandoffHold(
+    state,
+    request.heldPrompt === undefined ? null : { text: request.heldPrompt, isUnattended: request.isUnattended },
+  )
   $.clock.after(0, () => {
     void logFailure($, runHandoff($, state, request, beforeRun))
   })
@@ -554,8 +600,52 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
   return { drop: HELD_PROMPT }
 }
 
+// -- Prompts held while a handoff is pending. Kept together so the whole rule can move out of this file as one piece.
+
+const isUnattendedOrigin = (e: PromptSubmitInput): boolean => e.origin.kind === 'scheduled-trigger'
+
+const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
+  if (!(await refillBox($, text))) keepInTranscript($, text)
+}
+
+// An attachment or context can't be resent, so the prompt waits in the box for the person to send it again.
+const refuseDuringHandoff = ($: EngineInterface, text: string): { drop: string } => {
+  debug($, 'refused a prompt with attachments or context during the handoff')
+  $.ui.toast(REFUSED_TOAST)
+  $.clock.after(0, () => {
+    void logFailure($, returnToBox($, text))
+  })
+  return { drop: REFUSED_DURING_HANDOFF }
+}
+
+const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
+  if ((e.attachments?.length ?? 0) > 0 || (e.context?.length ?? 0) > 0) return refuseDuringHandoff($, e.text)
+  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e) })
+  debug($, `held a prompt for the handoff (${heldCount} held)`)
+  return { drop: HELD_FOR_HANDOFF }
+}
+
+// Taking the held prompts ends their holding: from here a prompt that arrives belongs to the fresh session or the old one.
+const settleHandoff = (state: SessionState, request: HandoffRequest): SettledHandoff => ({
+  trigger: request.trigger,
+  isUnattended: request.isUnattended,
+  heldGroups: groupHeldPrompts(takeHeldPrompts(state)),
+})
+
+const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } | undefined => {
+  // The handoff already carries this text and sends or restores it itself, so a repeat of it would run twice.
+  if (isCarriedByHandoff(state, e.text)) {
+    debug($, 'dropped a repeat of the prompt the handoff carries')
+    return { drop: REPEAT_NOT_ADDED }
+  }
+  if (isHoldingForHandoff(state)) return holdForHandoff($, state, e)
+  return undefined
+}
+
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
-  const isUnattended = e.origin.kind === 'scheduled-trigger'
+  const duringHandoff = decideDuringHandoff($, state, e)
+  if (duringHandoff !== undefined) return duringHandoff
+  const isUnattended = isUnattendedOrigin(e)
   state.heldPrompt = null
   state.isTurnUnattended = isUnattended
   const isNewWork = await inspectPrompt($, state, e.text)

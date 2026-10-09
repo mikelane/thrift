@@ -66,6 +66,8 @@ export type World = {
   sessionIdDenials: number
   submitThrows: boolean
   submitDropped: boolean
+  // One-shot callbacks, one per upcoming prompt.submit in order; an undefined entry lets that submit pass untouched.
+  submitHooks: Array<(() => void) | undefined>
   gitThrows: boolean
   gitFailure: boolean
   step:{ usage: TurnUsage | null; advisorCalls: number }
@@ -134,6 +136,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     sessionIdDenials: 0,
     submitThrows: false,
     submitDropped: false,
+    submitHooks: [],
     gitThrows: false,
     gitFailure: false,
     step: { usage: null, advisorCalls: 0 },
@@ -184,6 +187,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     return { isFilled: true }
   })
   on('prompt.submit', (_$, e) => {
+    world.submitHooks.shift()?.()
     if (world.submitThrows) throw new Error('submit refused')
     if (world.submitDropped) return { drop: 'refused by another hook' }
     world.effects.push(`entered:${e.origin.kind}:${e.text}`)
