@@ -23,7 +23,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     heldPrompt: null,
     hasBand: false,
     isTurnRunning: false,
-    isPressing: false,
+    isPressRunning: false,
     deferredPress: null,
   })
 })
@@ -51,7 +51,7 @@ const usedState = () => {
   state.heldPrompt = 'now ENG-2'
   state.hasBand = true
   state.isTurnRunning = true
-  state.isPressing = true
+  state.isPressRunning = true
   state.deferredPress = { offer: { signal: 'strong', contextTokens: 200_000, heldPrompt: false, isBusy: false }, button: 'handoff' }
   return state
 }
@@ -70,7 +70,7 @@ test('It clears what the old session learned in resetForNewSession', () => {
     backoffFrom: null,
     heldPrompt: null,
     isTurnRunning: false,
-    isPressing: false,
+    isPressRunning: false,
     deferredPress: null,
   })
 })

@@ -7,7 +7,7 @@ type Settings = {
   compactBeforeClear: boolean
 }
 
-export type DeferredPress = { offer: Offer; button: Button }
+export type ButtonPress = { offer: Offer; button: Button }
 
 export type SessionState = Settings & {
   mode: Mode
@@ -24,8 +24,8 @@ export type SessionState = Settings & {
   heldPrompt: string | null
   hasBand: boolean
   isTurnRunning: boolean
-  isPressing: boolean
-  deferredPress: DeferredPress | null
+  isPressRunning: boolean
+  deferredPress: ButtonPress | null
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -44,7 +44,7 @@ export const createState = (settings: Settings): SessionState => ({
   heldPrompt: null,
   hasBand: false,
   isTurnRunning: false,
-  isPressing: false,
+  isPressRunning: false,
   deferredPress: null,
 })
 
@@ -59,6 +59,6 @@ export const resetForNewSession = (state: SessionState): void => {
   state.backoffFrom = null
   state.heldPrompt = null
   state.isTurnRunning = false
-  state.isPressing = false
+  state.isPressRunning = false
   state.deferredPress = null
 }

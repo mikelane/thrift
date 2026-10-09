@@ -9,17 +9,28 @@ export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
   'not-now': 'Not now',
 }
 
+// Actions take letters, which work only once the band holds focus; a bare digit in an empty prompt presses a
+// band button, so the digit is reserved for the dismiss and cannot be hit by answering Claude's numbered questions.
+const HOTKEYS: Readonly<Record<Button, string>> = {
+  handoff: 'h',
+  'handoff-send': 'h',
+  'send-here': 's',
+  compact: 'c',
+  'not-now': '0',
+}
+
 const ACT_MODE_HINT = 'Set handoffMode to act in /config to skip asking.'
 
 const hintFor = ({ signal, heldPrompt, isBusy }: Offer): string => {
+  const { handoff, 'send-here': sendHere, 'not-now': dismiss } = HOTKEYS
   if (heldPrompt) {
     return isBusy
       ? 'ctrl+x Tab, then Enter to send it here.'
-      : 'ctrl+x Tab, then Enter to hand off and send it, or s to send it here.'
+      : `ctrl+x Tab, then Enter to hand off and send it, or ${sendHere} to send it here.`
   }
-  if (isBusy) return 'ctrl+x Tab, then Enter to compact. 0 to dismiss.'
-  if (signal === 'strong') return 'ctrl+x Tab, then Enter to hand off. 0 to dismiss.'
-  return 'ctrl+x Tab, then Enter to compact or h to hand off. 0 to dismiss.'
+  if (isBusy) return `ctrl+x Tab, then Enter to compact. ${dismiss} to dismiss.`
+  if (signal === 'strong') return `ctrl+x Tab, then Enter to hand off. ${dismiss} to dismiss.`
+  return `ctrl+x Tab, then Enter to compact or ${handoff} to hand off. ${dismiss} to dismiss.`
 }
 
 export const bandHint = (offer: Offer): string => `${hintFor(offer)} ${ACT_MODE_HINT}`
@@ -29,16 +40,6 @@ type BandControl = {
   hotkey: string
   isPrimary: boolean
   isDismiss: boolean
-}
-
-// Actions take letters, which work only once the band holds focus; a bare digit in an empty prompt presses a
-// band button, so the digit is reserved for the dismiss and cannot be hit by answering Claude's numbered questions.
-const HOTKEYS: Readonly<Record<Button, string>> = {
-  handoff: 'h',
-  'handoff-send': 'h',
-  'send-here': 's',
-  compact: 'c',
-  'not-now': '0',
 }
 
 // The highlight follows the plugin's own pick (compact for a weak signal), whatever the display order.
@@ -64,7 +65,7 @@ const CLEARS_SESSION: Readonly<Record<Button, boolean>> = {
 export const clearsSession = (button: Button): boolean => CLEARS_SESSION[button]
 
 // classify() gives a weak signal whenever work is busy; a held prompt keeps its own signal.
-export const busyOffer = (offer: Offer, contextTokens: number, isBusy: boolean): Offer => ({
+export const offerWithBusyState = (offer: Offer, contextTokens: number, isBusy: boolean): Offer => ({
   ...offer,
   contextTokens,
   isBusy,

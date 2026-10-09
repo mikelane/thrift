@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BUTTON_LABELS, bandControls, bandHint, bandMessage, busyOffer, clearsSession, isSameOffer } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
@@ -185,17 +185,17 @@ for (const [button, clears] of clearsSessionCases) {
 
 const strongOffer = { signal: 'strong', contextTokens: 150_000, heldPrompt: false, isBusy: false } as const
 
-test('It returns a weak signal for a busy band with no held prompt from busyOffer', () => {
-  expect(busyOffer(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
+test('It returns a weak signal for a busy band with no held prompt from offerWithBusyState', () => {
+  expect(offerWithBusyState(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
 })
 
-test('It keeps the signal of a busy band holding a prompt from busyOffer', () => {
+test('It keeps the signal of a busy band holding a prompt from offerWithBusyState', () => {
   const held = { ...strongOffer, heldPrompt: true }
-  expect(busyOffer(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
+  expect(offerWithBusyState(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
 })
 
-test('It keeps the signal of a band that is not busy from busyOffer', () => {
-  expect(busyOffer({ ...strongOffer, isBusy: true }, 160_000, false)).toEqual({ ...strongOffer, contextTokens: 160_000 })
+test('It keeps the signal of a band that is not busy from offerWithBusyState', () => {
+  expect(offerWithBusyState({ ...strongOffer, isBusy: true }, 160_000, false)).toEqual({ ...strongOffer, contextTokens: 160_000 })
 })
 
 test('It returns true for offers with equal fields from isSameOffer', () => {
