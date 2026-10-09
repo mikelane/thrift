@@ -134,12 +134,24 @@ Special cases:
 
 The band draws above the prompt from a typed atom. It states the context in thousands, says that
 accuracy drops as context grows, and varies its wording for a held prompt, a finished task,
-background work, or plain size. In `ask` mode a dim line says that `handoffMode` `act` does this
+background work, or plain size. In `ask` mode a dim line says to type a digit and that `handoffMode` `act` does this
 without asking. It yields to a survey. A band that cannot be taken down does not stop later turns
 from being evaluated.
 
-- The band comes down when the next prompt or task notification starts a turn, so a button press
-  can never clear a session in the middle of a turn.
+- The band is shaded and numbered like the built-in "Heads up" survey: `1: Hand off and clear`,
+  `2: Compact`, `0: Not now`. Actions count up from 1 in the order shown, and Not now is always `0`.
+  A held-prompt band has `1: Hand off and send it` and `2: Send here`, with no `0`.
+- Type the digit into an empty prompt to press a button, with no focus step. If the prompt holds
+  text, press ctrl+x Tab to give the band the keyboard first, or click a button (fullscreen).
+- The band stays up while a turn runs. A press made during a turn is held: a toast says so, the
+  band stays up, and the choice runs once when that turn ends (however it ends), so a `/clear` or
+  compaction never lands mid-turn. The first press wins; further presses before it runs are
+  ignored. The held press runs in place of the end-of-turn evaluation, so a new offer never
+  replaces a choice you made. Its decision record is the one the button always writes
+  (`point` `button`), written when it runs. Ending the session drops a held press.
+- The band comes down when you press a button that runs, when the turn-end evaluation offers
+  nothing, or when you press Enter again on a held prompt. A task notification or your next
+  prompt no longer takes it down.
 - A band still up when the plugin reloads (a code change, or a setting changed in `/config`) comes
   down when the reload fires `session.start` (not yet verified live for a `/config` change).
 - Pressing Send here or Hand off and send it takes the held prompt out of the box and leaves any
@@ -242,7 +254,10 @@ plugin without any error. Four layers guard against that:
 Everything above is covered by tests against the engine's own test kit. These need a live
 terminal and have not been watched yet:
 
-- How the band renders, and that each button does what its label says.
+- How the band renders (its `subtle` shading, the `1:` labels), that a bare digit in an empty prompt
+  and a click each press a button, and that each button does what its label says.
+- That `turn.start` and `turn.complete` bracket every model turn, so a press made mid-turn is held and
+  then released.
 - That `/handoff` survives a `/clear`, and that the plugin's re-registration after a clear works.
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
