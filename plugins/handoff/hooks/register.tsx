@@ -548,6 +548,9 @@ const runHandoff = async (
     if (outcome === 'clear') {
       beginOwnClear(state)
       isCleared = await clearSession($)
+    } else {
+      // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
+      await takeDownBand($, state)
     }
     const settledHandoff = settleHandoff(state, request)
     if (!isCleared) {

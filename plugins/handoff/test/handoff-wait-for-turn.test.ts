@@ -14,6 +14,7 @@ const SESSION_ENDED_TOAST = `toast:${SESSION_ENDED_MESSAGE}`
 const SESSION_ENDED_LOG = `log:${SESSION_ENDED_MESSAGE}`
 const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
+const WAITING = 'Handoff note written. It clears when the current turn ends. Your prompts stay held.'
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
 const SECOND_MESSAGE = 'Handoff from the previous session (new-session), written by Claude just before a /clear:\n\nSecond note.'
@@ -713,4 +714,108 @@ test('It delivers the note into the fresh session when the person clears during 
   expect(clearCount(world)).toBe(1)
   expect(world.appended).toEqual([LATE_TURN_MESSAGE])
   expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+})
+
+const shownText = async (band: Awaited<ReturnType<typeof mountBand>>) =>
+  (await band.findAll({ type: 'Text' })).map(text => text.text)
+
+const countOf = (world: World, effect: string) => world.effects.filter(seen => seen === effect).length
+
+// The person clears while the note is written; a finished background task then starts a turn in the fresh session.
+const personClearedThenTurnInFreshSession = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  await notify($, 'bg1')
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  return world
+}
+
+test('It takes the waiting status down once the note is delivered into the session the person cleared to', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toHaveLength(1)
+  expect(await shownText(await mountBand($))).toEqual(['engine band'])
+})
+
+test('It takes the waiting status down when the session is resumed during the wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await world.clock.settle()
+  expect(await shownText(await mountBand($))).toEqual(['engine band'])
+})
+
+test('It writes the session-ended line and toast exactly once when the session is resumed during the wait', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await world.clock.settle()
+  expect(countOf(world, `log:${SESSION_ENDED_MESSAGE}`)).toBe(1)
+  expect(countOf(world, `toast:${SESSION_ENDED_MESSAGE}`)).toBe(1)
+})
+
+test('It shows the waiting status once a turn starts during the compaction before the clear', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await startTurn($)
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+  expect(await shownText(await mountBand($))).toEqual([WAITING])
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+})
+
+test('It writes the busy refusal line and toast exactly once after the wait', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(countOf(world, BUSY_LOG)).toBe(1)
+  expect(countOf(world, BUSY_TOAST)).toBe(1)
+})
+
+test('It hands off when the person types /handoff after the busy abandon, as the refusal says', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  world.fork = async () => answered('Second note.')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+})
+
+test('It takes the waiting status down after the busy abandon', ACT, async ($, on) => {
+  await actHandoffWithBusyTurn($, on)
+  expect(await shownText(await mountBand($))).toEqual(['engine band'])
+})
+
+test('It hands off when the person types /handoff after a band press was refused as busy', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  const band = await mountBand($)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  await band.press({ key: 'handoff' })
+  await world.clock.settle()
+  expect(world.effects).toContain(BUSY_TOAST)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+})
+
+test('It keeps a person prompt held while the waiting status is up', async ($, on) => {
+  const world = await waitingForATurn($, on)
+  await submitPerson($, 'next thing')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain('entered:plugin:next thing')
 })
