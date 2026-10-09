@@ -514,7 +514,10 @@ const runHandoff = async (
       return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED)
     }
     if (sessionEnd === null && isBusy) {
-      return await abandonHandoff($, state, settleHandoff(state, request), 'background_busy', BUSY_REFUSAL)
+      // The decision-time snapshot predates the wait, so it says not busy; record the refusal as refuseToClear does.
+      const busyTrigger = { ...request.trigger, isBusy: true, signal: 'weak' as const }
+      const busySettled = { ...settleHandoff(state, request), trigger: busyTrigger }
+      return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL)
     }
     const hasTurnAfterNote = state.hasTurnMissingFromNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.

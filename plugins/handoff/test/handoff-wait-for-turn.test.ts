@@ -441,3 +441,96 @@ test('It clears normally after a session ended while no handoff was pending', as
   await world.clock.settle()
   expect(world.effects).toContain('clear')
 })
+
+const actHandoffWithBusyTurn = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  await world.clock.settle()
+  await startTurn($)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  await endTurn($, world)
+  return world
+}
+
+test('It records the background_busy abandon after the wait as busy, with a weak signal', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(lastRecord(world).trigger_values).toMatchObject({ reason: 'background_busy', is_background_busy: true, signal: 'weak' })
+})
+
+test('It runs one clear and delivers the note when the person clears during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await runCommand($, 'clear')
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
+  expect(world.appended).toHaveLength(1)
+})
+
+test('It abandons as session_ended when the session is resumed during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+  expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_ended' } })
+})
+
+test('It clears normally on the handoff after one the person cleared during', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  world.fork = async () => answered('Second note.')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(2)
+  expect(world.appended).toHaveLength(2)
+})
+
+test('It clears normally on the handoff after one abandoned as session_ended', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  world.fork = async () => answered('Second note.')
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+})
+
+test('It puts the held prompt back when the person resumes during the wait in act-mode prompt handoff', ACT, async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await submitPerson($, 'Start on PROJ-42 next')
+  await world.clock.settle()
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await world.clock.settle()
+  expect(world.effects).not.toContain('clear')
+})
