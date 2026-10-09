@@ -1,4 +1,4 @@
-import type { Offer } from '../types'
+import type { BandState, Offer, Writing } from '../types'
 import { formatTokens, type Button } from './signals'
 
 export const BUTTON_LABELS: Readonly<Record<Button, string>> = {
@@ -71,7 +71,15 @@ export const offerWithBusyState = (offer: Offer, contextTokens: number, isBusy: 
   signal: isBusy && !offer.heldPrompt ? 'weak' : offer.signal,
 })
 
-export const isSameOffer = (a: Offer, b: Offer): boolean =>
+export const WRITING: Writing = { isWriting: true }
+
+export const WRITING_STATUS = 'Writing a handoff note — this takes a few seconds…'
+
+export const isWriting = (band: BandState): band is Writing => 'isWriting' in band
+
+export const isSameOffer = (a: BandState, b: BandState): boolean =>
+  !isWriting(a) &&
+  !isWriting(b) &&
   a.signal === b.signal && a.contextTokens === b.contextTokens && a.heldPrompt === b.heldPrompt && a.isBusy === b.isBusy
 
 const question = ({ signal, heldPrompt, isBusy }: Offer): string => {

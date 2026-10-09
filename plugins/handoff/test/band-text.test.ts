@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer, isWriting, WRITING } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
@@ -219,3 +219,23 @@ for (const other of differingOffers) {
     expect(isSameOffer(strongOffer, other)).toBe(false)
   })
 }
+
+test('It returns true for the writing state from isWriting', () => {
+  expect(isWriting(WRITING)).toBe(true)
+})
+
+test('It returns false for an offer from isWriting', () => {
+  expect(isWriting(strongOffer)).toBe(false)
+})
+
+test('It returns false when the first band is the writing state from isSameOffer', () => {
+  expect(isSameOffer(WRITING, strongOffer)).toBe(false)
+})
+
+test('It returns false when the second band is the writing state from isSameOffer', () => {
+  expect(isSameOffer(strongOffer, WRITING)).toBe(false)
+})
+
+test('It returns false for two writing states from isSameOffer', () => {
+  expect(isSameOffer(WRITING, WRITING)).toBe(false)
+})
