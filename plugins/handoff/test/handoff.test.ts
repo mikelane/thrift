@@ -1,9 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
-import { completeTurn, install, lastRecord, runStep, startSession, usageOf } from './helpers'
+import { completeTurn, growTo200k, install, lastRecord, runStep, startSession, usageOf } from './helpers'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const ACT = { options: { handoffMode: 'act' } } as const
+
+test('It records a turn before session.start as shadow though the setting is act', ACT, async ($, on) => {
+  const world = install($, on)
+  await growTo200k($, world)
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+})
 
 test('It logs a shadow record with no signal for a turn under the threshold in off mode', async ($, on) => {
   const world = install($, on)
@@ -154,8 +161,16 @@ test('It only logs under -p even when act is set', ACT, async ($, on) => {
   await startSession($, false)
   await runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
   await completeTurn($)
-  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
   expect(world.effects).not.toContain('compact')
+})
+
+test('It records a non-trigger turn as active in an interactive session on a tested build when act is set', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runStep($, world, { usage: usageOf(1_000, 0, 49_000) })
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { setting: 'act', signal: 'none' } })
 })
 
 const untestedBuilds = [
@@ -181,6 +196,15 @@ for (const [name, version] of untestedBuilds) {
     await completeTurn($)
     expect(world.effects).not.toContain('compact')
     expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { setting: 'act', signal: 'weak' } })
+  })
+
+  test(`It records a non-trigger turn as shadow on ${name} though the setting is act`, ACT, async ($, on) => {
+    const world = install($, on)
+    world.version = version
+    await startSession($)
+    await runStep($, world, { usage: usageOf(1_000, 0, 199_000) })
+    await completeTurn($)
+    expect(lastRecord(world)).toMatchObject({ mode: 'shadow', action: 'none', trigger_values: { setting: 'act' } })
   })
 }
 

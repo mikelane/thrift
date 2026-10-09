@@ -56,7 +56,7 @@ plugins/<name>/
   `{ ts, session_id, component, mode, action, engine_version, trigger_values }`.
   - `ts`: ISO 8601 UTC.
   - `component`: the plugin's name.
-  - `mode`: `shadow` only when the action is `none` and the setting is `off`; otherwise `active`.
+  - `mode`: `shadow` only when the action is `none` and the plugin ran in `off` (the setting, or a fallback that holds it there); otherwise `active`.
   - `engine_version`: the Claude Code release (`$.session.version()`'s `base`), or its `version`
     when `base` is missing. A change in behavior then shows up as a split between versions.
   - `trigger_values`: scalars only. Never prompt text, file contents, or paths the person typed.

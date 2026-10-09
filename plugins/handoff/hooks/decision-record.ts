@@ -18,16 +18,17 @@ type RecordInput = {
   sessionId: string
   action: DecisionAction
   engineVersion: string
+  effectiveMode: Mode
   triggerValues: TriggerValues
 }
 
 export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p "$1" && cat >> "$2"', 'sh'] as const
 
-export const decisionRecord = ({ now, sessionId, action, engineVersion, triggerValues }: RecordInput) => ({
+export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiveMode, triggerValues }: RecordInput) => ({
   ts: new Date(now).toISOString(),
   session_id: sessionId,
   component: 'handoff',
-  mode: action === 'none' && triggerValues.setting === 'off' && triggerValues.point !== 'command' ? 'shadow' : 'active',
+  mode: action === 'none' && effectiveMode === 'off' && triggerValues.point !== 'command' ? 'shadow' : 'active',
   action,
   engine_version: engineVersion,
   trigger_values: triggerValues,

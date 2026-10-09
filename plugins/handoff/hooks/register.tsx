@@ -91,6 +91,7 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
       sessionId: id,
       action,
       engineVersion: state.engineVersion,
+      effectiveMode: state.mode,
       triggerValues: {
         point,
         signal,
