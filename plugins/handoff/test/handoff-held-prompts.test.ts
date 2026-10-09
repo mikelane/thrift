@@ -475,3 +475,17 @@ test('It sends a carried prompt the person re-sends from the box after the fresh
   const repeat = await outcome.repeat
   expect(dropOf(repeat)).toBeUndefined()
 })
+
+test('It runs a carried prompt the person re-sends from the box after the append was denied and the note was refused', ASK, async ($, on) => {
+  const { world, fork } = await carriedPlusScheduled($, on)
+  world.appendDenied = true
+  world.submitDropped = true
+  const outcome = repeatWhileScheduledGroupIsDelivered($, world)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  const repeat = await outcome.repeat
+  expect([dropOf(repeat), world.effects.filter(effect => effect.startsWith('entered:'))]).toEqual([
+    undefined,
+    ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
+  ])
+})
