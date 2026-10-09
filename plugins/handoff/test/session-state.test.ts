@@ -8,6 +8,10 @@ import {
   isCarriedByHandoff,
   isGroupOfOrigin,
   isHoldingForHandoff,
+  beginNoteWindow,
+  endMainTurn,
+  startMainTurn,
+  waitForTurnEnd,
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
@@ -38,6 +42,8 @@ test('It returns the settings with a closed gate and an empty session from creat
     isTurnRunning: false,
     isPressRunning: false,
     deferredPress: null,
+    hasTurnStartedSinceNote: false,
+    turnEndWaiter: null,
   })
 })
 
@@ -230,4 +236,70 @@ test('It returns to idle from endHandoffHold in every phase', () => {
 
 test('It tells whether a group shares an origin in isGroupOfOrigin', () => {
   expect([isGroupOfOrigin(person, false), isGroupOfOrigin(person, true), isGroupOfOrigin(nightly, true)]).toEqual([true, false, true])
+})
+
+const isPending = async (promise: Promise<void>): Promise<boolean> =>
+  Promise.race([promise.then(() => false), Promise.resolve().then(() => true)])
+
+test('It marks a turn running and started since the note from startMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  expect(state).toMatchObject({ isTurnRunning: true, hasTurnStartedSinceNote: true })
+})
+
+test('It forgets a turn that started before the note began in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.hasTurnStartedSinceNote).toBe(false)
+})
+
+test('It keeps a running turn running in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.isTurnRunning).toBe(true)
+})
+
+test('It marks no turn running from endMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  expect(state.isTurnRunning).toBe(false)
+})
+
+test('It keeps hasTurnStartedSinceNote after the turn ends in endMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  expect(state.hasTurnStartedSinceNote).toBe(true)
+})
+
+test('It stays pending in waitForTurnEnd until endMainTurn runs', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  expect(await isPending(waitForTurnEnd(state))).toBe(true)
+})
+
+test('It resolves waitForTurnEnd when endMainTurn runs', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitForTurnEnd(state)
+  endMainTurn(state)
+  await waiting
+  expect(state.turnEndWaiter).toBeNull()
+})
+
+test('It does nothing in endMainTurn when no one is waiting', () => {
+  const state = createState(settings)
+  expect(() => endMainTurn(state)).not.toThrow()
+})
+
+test('It resolves a waiter in resetForNewSession so none dangles', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitForTurnEnd(state)
+  resetForNewSession(state)
+  await waiting
+  expect(state.turnEndWaiter).toBeNull()
 })

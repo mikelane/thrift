@@ -40,6 +40,8 @@ export type SessionState = Settings & {
   isTurnRunning: boolean
   isPressRunning: boolean
   deferredPress: ButtonPress | null
+  hasTurnStartedSinceNote: boolean
+  turnEndWaiter: (() => void) | null
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -61,6 +63,8 @@ export const createState = (settings: Settings): SessionState => ({
   isTurnRunning: false,
   isPressRunning: false,
   deferredPress: null,
+  hasTurnStartedSinceNote: false,
+  turnEndWaiter: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -76,6 +80,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnRunning = false
   state.isPressRunning = false
   state.deferredPress = null
+  resolveTurnEndWaiter(state)
 }
 
 // The prompts a handoff holds and carries survive resetForNewSession: the clear happens in the middle of the handoff.
@@ -127,4 +132,30 @@ export const releaseCarriedGroup = (state: SessionState, group: HeldPromptGroup,
 
 export const endHandoffHold = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
+}
+
+export const startMainTurn = (state: SessionState): void => {
+  state.isTurnRunning = true
+  state.hasTurnStartedSinceNote = true
+}
+
+export const endMainTurn = (state: SessionState): void => {
+  state.isTurnRunning = false
+  resolveTurnEndWaiter(state)
+}
+
+// A turn already running when the note begins is not counted: only a turn that starts after it can be missing from the note.
+export const beginNoteWindow = (state: SessionState): void => {
+  state.hasTurnStartedSinceNote = false
+}
+
+export const waitForTurnEnd = (state: SessionState): Promise<void> =>
+  new Promise(resolve => {
+    state.turnEndWaiter = resolve
+  })
+
+const resolveTurnEndWaiter = (state: SessionState): void => {
+  const waiter = state.turnEndWaiter
+  state.turnEndWaiter = null
+  waiter?.()
 }
