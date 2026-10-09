@@ -14,7 +14,7 @@ import { BAND_HINT, BUTTON_LABELS, bandControls, bandMessage } from './band-text
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
-import { createState, resetForNewSession, type SessionState } from './session-state'
+import { createState, resetForNewSession, type DeferredPress, type SessionState } from './session-state'
 import {
   asMode,
   asThreshold,
@@ -40,6 +40,7 @@ const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_TOAST = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'handoff: handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'handoff: held your prompt. Choose below, or press Enter again to send it here.'
+const PRESS_WAITS_FOR_TURN = 'handoff: this turn is still running, so your choice will run when it ends.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'handoff: your prompt could not be sent or put back in the box. Here it is:'
 
@@ -528,7 +529,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   })
 }
 
-const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer, button: Button) => {
+const runPress = async ($: EngineInterface, state: SessionState, { offer, button }: DeferredPress) => {
   if (state.pending !== null) return
   const trigger = snapshot(state, 'button', offer.signal, offer.isBusy)
   if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
@@ -537,6 +538,15 @@ const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer
   else state.backoffFrom = state.contextTokens
   await takeDownBand($, state)
   if (button === 'not-now') await writeRecord($, state, { ...trigger, action: 'none', reason: 'not_now' })
+}
+
+// A press made mid-turn waits, so /clear and compaction never land inside a turn. The first press wins; the band
+// stays up until it runs, and it runs at the end of that turn in place of a fresh evaluation.
+const pressButton = async ($: EngineInterface, state: SessionState, offer: Offer, button: Button) => {
+  if (state.pending !== null || state.deferredPress !== null) return
+  if (!state.isTurnRunning) return runPress($, state, { offer, button })
+  state.deferredPress = { offer, button }
+  $.ui.toast(PRESS_WAITS_FOR_TURN)
 }
 
 const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'AbovePrompt'>, offer: Offer) => {
@@ -615,11 +625,16 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
-    await takeDownBand($, state)
+    if (state.heldPrompt !== null && PERSON_ORIGINS.has(e.origin.kind)) await takeDownBand($, state)
     const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
     if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
     const dropped = PERSON_ORIGINS.has(e.origin.kind) ? await decidePrompt($, state, e) : null
     return dropped ?? next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('turn.start', async ($, e, next) => {
+    state.isTurnRunning = true
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
@@ -627,7 +642,11 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     const hasFinishedTask = state.hasFinishedTask
     state.hasFinishedTask = false
-    if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
+    state.isTurnRunning = false
+    const held = state.deferredPress
+    state.deferredPress = null
+    if (held !== null) await runPress($, state, held)
+    else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
     return result
   }).catch(($, e, next) => next(e))
 

@@ -61,24 +61,6 @@ test('It states the context in thousands and that accuracy drops in a finished-t
   expect(message?.text).toContain('Accuracy drops as context grows.')
 })
 
-test('It takes the band down when the person starts the next turn', ASK, async ($, on) => {
-  const world = install($, on)
-  await startSession($)
-  await finishedTaskTurn($, world)
-  await submitPerson($, 'keep going')
-  const band = await mountBand($)
-  expect(await band.find({ text: 'engine band' })).toBeDefined()
-})
-
-test('It takes the band down when a task notification starts the next turn', ASK, async ($, on) => {
-  const world = install($, on)
-  await startSession($)
-  await finishedTaskTurn($, world)
-  await notify($, 'bg1')
-  const band = await mountBand($)
-  expect(await band.find({ text: 'engine band' })).toBeDefined()
-})
-
 test('It adds a dim line about act mode to the band', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
