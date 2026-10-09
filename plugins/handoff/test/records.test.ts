@@ -11,6 +11,7 @@ import {
   handedOffMessage,
   handoffMessage,
   holdsPrompt,
+  turnAfterNoteLine,
   joinPrompts,
   noteInBoxMessage,
   noteNotCarriedMessage,
@@ -117,9 +118,23 @@ test('It forbids a preamble in HANDOFF_PROMPT', () => {
 })
 
 test('It names the old session and the note from handoffMessage', () => {
-  const message = handoffMessage('old-id', 'The note.')
+  const message = handoffMessage('old-id', 'The note.', false)
   expect(message).toStartWith('Handoff from the previous session (old-id), written by Claude just before a /clear')
   expect(message).toEndWith('The note.')
+})
+
+test('It leaves the note as the last text of handoffMessage when no turn ran after it', () => {
+  expect(handoffMessage('old-id', 'The note.', false)).toEndWith('The note.')
+})
+
+test('It adds the turn-after-note line after the note in handoffMessage when a turn ran after it', () => {
+  expect(handoffMessage('old-id', 'The note.', true)).toEndWith(`The note.\n\n${turnAfterNoteLine('old-id')}`)
+})
+
+test('It says a turn ran after the note and points at the resume command from turnAfterNoteLine', () => {
+  expect(turnAfterNoteLine('old-id')).toBe(
+    'A turn ran in the previous session while or after this note was written, so the note may not cover it. To see that turn: claude --resume old-id',
+  )
 })
 
 test('It returns the command that reopens the old session from resumeCommand', () => {

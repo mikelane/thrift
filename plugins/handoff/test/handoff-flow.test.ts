@@ -176,6 +176,7 @@ for (const [name, fork] of failedForks) {
     await world.clock.settle()
     expect(world.effects).not.toContain('clear')
     expect(world.effects).toContain('toast:No handoff was written. This session is unchanged.')
+    expect(world.effects).toContain('log:No handoff was written. This session is unchanged.')
     expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'no_handoff_written' } })
   })
 }

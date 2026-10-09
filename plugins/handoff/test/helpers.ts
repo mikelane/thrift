@@ -51,6 +51,8 @@ export type World = {
   gitCalls: number
   agents: AgentInfo[]
   agentListThrows: boolean
+  // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
+  onAgentList: (() => Promise<void>) | undefined
   box: Box
   fillRefusal: 'no_composer' | 'dialog' | undefined
   fork: () => Promise<ModelForkResult>
@@ -121,6 +123,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     gitCalls: 0,
     agents: [],
     agentListThrows: false,
+    onAgentList: undefined,
     box: { text: '', cursor: 0 },
     fillRefusal: undefined,
     fork: async () => answered('The handoff note.'),
@@ -175,7 +178,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     world.forkPrompts.push(e.prompt)
     return ok(await world.fork())
   })
-  on('agent.list', () => {
+  on('agent.list', async () => {
+    await world.onAgentList?.()
     if (world.agentListThrows) throw new Error('agent list failed')
     return ok(world.agents)
   })

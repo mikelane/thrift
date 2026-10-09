@@ -359,7 +359,7 @@ test('It does not tell the person to type 0 in an empty prompt while the held pr
   expect(await band.find({ text: /0 to dismiss|empty prompt/ })).toBeUndefined()
 })
 
-const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared.'
+const BUSY_REFUSAL = 'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
 
 test('It refuses to clear and says why when background work started before an immediate press', ASK, async ($, on) => {
   const world = install($, on)

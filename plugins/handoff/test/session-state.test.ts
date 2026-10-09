@@ -2,12 +2,21 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   addHeldPrompt,
+  preClearOutcome,
   beginHandoffHold,
+  beginBeforeClear,
+  beginOwnClear,
+  recordSessionEnd,
   createState,
-  endHandoffHold,
+  endHandoff,
   isCarriedByHandoff,
   isGroupOfOrigin,
   isHoldingForHandoff,
+  beginNoteWindow,
+  endMainTurn,
+  startMainTurn,
+  releaseTurnEndWaiter,
+  waitForTurnEnd,
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
@@ -38,6 +47,10 @@ test('It returns the settings with a closed gate and an empty session from creat
     isTurnRunning: false,
     isPressRunning: false,
     deferredPress: null,
+    hasTurnAfterNote: false,
+    turnEndWaiter: null,
+    handoffStage: 'idle',
+    sessionEndBeforeClear: null,
   })
 })
 
@@ -221,13 +234,178 @@ test('It keeps the carried prompt when another origin group is handed back in re
   expect(isCarriedByHandoff(state, 'person says')).toBe(true)
 })
 
-test('It returns to idle from endHandoffHold in every phase', () => {
+test('It returns to idle from endHandoff in every phase', () => {
   const state = createState(settings)
   beginHandoffHold(state, person)
-  endHandoffHold(state)
+  endHandoff(state)
   expect(state.handoffHold).toEqual({ phase: 'idle' })
 })
 
 test('It tells whether a group shares an origin in isGroupOfOrigin', () => {
   expect([isGroupOfOrigin(person, false), isGroupOfOrigin(person, true), isGroupOfOrigin(nightly, true)]).toEqual([true, false, true])
+})
+
+const isPending = async (promise: Promise<void>): Promise<boolean> =>
+  Promise.race([promise.then(() => false), Promise.resolve().then(() => true)])
+
+test('It marks a turn running and started since the note from startMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  expect(state).toMatchObject({ isTurnRunning: true, hasTurnAfterNote: true })
+})
+
+test('It counts a turn already running when the note began as missing from the note in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.hasTurnAfterNote).toBe(true)
+})
+
+test('It forgets a turn that ended before the note began in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.hasTurnAfterNote).toBe(false)
+})
+
+test('It keeps a running turn running in beginNoteWindow', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  beginNoteWindow(state)
+  expect(state.isTurnRunning).toBe(true)
+})
+
+test('It marks no turn running from endMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  expect(state.isTurnRunning).toBe(false)
+})
+
+test('It keeps hasTurnAfterNote after the turn ends in endMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  endMainTurn(state)
+  expect(state.hasTurnAfterNote).toBe(true)
+})
+
+test('It stays pending in waitForTurnEnd until the waiter is released', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitForTurnEnd(state)
+  expect(await isPending(waiting)).toBe(true)
+})
+
+test('It resolves waitForTurnEnd once the waiter is released', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitForTurnEnd(state)
+  endMainTurn(state)
+  releaseTurnEndWaiter(state)
+  await waiting
+  expect(state.turnEndWaiter).toBeNull()
+})
+
+test('It does nothing in releaseTurnEndWaiter when no one is waiting', () => {
+  const state = createState(settings)
+  expect(() => releaseTurnEndWaiter(state)).not.toThrow()
+  expect(state.turnEndWaiter).toBeNull()
+})
+
+test('It leaves the waiter pending in resetForNewSession so the handoff resumes after the session end hook', async () => {
+  const state = createState(settings)
+  startMainTurn(state)
+  const waiting = waitForTurnEnd(state)
+  resetForNewSession(state)
+  expect(await isPending(waiting)).toBe(true)
+})
+
+test('It enters the before_clear stage and forgets an earlier session end in beginBeforeClear', () => {
+  const state = createState(settings)
+  state.sessionEndBeforeClear = 'other'
+  beginBeforeClear(state)
+  expect(state.handoffStage).toBe('before_clear')
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It enters the own_clear stage in beginOwnClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  expect(state.handoffStage).toBe('own_clear')
+})
+
+test('It returns to idle in endHandoff', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  endHandoff(state)
+  expect(state.handoffStage).toBe('idle')
+})
+
+test('It records a clear before the handoff clears as the person clearing in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBe('cleared_by_person')
+})
+
+test('It records any other end before the handoff clears as other in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It lets a later other end outrank a clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  recordSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It keeps other when a clear follows in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'resume')
+  recordSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It ignores the end the handoff own clear causes in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It ignores a session end when no handoff is pending in recordSessionEnd', () => {
+  const state = createState(settings)
+  recordSessionEnd(state, 'resume')
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It abandons as session_ended when another session end came, even if work is busy, in preClearOutcome', () => {
+  expect(preClearOutcome('other', true)).toBe('abandon_session_ended')
+})
+
+test('It abandons as session_ended when another session end came and nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome('other', false)).toBe('abandon_session_ended')
+})
+
+test('It delivers to the person clear over busy work in preClearOutcome', () => {
+  expect(preClearOutcome('cleared_by_person', true)).toBe('deliver_to_person_clear')
+})
+
+test('It delivers to the person clear when nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome('cleared_by_person', false)).toBe('deliver_to_person_clear')
+})
+
+test('It abandons as busy when no session ended and work is busy in preClearOutcome', () => {
+  expect(preClearOutcome(null, true)).toBe('abandon_busy')
+})
+
+test('It clears when no session ended and nothing is busy in preClearOutcome', () => {
+  expect(preClearOutcome(null, false)).toBe('clear')
 })

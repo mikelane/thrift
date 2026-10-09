@@ -22,6 +22,35 @@ export type HandoffHold =
   | { phase: 'holding'; heldPrompts: HeldPrompt[]; promptCarriedByHandoff: string | null }
   | { phase: 'delivering'; promptCarriedByHandoff: string }
 
+// Where a handoff stands relative to its own /clear, so the session end that /clear causes is not taken for the person's.
+//   idle:         no handoff.
+//   before_clear: the note is written, awaited, or compacted; the clear has not been issued.
+//   own_clear:    the handoff issued its /clear.
+export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
+
+// What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
+export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
+
+export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'deliver_to_person_clear' | 'clear'
+
+const assertNever = (value: never): never => {
+  throw new Error(`unhandled value: ${String(value)}`)
+}
+
+// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons.
+export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean): PreClearOutcome => {
+  switch (sessionEnd) {
+    case 'other':
+      return 'abandon_session_ended'
+    case 'cleared_by_person':
+      return 'deliver_to_person_clear'
+    case null:
+      return isBusy ? 'abandon_busy' : 'clear'
+    default:
+      return assertNever(sessionEnd)
+  }
+}
+
 export type SessionState = Settings & {
   mode: Mode
   engineVersion: string
@@ -40,6 +69,10 @@ export type SessionState = Settings & {
   isTurnRunning: boolean
   isPressRunning: boolean
   deferredPress: ButtonPress | null
+  hasTurnAfterNote: boolean
+  turnEndWaiter: (() => void) | null
+  handoffStage: HandoffStage
+  sessionEndBeforeClear: SessionEndBeforeClear | null
 }
 
 export const createState = (settings: Settings): SessionState => ({
@@ -61,6 +94,10 @@ export const createState = (settings: Settings): SessionState => ({
   isTurnRunning: false,
   isPressRunning: false,
   deferredPress: null,
+  hasTurnAfterNote: false,
+  turnEndWaiter: null,
+  handoffStage: 'idle',
+  sessionEndBeforeClear: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -78,7 +115,8 @@ export const resetForNewSession = (state: SessionState): void => {
   state.deferredPress = null
 }
 
-// The prompts a handoff holds and carries survive resetForNewSession: the clear happens in the middle of the handoff.
+// The prompts a handoff holds and carries, and its stage, survive resetForNewSession: the clear happens in the middle of
+// the handoff. The turn-end waiter is not released here: the handoff must resume after the session end hook returns.
 
 export const isGroupOfOrigin = (group: HeldPromptGroup, isUnattended: boolean): boolean => group.isUnattended === isUnattended
 
@@ -125,6 +163,53 @@ export const releaseCarriedGroup = (state: SessionState, group: HeldPromptGroup,
   if (isGroupOfOrigin(group, handoffIsUnattended)) releaseCarried(state)
 }
 
-export const endHandoffHold = (state: SessionState): void => {
+// Ends both the hold on prompts and the stage, so the session end after this point is no handoff's business.
+export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
+  state.handoffStage = 'idle'
+}
+
+export const beginBeforeClear = (state: SessionState): void => {
+  state.handoffStage = 'before_clear'
+  state.sessionEndBeforeClear = null
+}
+
+export const beginOwnClear = (state: SessionState): void => {
+  state.handoffStage = 'own_clear'
+}
+
+// Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
+export const recordSessionEnd = (state: SessionState, reason: string): void => {
+  if (state.handoffStage !== 'before_clear') return
+  if (state.sessionEndBeforeClear === 'other') return
+  state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
+}
+
+// A turn in the session the person cleared to is not one the note missed, so it does not count.
+export const startMainTurn = (state: SessionState): void => {
+  state.isTurnRunning = true
+  if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
+}
+
+export const endMainTurn = (state: SessionState): void => {
+  state.isTurnRunning = false
+}
+
+// The note's fork sees the conversation only up to here, so a turn already running now is missing from the note too.
+export const beginNoteWindow = (state: SessionState): void => {
+  state.hasTurnAfterNote = state.isTurnRunning
+}
+
+// Resolves when the turn-end waiter is released. The caller re-checks isTurnRunning after each wake-up.
+// SAFETY: a single waiter slot is enough. claim(state, 'handoff') admits one handoff at a time, and only that
+// handoff's loop waits, so a second waiter can never overwrite the first and leave it hanging.
+export const waitForTurnEnd = (state: SessionState): Promise<void> =>
+  new Promise(resolve => {
+    state.turnEndWaiter = resolve
+  })
+
+export const releaseTurnEndWaiter = (state: SessionState): void => {
+  const waiter = state.turnEndWaiter
+  state.turnEndWaiter = null
+  waiter?.()
 }

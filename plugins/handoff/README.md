@@ -54,16 +54,37 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
       first. Presses and hotkeys do nothing while it is up.
       It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
+      While a turn is running (step 3) it reads "Handoff note written. It clears when the current turn
+      ends. Your prompts stay held.", and that text is a toast too.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open
       threads, the next concrete step, and facts the next session would otherwise rediscover, in
       at most 400 words of plain Markdown.
-   3. If `compactBeforeClear` is on, compact the old session. A failed or vetoed compaction is
-      logged and the handoff goes on.
-   4. Run `/clear`.
-   5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
-      (&lt;id&gt;), written by Claude just before a /clear".
-   6. Say what happened to the note, in a transcript line and a toast with the same text. If it was
+   3. If a turn is running (one a peer or a finished background task started, or one that was queued
+      before the handoff), wait for it to end, however long that takes. The wait has no limit. When
+      the wait begins, the status line changes to the waiting text and a toast shows it once, unless
+      the person has already cleared, in which case nothing shows. Person
+      prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
+      the debug log when it begins and when it ends.
+   4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
+      never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
+      turn started during the compaction, go back to step 3.
+   5. Check for background work again, because a turn may have started some while the handoff
+      waited.
+      - Work is running and the handoff did not come from a typed `/handoff`: stop. Nothing is
+        cleared. A toast and a transcript line say a handoff would cut the work off and that
+        typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
+        `none` record with reason `background_busy` is written.
+      - Work is running and the handoff came from a typed `/handoff`: go on, as it does when it
+        starts while work is busy.
+      - A turn started during this check: go back to step 3.
+      - Otherwise run `/clear` in the same tick as the last check for a running turn.
+   6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
+      (&lt;id&gt;), written by Claude just before a /clear". If a turn ran in the old session after the
+      note began to be written, the message ends with one more line saying so ("A turn ran in the previous session
+      while or after this note was written, so the note may not cover it. To see that turn:
+      `claude --resume <id>`"); the note itself is not rewritten.
+   7. Say what happened to the note, in a transcript line and a toast with the same text. If it was
       appended, or the append was refused and it was submitted as a prompt: "Handed off. This session
       starts from a note summarizing the previous one. To reopen the full previous conversation:
       `claude --resume <id>`". If both were refused and it was put in the prompt box instead, the
@@ -73,7 +94,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       this session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
-   7. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
+   8. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
       started by handing it off first or by running `/handoff` while the prompt was held.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
@@ -141,8 +162,12 @@ Special cases:
   resent), a prompt typed while a turn is running, a prompt from a plugin or another session (only
   the person origins `composer`, `bridge`, `sdk`, and `scheduled-trigger` count), and any prompt
   that arrives while a compaction is pending.
-- **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
-  session is compacted before the clear) is held, so `/clear` never runs inside its turn.
+- **Turns started by something other than a person.** A peer prompt or a finished background
+  task is not held, and a finished task is still marked done. If it starts a turn while the handoff
+  is pending, the handoff waits for that turn to end before it clears (step 3).
+- **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while
+  the handoff waits for a turn, or while the session is compacted before the clear is held, so
+  `/clear` never runs inside its turn.
   - Held: after the clear it is sent in the fresh session, after the note.
   - Grouped by sender: prompts from the same kind of sender (a person, or a scheduled trigger) are
     joined with a blank line, in the order they arrived, and sent as one. Each kind follows its own
@@ -158,6 +183,15 @@ Special cases:
     is dropped with a short toast and is not sent in the fresh session. Its text is put back in the
     prompt box, or shown in the transcript if the box can't take it. After the handoff, send it
     again and add the attachments or context again.
+- **The session ends before the handoff clears.** This covers the note being written, the wait for a
+  turn, and the compaction. The handoff's own `/clear` ends the session too, and that is not counted.
+  - You typed `/clear`: the handoff runs no second clear. The note (with the turn-after-note line, if
+    it applies) and the held prompts go into the fresh session you made, as they would after the
+    handoff's own clear, and the record is `cleared`.
+  - Any other end (`/resume` and so on): the handoff stops. Nothing is cleared and no note is added.
+    A toast and a transcript line say the handoff stopped because the session ended and no note was
+    carried over, held prompts go back as they do on any failure, and a `none` record with reason
+    `session_ended` is written.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 
@@ -196,7 +230,7 @@ from being evaluated.
   first settles. A held press for a prompt that is no longer held says so and takes the band down.
 - Background work is checked again when a press runs. If work started since the band was drawn and
   the press would clear (Hand off and clear, Hand off and send it), nothing is cleared: a toast says
-  a handoff would cut the work off, the band is redrawn in its busy shape (Compact and Not now, or
+  a handoff would cut the work off and that typing `/handoff` hands off anyway, the band is redrawn in its busy shape (Compact and Not now, or
   Send here alone for a held prompt), and a `none` record with reason `background_busy` is written. The record's signal is `weak`, which is what
   a busy session classifies as. A band that was taken down or replaced since the press is not redrawn.
   A turn that ends interrupted or in error likewise refreshes a standing band's busy state.
@@ -220,11 +254,11 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 ### When something fails
 
 - **The fork returns no answer, or anything throws before the clear.** Nothing is cleared. A toast
-  says no handoff was written and the session is unchanged. A held prompt goes back in the box
+  and a transcript line say no handoff was written and the session is unchanged. A held prompt goes back in the box
   when someone is at the prompt. When nobody is, or the box will not take it, the prompt is
   submitted in the unchanged session.
-- **`/clear` throws after the fork succeeded.** The session is unchanged and the prompt is handled
-  the same way. A scheduled prompt still runs.
+- **`/clear` throws after the fork succeeded.** The session is unchanged, a toast and a transcript
+  line say so, and the prompt is handled the same way. A scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
   a prompt, joined to any held prompt.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
@@ -259,7 +293,7 @@ the log, and nothing from it is written into the session.
 | Field | Values |
 |---|---|
 | `ts` | ISO 8601 UTC |
-| `session_id` | The session the decision is about. A `cleared` record carries the old session's id. |
+| `session_id` | The session the decision is about. A `cleared` record, and any record a handoff writes after the wait (an abandon, a failed or vetoed compaction), carries the id of the session the handoff started in, even if the session changed meanwhile. |
 | `component` | Always `handoff` |
 | `mode` | `shadow` only when `action` is `none` and the plugin ran in `off`, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. `trigger_values.setting` still shows what you configured. A record for `/handoff` is always `active`, because you asked for it. |
 | `action` | `none`, `advised` (a band was shown), `cleared`, `compacted`, or `untested_engine` |
@@ -271,7 +305,7 @@ the log, and nothing from it is written into the session.
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode` (the plugin may act as `off` anyway; see Compatibility) |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
-| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `band_failed`, `not_now`, `send_here`, or `background_busy` (a press that would clear was refused because background work is running) |
+| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 
 A prompt is evaluated, and so logged, only when it names new work.
@@ -322,7 +356,7 @@ terminal and have not been watched yet:
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
 - That `claude --resume <old id>` reopens the old session after a handoff.
-- That the status line shows during the wait and is gone after the clear, and that no `handoff:`
+- That the status lines (writing, then waiting for a turn) show and are gone after the clear, and that no `handoff:`
   appears twice in a transcript line or toast.
 - Whether the appended note shows in the fresh session's transcript, or only in its context. If it
   does not show, a "note loaded" line would be needed; none is written yet.
@@ -350,4 +384,4 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
 | `hooks/session-state.ts` | The per-session state object |
-| `types/index.d.ts` | The band's atom: an `Offer`, or the writing status |
+| `types/index.d.ts` | The band's atom: an `Offer`, or a status line (writing the note, or waiting for a turn) |

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer, isWriting, WRITING } from '../hooks/band-text'
+import { BUTTON_LABELS, bandControls, bandHint, bandMessage, offerWithBusyState, clearsSession, isSameOffer, isWriting, statusText, WAITING, WAITING_STATUS, WRITING, WRITING_STATUS } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
@@ -238,4 +238,24 @@ test('It returns false when the second band is the writing state from isSameOffe
 
 test('It returns false for two writing states from isSameOffer', () => {
   expect(isSameOffer(WRITING, WRITING)).toBe(false)
+})
+
+test('It returns true for the waiting state from isWriting', () => {
+  expect(isWriting(WAITING)).toBe(true)
+})
+
+test('It returns false for the waiting state against the writing state from isSameOffer', () => {
+  expect(isSameOffer(WAITING, WRITING)).toBe(false)
+})
+
+test('It returns the writing status for the writing state from statusText', () => {
+  expect(statusText(WRITING)).toBe(WRITING_STATUS)
+})
+
+test('It returns the waiting status for the waiting state from statusText', () => {
+  expect(statusText(WAITING)).toBe(WAITING_STATUS)
+})
+
+test('It says the note is written, when it clears, and that prompts stay held in the waiting status', () => {
+  expect(WAITING_STATUS).toBe('Handoff note written. It clears when the current turn ends. Your prompts stay held.')
 })
