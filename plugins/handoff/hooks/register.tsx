@@ -24,7 +24,7 @@ import {
 } from './band-text'
 import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
 import { isUntestedEngine } from './engine-version'
-import { HANDOFF_PROMPT, handoffMessage, holdsPrompt, joinPrompts, resumeCommand, withoutPrompt } from './handoff-note'
+import { HANDOFF_PROMPT, handedOffMessage, handoffMessage, holdsPrompt, joinPrompts, withoutPrompt } from './handoff-note'
 import { createState, resetForNewSession, type ButtonPress, type SessionState } from './session-state'
 import {
   asMode,
@@ -365,9 +365,9 @@ const continueInFreshSession = async (
   await registerHandoffCommand($)
   const message = handoffMessage(oldId, note)
   const isStored = await appendNote($, message)
-  const resume = resumeCommand(oldId)
-  $.ui.log(`The previous session is ${oldId}. Reopen it with ${resume}`)
-  $.ui.toast(`Handoff written. Reopen ${oldId} with ${resume}`)
+  const done = handedOffMessage(oldId)
+  $.ui.log(done)
+  $.ui.toast(done)
   await writeRecord($, state, { ...request.trigger, action: 'cleared', sessionId: oldId })
   if (request.heldPrompt !== undefined) await inspectPrompt($, state, request.heldPrompt)
   const prompt = isStored ? request.heldPrompt : joinPrompts(message, request.heldPrompt)

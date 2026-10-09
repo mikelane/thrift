@@ -13,6 +13,9 @@ export const handoffMessage = (oldSessionId: string, note: string): string =>
 
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 
+export const handedOffMessage = (oldSessionId: string): string =>
+  `Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
+
 export const joinPrompts = (handoff: string, held: string | undefined): string =>
   held ? `${handoff}\n\n${held}` : handoff
 
