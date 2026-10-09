@@ -65,6 +65,7 @@ export type World = {
   boxReadDenied: boolean
   sessionIdDenials: number
   submitThrows: boolean
+  submitDropped: boolean
   gitThrows: boolean
   gitFailure: boolean
   step:{ usage: TurnUsage | null; advisorCalls: number }
@@ -132,6 +133,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     boxReadDenied: false,
     sessionIdDenials: 0,
     submitThrows: false,
+    submitDropped: false,
     gitThrows: false,
     gitFailure: false,
     step: { usage: null, advisorCalls: 0 },
@@ -183,6 +185,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   })
   on('prompt.submit', (_$, e) => {
     if (world.submitThrows) throw new Error('submit refused')
+    if (world.submitDropped) return { drop: 'refused by another hook' }
     world.effects.push(`entered:${e.origin.kind}:${e.text}`)
     return { text: e.text }
   })

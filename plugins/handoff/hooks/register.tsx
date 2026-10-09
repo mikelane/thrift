@@ -288,13 +288,21 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
+// A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of rejecting.
+const submitEntered = async ($: EngineInterface, text: string, failureLabel: string): Promise<boolean> => {
   try {
-    await $.prompt.submit({ text })
+    const result = await $.prompt.submit({ text })
+    if (result.drop === undefined) return true
+    debug($, `${failureLabel}: ${result.drop}`)
+    return false
   } catch (error) {
-    debug($, `could not restore the held prompt: ${String(error)}`)
-    keepInTranscript($, text)
+    debug($, `${failureLabel}: ${String(error)}`)
+    return false
   }
+}
+
+const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
+  if (!(await submitEntered($, text, 'could not restore the held prompt'))) keepInTranscript($, text)
 }
 
 const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
@@ -363,15 +371,10 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
 type Carried = Exclude<NoteDelivery, 'appended'>
 
 const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
-  try {
-    await $.prompt.submit({ text })
-    return 'submitted'
-  } catch (error) {
-    debug($, `could not send the prompt: ${String(error)}`)
-    if (!isUnattended && (await refillBox($, text))) return 'in_box'
-    keepInTranscript($, text)
-    return 'not_carried'
-  }
+  if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
+  if (!isUnattended && (await refillBox($, text))) return 'in_box'
+  keepInTranscript($, text)
+  return 'not_carried'
 }
 
 const FINAL_MESSAGES: Record<NoteDelivery, (oldId: string) => string> = {

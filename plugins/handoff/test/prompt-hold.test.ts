@@ -419,6 +419,16 @@ test('It writes an unattended prompt to the transcript when the handoff fails an
   expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
 })
 
+test('It writes the held prompt to the transcript when a hook drops the send after the clear and nobody is at the box', ACT, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2')
+  world.submitDropped = true
+  world.fillRefusal = 'no_composer'
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+  expect(world.effects.filter(effect => effect.startsWith('log:') && effect.endsWith('\nnow ENG-2'))).toHaveLength(1)
+})
+
 test('It writes the held prompt to the transcript when the send after the clear fails and nobody is at the box', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')

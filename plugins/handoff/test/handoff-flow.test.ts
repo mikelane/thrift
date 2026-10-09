@@ -376,6 +376,48 @@ test('It logs note in_box in the cleared record when the note waits in the promp
   expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'in_box' } })
 })
 
+// A prompt.submit hook beneath the plugin (another plugin, or a settings hook) refuses the submitted note:
+// $.prompt.submit resolves with { drop } rather than rejecting, so the note never entered the session.
+const droppedNoteWorld = ($: Engine, on: On) => {
+  const world = install($, on)
+  world.appendDenied = true
+  world.submitDropped = true
+  return world
+}
+
+test('It does not log note submitted when the submitted note is dropped by a hook', ACT, async ($, on) => {
+  const world = droppedNoteWorld($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(lastRecord(world).trigger_values.note).not.toBe('submitted')
+})
+
+test('It does not announce the session starts from the note when the submitted note is dropped by a hook', ACT, async ($, on) => {
+  const world = droppedNoteWorld($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).not.toContain(`log:${HANDED_OFF}`)
+})
+
+test('It puts the note back in the prompt box when a hook drops the submitted note', ACT, async ($, on) => {
+  const world = droppedNoteWorld($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'in_box' } })
+  expect(world.effects).toContain(`log:${IN_THE_BOX}`)
+})
+
+test('It writes the drop reason to the debug log when a hook drops the submitted note', ACT, async ($, on) => {
+  const world = droppedNoteWorld($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.debugLines).toContain('handoff: could not send the prompt: refused by another hook')
+})
+
 test('It logs note not_carried in the cleared record when nothing could carry the note', ACT, async ($, on) => {
   const world = install($, on)
   refuseEveryWayToCarryTheNote(world)
