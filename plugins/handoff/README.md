@@ -60,9 +60,14 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       at most 400 words of plain Markdown.
    3. If `compactBeforeClear` is on, compact the old session. A failed or vetoed compaction is
       logged and the handoff goes on.
-   4. Run `/clear`.
+   4. If a turn is running (one a peer or a finished background task started, or one that was queued
+      before the handoff), wait for it to end, however long that takes, then run `/clear`. The
+      Writing status stays up and person prompts stay held meanwhile. The wait has no limit, and
+      the check and the clear happen in the same tick. Otherwise run `/clear` at once.
    5. Append the handoff as a message for the model, prefixed "Handoff from the previous session
-      (&lt;id&gt;), written by Claude just before a /clear".
+      (&lt;id&gt;), written by Claude just before a /clear". If a turn started after the note began to
+      be written, the message ends with one more line saying so and giving `claude --resume <id>`
+      for the details; the note itself is not rewritten.
    6. Say what happened to the note, in a transcript line and a toast with the same text. If it was
       appended, or the append was refused and it was submitted as a prompt: "Handed off. This session
       starts from a note summarizing the previous one. To reopen the full previous conversation:
@@ -141,6 +146,9 @@ Special cases:
   resent), a prompt typed while a turn is running, a prompt from a plugin or another session (only
   the person origins `composer`, `bridge`, `sdk`, and `scheduled-trigger` count), and any prompt
   that arrives while a compaction is pending.
+- **Turns started by something other than a person.** A peer prompt or a finished background
+  task is not held, and a finished task is still marked done. If it starts a turn while the handoff
+  is pending, the handoff waits for that turn to end before it clears (step 4).
 - **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
   session is compacted before the clear) is held, so `/clear` never runs inside its turn.
   - Held: after the clear it is sent in the fresh session, after the note.
