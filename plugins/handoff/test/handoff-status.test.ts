@@ -176,3 +176,32 @@ test('It does not keep the status line across a session start', ASK, async ($, o
   await startSession($)
   expect(await shownText(band)).toEqual(['engine band'])
 })
+
+test('It keeps the status line when a held prompt is sent again while /handoff writes the note', ASK, async ($, on) => {
+  const world = install($, on)
+  world.branch = 'alice/eng-1-start'
+  holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await submitPerson($, 'now ENG-2')
+  expect(await shownText(await mountBand($))).toEqual([STATUS])
+})
+
+test('It leaves a held prompt in the box when /handoff runs instead of sending it', ASK, async ($, on) => {
+  const world = install($, on)
+  world.branch = 'alice/eng-1-start'
+  holdFork(world)
+  await startSession($)
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2')
+  await world.clock.settle()
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2')
+})

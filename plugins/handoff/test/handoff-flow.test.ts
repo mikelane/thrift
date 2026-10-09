@@ -286,3 +286,57 @@ test('It runs /handoff on an untested engine', async ($, on) => {
   await world.clock.settle()
   expect(world.effects).toContain('clear')
 })
+
+const HANDED_OFF =
+  'Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session'
+const NOT_CARRIED_OVER =
+  'The handoff note could not be added to the new session. The previous conversation is unchanged: claude --resume old-session'
+
+const refuseEveryWayToCarryTheNote = (world: World) => {
+  world.appendDenied = true
+  world.submitThrows = true
+  world.fillRefusal = 'dialog'
+}
+
+test('It reports the handoff once the note is appended', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(world.effects).toContain(`log:${HANDED_OFF}`)
+})
+
+test('It reports the handoff once the note is submitted after a refused append', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain(`log:${HANDED_OFF}`)
+})
+
+test('It reports the handoff once the note is in the box after a refused append and send', ACT, async ($, on) => {
+  const world = install($, on)
+  world.appendDenied = true
+  world.submitThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain(`log:${HANDED_OFF}`)
+})
+
+test('It does not claim the session starts from the note when it could not be appended, sent, or put in the box', ACT, async ($, on) => {
+  const world = install($, on)
+  refuseEveryWayToCarryTheNote(world)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).not.toContain(`log:${HANDED_OFF}`)
+})
+
+test('It says the note was not carried over, with the resume command, when nothing could carry it', ACT, async ($, on) => {
+  const world = install($, on)
+  refuseEveryWayToCarryTheNote(world)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain(`log:${NOT_CARRIED_OVER}`)
+  expect(world.effects).toContain(`toast:${NOT_CARRIED_OVER}`)
+})

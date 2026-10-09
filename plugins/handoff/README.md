@@ -63,11 +63,15 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    4. Run `/clear`.
    5. Append the handoff as a message the model reads and you do not see, prefixed "Handoff from
       the previous session (&lt;id&gt;), written by Claude just before a /clear".
-   6. Write a transcript line and a toast with the same text: "Handed off. This session starts from
-      a note summarizing the previous one. To reopen the full previous conversation:
-      `claude --resume <id>`". Claude Code puts the plugin's name in front of its toasts and
-      transcript lines, so the plugin's own strings carry no `handoff:` prefix.
-   7. If a prompt was held, submit it in the fresh session.
+   6. Once the note is appended, submitted, or put in the prompt box, write a transcript line and a
+      toast with the same text: "Handed off. This session starts from a note summarizing the
+      previous one. To reopen the full previous conversation: `claude --resume <id>`". If the note
+      reached the session by none of those, the text is "The handoff note could not be added to the
+      new session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
+      the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
+      carry no `handoff:` prefix.
+   7. If a prompt was held and the handoff was started by handing it off first, submit it in the
+      fresh session. Running `/handoff` while a prompt is held leaves that prompt in the box.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.
