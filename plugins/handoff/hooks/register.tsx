@@ -925,13 +925,17 @@ export const register: Register = (on, options) => {
     endMainTurn(state)
     const deferredPress = state.deferredPress
     state.deferredPress = null
-    if (deferredPress !== null) {
-      noteCacheReads(state, e)
-      await claimAndRunPress($, state, deferredPress)
-    } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
-    else await refreshBandBusyState($, state)
-    // The handoff clears in a later tick: /clear inside the hook the turn is waiting on is refused.
-    $.clock.after(0, () => releaseTurnEndWaiter(state))
+    try {
+      if (deferredPress !== null) {
+        noteCacheReads(state, e)
+        await claimAndRunPress($, state, deferredPress)
+      } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
+      else await refreshBandBusyState($, state)
+    } finally {
+      // The handoff clears in a later tick: /clear inside the hook the turn is waiting on is refused.
+      // Released even when the work above throws, so a failure there cannot leave the handoff waiting forever.
+      $.clock.after(0, () => releaseTurnEndWaiter(state))
+    }
     return result
   }).catch(($, e, next) => next(e))
 
