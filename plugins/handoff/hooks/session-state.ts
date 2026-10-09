@@ -1,4 +1,5 @@
 import type { Offer } from '../types'
+import type { HeldPrompt } from './handoff-note'
 import type { Button, Mode } from './signals'
 
 type Settings = {
@@ -22,7 +23,8 @@ export type SessionState = Settings & {
   backoffFrom: number | null
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
-  promptsHeldForHandoff: string[] | null
+  promptsHeldForHandoff: HeldPrompt[] | null
+  carriedForHandoff: string | null
   hasBand: boolean
   isTurnRunning: boolean
   isPressRunning: boolean
@@ -44,6 +46,7 @@ export const createState = (settings: Settings): SessionState => ({
   pending: null,
   heldPrompt: null,
   promptsHeldForHandoff: null,
+  carriedForHandoff: null,
   hasBand: false,
   isTurnRunning: false,
   isPressRunning: false,

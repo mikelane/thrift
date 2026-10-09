@@ -143,10 +143,16 @@ Special cases:
   that arrives while a compaction is pending.
 - **Prompts sent during a handoff.** A person prompt that arrives while the note is written (or the
   session is compacted before the clear) is held, so `/clear` never runs inside its turn. After the
-  clear it is sent in the fresh session after the note. Several prompts are joined with a blank
-  line, in the order they arrived, and sent as one; a prompt sent again while held is sent once. If
-  the handoff fails, they go back in the box like any held prompt. A prompt with attachments or
-  context can't be resent, so it is refused with a toast and left in the box to send again.
+  clear it is sent in the fresh session after the note. Prompts that came from the same kind of
+  sender (a person, or a scheduled trigger) are joined with a blank line, in the order they arrived,
+  and sent as one; each kind follows its own rule if delivery fails. A prompt is dropped as a
+  duplicate only when its text matches the prompt the handoff is already carrying (say, "Hand off and
+  send it" sent again); every other prompt is kept, so two identical prompts sent on purpose are both
+  sent. If the handoff fails, a person prompt goes back in the box and a scheduled one is submitted
+  here, whatever the handoff itself was. When the note has to be sent as a prompt, it carries the
+  prompts of the handoff's own kind and the others follow it. A prompt with attachments or context
+  can't be resent, so it is refused with a toast; its text is put back in the box where possible, and
+  it is sent again after the handoff.
 - **One at a time.** A handoff or compaction is claimed when it is scheduled, not when it starts. A
   turn that ends while one is pending is not evaluated, and a second Compact press is ignored.
 

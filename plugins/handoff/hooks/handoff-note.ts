@@ -29,8 +29,19 @@ export const joinPrompts = (handoff: string, held: string | undefined): string =
 
 const PROMPT_SEPARATOR = '\n\n'
 
-export const joinHeldPrompts = (prompts: readonly string[]): string | undefined =>
-  prompts.length === 0 ? undefined : prompts.join(PROMPT_SEPARATOR)
+export type HeldPrompt = { text: string; isUnattended: boolean }
+
+// Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
+export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPrompt[] => {
+  const groups: HeldPrompt[] = []
+  for (const { text, isUnattended } of prompts) {
+    const index = groups.findIndex(group => group.isUnattended === isUnattended)
+    const group = groups[index]
+    if (group === undefined) groups.push({ text, isUnattended })
+    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended }
+  }
+  return groups
+}
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

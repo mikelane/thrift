@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
+import { groupHeldPrompts } from '../hooks/handoff-note'
 import {
   answered,
   compacted,
@@ -18,7 +19,7 @@ const ASK = { options: { handoffMode: 'ask' } } as const
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent in the fresh session.'
 const REFUSED_DURING_HANDOFF =
-  'A handoff is in progress, so a prompt with attachments or context cannot be held. It is back in your prompt box. Send it again after the handoff.'
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
 
 const holdFork = (world: World) => {
@@ -103,12 +104,12 @@ test('It sends several held prompts once, joined in the order they arrived', asy
   expect(entered(world)).toEqual(['entered:plugin:first\n\nsecond\n\nthird'])
 })
 
-test('It sends a prompt sent twice during the write only once', async ($, on) => {
+test('It sends two identical prompts sent on purpose during the write both', async ($, on) => {
   const { world, finishNote } = await writingTheNote($, on)
-  await submitPerson($, 'again')
-  await submitPerson($, 'again')
+  await submitPerson($, 'continue')
+  await submitPerson($, 'continue')
   await finishNote()
-  expect(entered(world)).toEqual(['entered:plugin:again'])
+  expect(entered(world)).toEqual(['entered:plugin:continue\n\ncontinue'])
 })
 
 const heldBeforeTheHandoff = async ($: Engine, on: On) => {
@@ -250,4 +251,161 @@ test('It holds a prompt sent while the session is compacted before the clear', {
   finishCompaction()
   await world.clock.settle()
   expect(entered(world)).toEqual(['entered:plugin:during compaction'])
+})
+
+// An unattended handoff: a scheduled prompt that names new work hands off without asking.
+const unattendedHandoffWriting = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  world.branch = 'alice/eng-1-start'
+  await startSession($)
+  await growTo200k($, world)
+  await submitPerson($, 'start on ENG-1')
+  await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+  await world.clock.settle()
+  const finishWith = async (result: ModelForkResult) => {
+    fork.release(result)
+    await world.clock.settle()
+  }
+  return { world, finishNote: () => finishWith(answered('The handoff note.')), failNote: () => finishWith({ isAnswered: false, reason: 'nothing-to-fork' }) }
+}
+
+test('It puts a person prompt held during an unattended handoff back in the box when the note fails', ASK, async ($, on) => {
+  const { world, failNote } = await unattendedHandoffWriting($, on)
+  await submitPerson($, 'actually wait')
+  await failNote()
+  expect(world.box.text).toContain('actually wait')
+})
+
+test('It submits the carried scheduled prompt of an unattended handoff when the note fails', ASK, async ($, on) => {
+  const { world, failNote } = await unattendedHandoffWriting($, on)
+  await submitPerson($, 'actually wait')
+  await failNote()
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+})
+
+test('It submits a scheduled prompt held during an attended handoff when the note fails', async ($, on) => {
+  const { world, failNote } = await writingTheNote($, on)
+  await submitPerson($, 'run the nightly job', { kind: 'scheduled-trigger' })
+  await failNote()
+  expect(entered(world)).toEqual(['entered:plugin:run the nightly job'])
+})
+
+test('It puts a person prompt back in the box and submits a scheduled one when the clear fails', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.clearThrows = true
+  await submitPerson($, 'person says')
+  await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+  await finishNote()
+  expect([world.box.text, entered(world)]).toEqual(['person says', ['entered:plugin:nightly job']])
+})
+
+test('It sends each origin group in the fresh session joined in arrival order', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await submitPerson($, 'person one')
+  await submitPerson($, 'nightly one', { kind: 'scheduled-trigger' })
+  await submitPerson($, 'person two')
+  await finishNote()
+  expect(entered(world)).toEqual(['entered:plugin:person one\n\nperson two', 'entered:plugin:nightly one'])
+})
+
+test('It puts a person prompt in the box and the transcript for a scheduled one when the fresh session refuses both', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.submitDropped = true
+  await submitPerson($, 'person says')
+  await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+  await finishNote()
+  expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:Your prompt'))]).toEqual([
+    'person says',
+    ['log:Your prompt could not be sent or put back in the box. Here it is:\nnightly job'],
+  ])
+})
+
+test('It joins only the attended prompts to the note of an attended handoff and sends scheduled ones apart', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  world.appendDenied = true
+  await submitPerson($, 'person says')
+  await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+  await finishNote()
+  expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}\n\nperson says`, 'entered:plugin:nightly job'])
+})
+
+test('It joins only the scheduled prompts to the note of an unattended handoff and sends person prompts apart', ASK, async ($, on) => {
+  const { world, finishNote } = await unattendedHandoffWriting($, on)
+  world.appendDenied = true
+  await submitPerson($, 'person says')
+  await finishNote()
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', `entered:plugin:${NOTE_MESSAGE}\n\nnow ENG-2`, 'entered:plugin:person says'])
+})
+
+test('It never holds a plugin prompt sent while the note is written', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await $.prompt.submit({ text: 'from a plugin', wait: false, origin: { kind: 'plugin', name: 'other' } })
+  await finishNote()
+  expect(entered(world)).toEqual(['entered:plugin:from a plugin'])
+})
+
+// The handoff checks whether the append is denied right after the clear, before it delivers anything: the person repeats the carried prompt then.
+const repeatingDuringDelivery = async ($: Engine, on: On) => {
+  const { world, finishNote } = await heldBeforeTheHandoff($, on)
+  let repeat: Promise<unknown> = Promise.resolve(undefined)
+  Object.defineProperty(world, 'appendDenied', {
+    get: () => {
+      repeat = submitPerson($, 'now ENG-2')
+      return false
+    },
+  })
+  await finishNote()
+  return { world, outcome: { drop: dropOf(await repeat) } }
+}
+
+test('It drops a repeat of the carried prompt that arrives after the clear', ASK, async ($, on) => {
+  const { outcome } = await repeatingDuringDelivery($, on)
+  expect(outcome.drop).toBe(HELD_FOR_HANDOFF)
+})
+
+test('It sends the carried prompt once when it is repeated after the clear', ASK, async ($, on) => {
+  const { world } = await repeatingDuringDelivery($, on)
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+})
+
+test('It drops a repeat of the carried prompt that arrives with an attachment and leaves the box alone', ASK, async ($, on) => {
+  const { world, finishNote } = await heldBeforeTheHandoff($, on)
+  const repeat = await submitPerson($, 'now ENG-2', { attachments: IMAGE })
+  await finishNote()
+  expect([dropOf(repeat), world.box.text, entered(world)]).toEqual([
+    HELD_FOR_HANDOFF,
+    '',
+    ['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'],
+  ])
+})
+
+test('It lets a repeat of the carried prompt through once the handoff has finished', ASK, async ($, on) => {
+  const { world, finishNote } = await heldBeforeTheHandoff($, on)
+  await finishNote()
+  expect(dropOf(await submitPerson($, 'now ENG-2'))).toBeUndefined()
+  expect(entered(world).at(-1)).toBe('entered:composer:now ENG-2')
+})
+
+test('It returns no groups from groupHeldPrompts for no prompts', () => {
+  expect(groupHeldPrompts([])).toEqual([])
+})
+
+test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
+  expect(groupHeldPrompts([{ text: 'a', isUnattended: false }, { text: 'a', isUnattended: false }])).toEqual([
+    { text: 'a\n\na', isUnattended: false },
+  ])
+})
+
+test('It keeps one group per origin, ordered by first arrival, in groupHeldPrompts', () => {
+  expect(
+    groupHeldPrompts([
+      { text: 'u1', isUnattended: true },
+      { text: 'p1', isUnattended: false },
+      { text: 'u2', isUnattended: true },
+    ]),
+  ).toEqual([
+    { text: 'u1\n\nu2', isUnattended: true },
+    { text: 'p1', isUnattended: false },
+  ])
 })
