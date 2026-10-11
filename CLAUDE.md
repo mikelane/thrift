@@ -84,7 +84,10 @@ A check that needs a plugin's files on disk, which `plugin test` cannot read (it
 in `plugins/<name>/checks/*.ts`. `scripts/check.sh` runs each one with
 `node --experimental-strip-types` after `tsc` and before `plugin test`, and a non-zero exit fails
 the run. Such a file imports its siblings with explicit `.ts` extensions, so those modules import
-nothing and use only erasable TypeScript.
+nothing and use only erasable TypeScript. It needs Node 22.6 or newer (older Node exits with
+"bad option", which fails the step). `tsc` does not cover `checks/`: they need `@types/node` for
+`node:fs` and `allowImportingTsExtensions`, and the logic they call lives in `hooks/`, which `tsc`
+and `plugin test` already cover.
 
 Tests use `claude-code/testing`. The kit mocks the clock, store, env, and `session.append`
 directly (`mock.*`). Every other engine call (`model.fork`, `process.run`, `agent.list`,
