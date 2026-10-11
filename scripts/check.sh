@@ -5,7 +5,8 @@
 # Usage: scripts/check.sh [plugin...]   (no arguments checks every plugins/*/)
 #
 # CHECK_LOG_DIR: when set, each plugin's output goes to $CHECK_LOG_DIR/<plugin>.txt, which is
-# removed when the plugin passes and printed when it fails. CI sets it for the canary report job.
+# removed when the plugin passes and printed when it fails, and a `checked` file is created once
+# every plugin has been tried. CI sets it for the canary report job, which reads both.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -22,8 +23,13 @@ if [ "$#" -gt 0 ]; then
 else
   names=()
   for dir in plugins/*/; do
+    [ -d "$dir" ] || continue
     names+=("$(basename "$dir")")
   done
+fi
+if [ "${#names[@]}" -eq 0 ]; then
+  echo "No plugins found under $repo_root/plugins." >&2
+  exit 1
 fi
 
 write_type_declarations() {
@@ -35,14 +41,15 @@ write_type_declarations() {
   if [ ! -f "$declarations" ]; then
     echo "The engine wrote no type declarations for $plugin_dir:" >&2
     printf '%s\n' "$output" | tail -n 50 >&2
-    exit 1
+    return 1
   fi
 }
 
 # Chained with && because set -e is off inside a function called from an `if`.
 run_checks() {
   local plugin_dir=$1
-  echo '## claude plugin validate' &&
+  write_type_declarations "$plugin_dir" &&
+    echo '## claude plugin validate' &&
     claude plugin validate "$plugin_dir" &&
     echo '## tsc -p' &&
     "$tsc" -p "$plugin_dir" &&
@@ -57,7 +64,6 @@ check_plugin() {
     echo "No such plugin: $plugin_dir" >&2
     exit 1
   fi
-  write_type_declarations "$plugin_dir"
   if [ -z "${CHECK_LOG_DIR:-}" ]; then
     run_checks "$plugin_dir"
     return
@@ -82,4 +88,8 @@ for name in "${names[@]}"; do
     check_plugin "$name"
   fi
 done
+if [ -n "${CHECK_LOG_DIR:-}" ]; then
+  mkdir -p "$CHECK_LOG_DIR"
+  touch "$CHECK_LOG_DIR/checked"
+fi
 exit "$status"

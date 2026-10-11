@@ -84,26 +84,10 @@ jobs:
             grep -q "TESTED_THROUGH = '${PINNED_VERSION}'" "$file" || { echo "$file does not name ${PINNED_VERSION}"; exit 1; }
           done
 
-      - name: Let the engine write each plugin's type declarations
-        run: |
-          for dir in plugins/*/; do
-            out=$(CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$dir" 2>&1) || true
-            if [ ! -f "${dir}.claude-plugin/types/claude-code/index.d.ts" ]; then
-              echo "No declarations were written for $dir"
-              printf '%s\n' "$out" | tail -n 50
-              exit 1
-            fi
-          done
-
       - name: Validate, type-check, and test every plugin
         env:
           CHECK_LOG_DIR: ${{ runner.temp }}/failures
-        run: |
-          status=0
-          scripts/check.sh || status=1
-          mkdir -p "$CHECK_LOG_DIR"
-          touch "$CHECK_LOG_DIR/checked"
-          exit "$status"
+        run: scripts/check.sh
 
       - name: Record the Claude Code version for the canary issue job
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'
