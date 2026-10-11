@@ -40,7 +40,7 @@ test('It names the component, session, engine version, and time in every record'
   })
 })
 
-test('It logs the point, setting, threshold, context size, and cache read tokens as scalars', async ($, on) => {
+test('It logs the point, setting, effective mode, threshold, context size, and cache read tokens as scalars', async ($, on) => {
   const world = install($, on)
   await startSession($)
   await runStep($, world, { usage: usageOf(1_000, 0, 49_000) })
@@ -255,7 +255,7 @@ test('It records effective_mode off and setting act for /handoff before session.
   const world = install($, on)
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(lastRecord(world).trigger_values).toMatchObject({ point: 'command', setting: 'act', effective_mode: 'off' })
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
 })
 
 test('It records effective_mode off and setting act for /handoff under -p', ACT, async ($, on) => {
@@ -263,7 +263,7 @@ test('It records effective_mode off and setting act for /handoff under -p', ACT,
   await startSession($, false)
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(lastRecord(world).trigger_values).toMatchObject({ point: 'command', setting: 'act', effective_mode: 'off' })
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
 })
 
 test('It records effective_mode off and setting act for /handoff on an untested build', ACT, async ($, on) => {
@@ -272,7 +272,7 @@ test('It records effective_mode off and setting act for /handoff on an untested 
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(lastRecord(world).trigger_values).toMatchObject({ point: 'command', setting: 'act', effective_mode: 'off' })
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
 })
 
 test('It records effective_mode off and setting act on the untested_engine record', ACT, async ($, on) => {

@@ -64,6 +64,29 @@ for (const [setting, effectiveMode] of effectiveModeCases) {
   })
 }
 
+// Must match the sample record in plugins/handoff/README.md.
+const README_SAMPLE_RECORD =
+  '{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","effective_mode":"act"}}'
+
+test('It serializes the README sample record byte for byte', () => {
+  const record = decisionRecord({
+    ...baseRecord,
+    action: 'cleared',
+    effectiveMode: 'act',
+    triggerValues: {
+      point: 'turn-end',
+      signal: 'strong',
+      context_tokens: 200_000,
+      threshold: 150_000,
+      is_background_busy: false,
+      setting: 'act',
+      cache_read_tokens: 180_000,
+      note: 'appended',
+    },
+  })
+  expect(JSON.stringify(record)).toBe(README_SAMPLE_RECORD)
+})
+
 const modeCases = [
   ['none', 'off', 'off', 'turn-end', 'shadow'],
   ['none', 'ask', 'ask', 'turn-end', 'active'],
