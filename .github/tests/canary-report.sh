@@ -3,8 +3,9 @@
 # (`report`) job and the `scripts/check.sh` run that feeds it.
 #
 # The `report` job checks out nothing, so its script has to stay inline in ci.yml. This harness
-# pulls the real step scripts out of ci.yml and runs them under `bash -eo pipefail`, the shell
-# Actions uses, with a stub `gh` and a stub `claude` and `tsc`. No network and no API key.
+# pulls the real step scripts out of ci.yml and runs them under `bash -eo pipefail`, which is what
+# `shell: bash` gives and is stricter than the `bash -e` a step without `shell:` gets. A stub `gh`,
+# a stub `claude` and a stub `tsc` stand in for the real tools. No network and no API key.
 #
 # Usage: .github/tests/canary-report.sh [name-fragment]   (runs the tests whose name contains it)
 # CANARY_CI_YML points the harness at another copy of ci.yml, which is how the extraction guard
@@ -251,7 +252,6 @@ make_repo() {
   chmod +x "$REPO/scripts/check.sh"
   cp "$STUBS/tsc" "$REPO/node_modules/.bin/tsc"
   cp "$STUBS/claude" "$REPO/bin/claude"
-  rm -f "$FAILURES/checked" "$FAILURES/claude-version"
   rm -f "$FAILURES/checked" "$FAILURES/claude-version"
   STUB_LOG=$T/stub-calls
   : > "$STUB_LOG"
@@ -969,5 +969,5 @@ for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   fi
 done
 echo "$((total - failures)) of $total passed"
-[[ "$total" -gt 0 || -n "$FILTER" ]] || { echo 'No tests ran.' >&2; exit 1; }
+[[ "$total" -gt 0 ]] || { echo 'No tests ran.' >&2; exit 1; }
 [[ "$failures" == 0 ]]
