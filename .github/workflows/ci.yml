@@ -11,8 +11,14 @@ name: CI
 # on, so it holds `contents: read` and nothing else. On the weekly schedule, and on a manual run,
 # its latest leg hands its failure logs and the Claude Code version to job `report` as an
 # artifact. `report` is the only job with `issues: write`. It reads the plugin list through the API
-# at the run's own commit, but still checks out and runs no repository code. Only people with write access can start a manual run, so `issues: write` there
-# does not reintroduce the exposure pull requests had.
+# at the run's own commit, but still checks out and runs no repository code. Only people with write
+# access can start a manual run, so `issues: write` there does not reintroduce the exposure pull
+# requests had.
+#
+# Job `canary-harness` runs .github/tests/canary-report.sh, which pulls the `report` script out of
+# this file and runs it against a stub `gh`. It holds `contents: read`, installs no Claude Code, and
+# needs no network. It has no path filter because the workflow has none: it takes seconds, and any
+# change to this file, to that harness or to scripts/check.sh runs it.
 #
 # A manual run defaults to a dry run: `report` prints the issues it would open instead of opening
 # them, which exercises the canary path without waiting for Monday.
@@ -105,6 +111,20 @@ jobs:
           path: ${{ runner.temp }}/failures
           retention-days: 1
           if-no-files-found: error
+
+  canary-harness:
+    name: canary report harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the canary report harness against the real report script
+        run: .github/tests/canary-report.sh
 
   report:
     name: open canary issues
