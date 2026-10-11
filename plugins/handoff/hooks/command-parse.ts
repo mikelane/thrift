@@ -157,4 +157,10 @@ const finishesSegment = (segment: string): boolean => {
   return false
 }
 
+// SAFETY: this is a lexer over the command text, not a shell parser, so it has known gaps. It misses a commit or push inside
+// $(...), backticks, a subshell, or a then/do/{ block, behind sudo, env, or time, and with git -c, --git-dir, or gh -R. It
+// reads $((1<<2)) as a heredoc opener, and counts `git push --help` as finishing a task. The misses only downgrade a strong
+// signal to weak, and the over-counts need a command that is not a real push or an arithmetic expansion to follow. Each
+// gap needs a command shaped to hit it, which a person finishing a task rarely types, and the cost is one turn end judged
+// as unfinished or finished, so no guard is worth the parser it would take.
 export const finishesTask = (command: string): boolean => commandSegments(command).some(finishesSegment)

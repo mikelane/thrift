@@ -180,7 +180,9 @@ Special cases:
   the person origins `composer`, `bridge`, `sdk`, and `scheduled-trigger` count), and any prompt
   that arrives while a compaction is pending.
 - **Turns started by something other than a person.** A peer prompt or a finished background
-  task is not held, and a finished task is still marked done. If it starts a turn while the handoff
+  task is not held, and a finished task is still marked done. This is deliberate and holds through
+  the delivery too: they do not come from the person, so they have no place in the order of the
+  person's prompts. A peer prompt or task notification can therefore run ahead of the held prompts. If it starts a turn while the handoff
   is pending, the handoff waits for that turn to end before it clears (step 3).
 - **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while
   the handoff waits for a turn, or while the session is compacted before the clear is held, so
@@ -292,6 +294,10 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
   the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
   already holds it as a whole line is left alone.
+- **Prompt text in the engine's debug log.** A prompt kept in the transcript, and a refused remote
+  prompt, is written with `$.ui.log`. The engine also copies every `$.ui.log` line, up to 10000
+  characters, into Claude Code's own local debug log, which the decision log never sees. This is
+  accepted: the debug log is local to your machine, and the text is what you typed.
 - **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
   the decision log), joined to the handoff if the append was refused, so it can be copied back. A
   note that goes alone, with no held prompt, is labeled "The handoff note", not "Your prompt".
@@ -371,7 +377,9 @@ plugin without any error. Four layers guard against that:
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
    shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
    fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
-   an interactive run, so a hot reload mid-session stays `off` until the next session start.
+   an interactive run, so after a hot reload it stays `off` until the reload's own `session.start` has run. The engine's
+   declarations say `session.start` fires once per fresh load of a plugin, a reload included
+   (never for a `/clear`); whether it does for a setting changed in `/config` is not yet verified live.
    In an interactive session `/handoff` still works, because you asked for it at a moment you
    chose, and the toast says so. A session with no prompt (`-p`, the SDK) never registers
    `/handoff`, so there the toast does not mention it.

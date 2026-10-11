@@ -1082,6 +1082,9 @@ export const register: Register = (on, options) => {
     if (state.heldPrompt !== null && isPersonOrigin(e.origin.kind)) await takeDownBand($, state)
     const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
     if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
+    // Only the person origins are held or refused during a handoff. A task notification or a peer prompt passes through, in
+    // every phase including the delivery, on purpose (decided on #6): it does not come from the person, so it has no place in
+    // the order of their prompts.
     const dropped = isPersonOrigin(e.origin.kind) ? await decidePrompt($, state, e) : null
     return dropped ?? next(e)
   }).catch(($, e, next) => next(e))
