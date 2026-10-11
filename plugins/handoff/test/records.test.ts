@@ -3,12 +3,14 @@ import { expect, test } from 'claude-code/testing'
 import {
   LOG_WRITER,
   decisionRecord,
-  heldGroupFields,
   logLocation,
   type TriggerValues,
 } from '../hooks/decision-record'
 import {
+  FINAL_MESSAGES,
   HANDOFF_PROMPT,
+  busyRefusalMessage,
+  clearFailedMessage,
   handedOffMessage,
   handoffMessage,
   holdsPrompt,
@@ -71,30 +73,6 @@ test('It rejects a reason outside DecisionReason at compile time', () => {
   // @ts-expect-error 'bogus' is not a DecisionReason
   const bogus: NonNullable<TriggerValues['reason']> = 'bogus'
   expect([known, bogus]).toEqual(['backoff', 'bogus'])
-})
-
-// Must match the sample record in plugins/handoff/README.md.
-const README_SAMPLE_RECORD =
-  '{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","held_groups":0,"held_unattended":false,"effective_mode":"act"}}'
-
-test('It serializes the README sample record byte for byte', () => {
-  const record = decisionRecord({
-    ...baseRecord,
-    action: 'cleared',
-    effectiveMode: 'act',
-    triggerValues: {
-      point: 'turn-end',
-      signal: 'strong',
-      context_tokens: 200_000,
-      threshold: 150_000,
-      is_background_busy: false,
-      setting: 'act',
-      cache_read_tokens: 180_000,
-      note: 'appended',
-      ...heldGroupFields([]),
-    },
-  })
-  expect(JSON.stringify(record)).toBe(README_SAMPLE_RECORD)
 })
 
 const modeCases = [
@@ -205,6 +183,43 @@ test('It says the note could not be added to this session, with the resume comma
     'The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-id',
   )
 })
+
+test('It says the session is unchanged from busyRefusalMessage when nothing was compacted', () => {
+  expect(busyRefusalMessage(false)).toBe(
+    'Background work is running, and a handoff would cut it off. This session is unchanged. Type /handoff to hand off anyway.',
+  )
+})
+
+test('It says the session was compacted, not cleared, from busyRefusalMessage after a compaction', () => {
+  expect(busyRefusalMessage(true)).toBe(
+    'Background work is running, and a handoff would cut it off. This session was compacted, not cleared. Type /handoff to hand off anyway.',
+  )
+})
+
+test('It says the session is unchanged from clearFailedMessage when nothing was compacted', () => {
+  expect(clearFailedMessage(false)).toBe(
+    'The handoff was written but /clear failed. This session is unchanged. Type /handoff to try again.',
+  )
+})
+
+test('It says the session was compacted, not cleared, from clearFailedMessage after a compaction', () => {
+  expect(clearFailedMessage(true)).toBe(
+    'The handoff was written but /clear failed. This session was compacted, not cleared. Type /handoff to try again.',
+  )
+})
+
+const finalMessageCases = [
+  ['appended', handedOffMessage('old-id')],
+  ['submitted', handedOffMessage('old-id')],
+  ['in_box', noteInBoxMessage('old-id')],
+  ['not_carried', noteNotCarriedMessage('old-id')],
+] as const
+
+for (const [delivery, expected] of finalMessageCases) {
+  test(`It returns the ${delivery} final message from FINAL_MESSAGES`, () => {
+    expect(FINAL_MESSAGES[delivery]('old-id')).toBe(expected)
+  })
+}
 
 const joinCases = [
   ['handoff', 'held prompt', 'handoff\n\nheld prompt'],

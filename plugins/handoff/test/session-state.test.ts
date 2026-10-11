@@ -6,6 +6,8 @@ import {
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
+  claimPending,
+  noteCacheReads,
   recordSessionEnd,
   createState,
   endHandoff,
@@ -408,4 +410,30 @@ test('It abandons as busy when no session ended and work is busy in preClearOutc
 
 test('It clears when no session ended and nothing is busy in preClearOutcome', () => {
   expect(preClearOutcome(null, false)).toBe('clear')
+})
+
+test('It takes a free pending slot and returns true from claimPending', () => {
+  const state = createState(settings)
+  expect(claimPending(state, 'compact')).toBe(true)
+  expect(state.pending).toBe('compact')
+})
+
+test('It refuses a taken pending slot and keeps the first claim from claimPending', () => {
+  const state = createState(settings)
+  claimPending(state, 'compact')
+  expect(claimPending(state, 'handoff')).toBe(false)
+  expect(state.pending).toBe('compact')
+})
+
+test('It stores the turn cache-read tokens from noteCacheReads', () => {
+  const state = createState(settings)
+  noteCacheReads(state, 33_000)
+  expect(state.cacheReadTokens).toBe(33_000)
+})
+
+test('It stores zero from noteCacheReads when the turn reported no cache reads', () => {
+  const state = createState(settings)
+  state.cacheReadTokens = 99_000
+  noteCacheReads(state, undefined)
+  expect(state.cacheReadTokens).toBe(0)
 })

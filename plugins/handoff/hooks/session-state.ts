@@ -201,7 +201,7 @@ export const beginNoteWindow = (state: SessionState): void => {
 }
 
 // Resolves when the turn-end waiter is released. The caller re-checks isTurnRunning after each wake-up.
-// SAFETY: a single waiter slot is enough. claim(state, 'handoff') admits one handoff at a time, and only that
+// SAFETY: a single waiter slot is enough. claimPending(state, 'handoff') admits one handoff at a time, and only that
 // handoff's loop waits, so a second waiter can never overwrite the first and leave it hanging.
 export const waitForTurnEnd = (state: SessionState): Promise<void> =>
   new Promise(resolve => {
@@ -212,4 +212,14 @@ export const releaseTurnEndWaiter = (state: SessionState): void => {
   const waiter = state.turnEndWaiter
   state.turnEndWaiter = null
   waiter?.()
+}
+
+export const claimPending = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
+  if (state.pending !== null) return false
+  state.pending = kind
+  return true
+}
+
+export const noteCacheReads = (state: SessionState, cacheReadTokens: number | undefined): void => {
+  state.cacheReadTokens = cacheReadTokens ?? 0
 }

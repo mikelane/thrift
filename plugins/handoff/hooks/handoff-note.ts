@@ -22,6 +22,23 @@ export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterN
   return hasTurnAfterNote ? `${message}\n\n${turnAfterNoteLine(oldSessionId)}` : message
 }
 
+// One wording for the session's state in every message that stops a handoff, so each outcome reads the same.
+const COMPACTED_NOT_CLEARED = 'This session was compacted, not cleared.'
+
+const sessionLeftLine = (hasCompacted: boolean): string => (hasCompacted ? COMPACTED_NOT_CLEARED : 'This session is unchanged.')
+
+// The session that ended is the one that was compacted; the session the person sees now never was.
+export const sessionEndedMessage = (hasCompacted: boolean, oldSessionId: string): string => {
+  const message = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
+  return hasCompacted ? `${message} The previous session was compacted. To reopen it: ${resumeCommand(oldSessionId)}` : message
+}
+
+export const clearFailedMessage = (hasCompacted: boolean): string =>
+  `The handoff was written but /clear failed. ${sessionLeftLine(hasCompacted)} Type /handoff to try again.`
+
+export const busyRefusalMessage = (hasCompacted: boolean): string =>
+  `Background work is running, and a handoff would cut it off. ${sessionLeftLine(hasCompacted)} Type /handoff to hand off anyway.`
+
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 
 export const handedOffMessage = (oldSessionId: string): string =>
@@ -32,6 +49,13 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
 
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
   `The handoff note could not be added to this session. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
+
+export const FINAL_MESSAGES: Record<NoteDelivery, (oldSessionId: string) => string> = {
+  appended: handedOffMessage,
+  submitted: handedOffMessage,
+  in_box: noteInBoxMessage,
+  not_carried: noteNotCarriedMessage,
+}
 
 const PROMPT_SEPARATOR = '\n\n'
 

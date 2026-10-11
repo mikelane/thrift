@@ -53,9 +53,11 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       seconds…", with no buttons and no hotkeys, and show the same text as a toast. The status line shows
       whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
       first. Presses and hotkeys do nothing while it is up.
-      It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
-      While a turn is running (step 3) it reads "Handoff note written. It clears when the current turn
-      ends. Your prompts stay held.", and that text is a toast too.
+      It comes down when the clear runs, when the handoff is abandoned, or when a step throws. If you
+      type `/clear` before it goes up, it goes up in the fresh session and comes down just before
+      the note is delivered there.
+      While a turn is running (step 3) it reads "Handoff note written. The handoff continues when the
+      current turn ends. Your prompts stay held.", and that text is a toast too.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
       its goal, what is done (commits, branches, PRs, files, with paths), decisions and why, open
       threads, the next concrete step, and facts the next session would otherwise rediscover, in
@@ -65,15 +67,18 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       the wait begins, the status line changes to the waiting text and a toast shows it once, unless
       the person has already cleared, in which case nothing shows. Person
       prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
-      the debug log when it begins and when it ends.
+      the debug log when it begins and when it ends. The waiting text says "continues", not "clears",
+      because the handoff can still stop after the wait (step 5).
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
-      never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
-      turn started during the compaction, go back to step 3.
+      never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. A
+      successful one writes no record of its own. The record that ends the handoff carries
+      `compacted_before_clear` instead, so a handoff that stops later still shows the session was
+      compacted. If a turn started during the compaction, go back to step 3.
    5. Check for background work again, because a turn may have started some while the handoff
       waited.
       - Work is running and the handoff did not come from a typed `/handoff`: stop. Nothing is
-        cleared. A toast and a transcript line say a handoff would cut the work off and that
-        typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
+        cleared. A toast and a transcript line say a handoff would cut the work off, whether the
+        session was compacted, and that typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
         `none` record with reason `background_busy` is written.
       - Work is running and the handoff came from a typed `/handoff`: go on, as it does when it
         starts while work is busy.
@@ -261,8 +266,10 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   and a transcript line say no handoff was written and the session is unchanged. A held prompt goes back in the box
   when someone is at the prompt. When nobody is, or the box will not take it, the prompt is
   submitted in the unchanged session.
-- **`/clear` throws after the fork succeeded.** The session is unchanged, a toast and a transcript
-  line say so, and the prompt is handled the same way. A scheduled prompt still runs.
+- **`/clear` throws after the fork succeeded.** The session is unchanged, or compacted but not
+  cleared when `compactBeforeClear` is on and the compaction worked. A toast and a transcript
+  line say which and that typing `/handoff` tries again. The prompt is handled the same way. A
+  scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
   a prompt, joined to any held prompt.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
@@ -291,8 +298,10 @@ that decide nothing are logged too, so you can compute a trigger rate. Prompt te
 the log, and nothing from it is written into the session.
 
 ```json
-{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
+{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","cleared_by":"handoff","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
 ```
+
+A check rebuilds this line through the code that writes the log and fails if the two differ in key order, names, or types. It copies every value from the line into the rebuild, so it does not compare values: a value the code would never write passes. It also cannot tell that an optional field was left out of the sample.
 
 | Field | Values |
 |---|---|
@@ -312,6 +321,8 @@ the log, and nothing from it is written into the session.
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
+| `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear`) or `person` (you typed `/clear` before the handoff's own clear, so the note went into the fresh session you made and no second clear ran) |
+| `trigger_values.compacted_before_clear` | Present, as `true`, only on the record that ends a handoff (a `cleared` record, or the `none` record of an abandon) when `compactBeforeClear` was on and the compaction before the clear worked. It tells a `background_busy`, `clear_failed`, or `session_ended` record that left the session compacted from one that left it unchanged. A vetoed or failed compaction writes its own `none` record and leaves this off. A compaction in act mode outside a handoff writes a `compacted` record instead |
 | `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, from when it was scheduled until the clear, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). A count, never prompt text |
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
 | `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note when the note is not appended |

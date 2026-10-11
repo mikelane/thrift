@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, On } from 'claude-code'
+import type { ModelForkResult, On, SessionCompactResult } from 'claude-code'
 
 import { HANDOFF_PROMPT } from '../hooks/handoff-note'
 import {
@@ -199,7 +199,7 @@ test('It tells the person the session is unchanged when /clear throws', ACT, asy
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged.')
+  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged. Type /handoff to try again.')
   expect(world.effects).not.toContain('append')
   expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'clear_failed' } })
 })
@@ -446,3 +446,69 @@ test('It writes the deny reason to the debug log when the append is refused', AC
   await world.clock.settle()
   expect(world.debugLines).toContain('handoff: append denied: refused')
 })
+
+const compactedFirst = async ($: Engine, on: On, compaction: () => Promise<SessionCompactResult>) => {
+  const world = install($, on)
+  world.compact = compaction
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  return world
+}
+
+const compactionOutcomes: ReadonlyArray<readonly [string, () => Promise<SessionCompactResult>]> = [
+  ['is vetoed', async () => ({ skip: 'vetoed' })],
+  [
+    'fails',
+    async () => {
+      throw new Error('compaction failed')
+    },
+  ],
+]
+
+test('It records compacted_before_clear true on the cleared record after a successful compaction', ACT_COMPACTING, async ($, on) => {
+  const world = await compactedFirst($, on, async () => compacted(48_000))
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { compacted_before_clear: true } })
+})
+
+for (const [name, compaction] of compactionOutcomes) {
+  test(`It leaves compacted_before_clear off the cleared record when the compaction ${name}`, ACT_COMPACTING, async ($, on) => {
+    const world = await compactedFirst($, on, compaction)
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+    expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
+  })
+}
+
+test('It leaves compacted_before_clear off the cleared record when compactBeforeClear is off', ACT, async ($, on) => {
+  const world = await handedOff($, on)
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
+})
+
+test('It says the session was compacted, not cleared, when /clear throws after a successful compaction', ACT_COMPACTING, async ($, on) => {
+  const world = install($, on)
+  world.clearThrows = true
+  await startSession($)
+  await finishedTaskTurn($, world)
+  await world.clock.settle()
+  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session was compacted, not cleared. Type /handoff to try again.')
+  expect(world.effects).toContain('log:The handoff was written but /clear failed. This session was compacted, not cleared. Type /handoff to try again.')
+  expect(lastRecord(world)).toMatchObject({
+    action: 'none',
+    trigger_values: { reason: 'clear_failed', compacted_before_clear: true },
+  })
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
+})
+
+for (const [name, compaction] of compactionOutcomes) {
+  test(`It still says the session is unchanged when /clear throws after a compaction that ${name}`, ACT_COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.compact = compaction
+    world.clearThrows = true
+    await startSession($)
+    await finishedTaskTurn($, world)
+    await world.clock.settle()
+    expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged. Type /handoff to try again.')
+    expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
+  })
+}

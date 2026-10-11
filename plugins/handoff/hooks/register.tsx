@@ -24,25 +24,29 @@ import {
   statusText,
 } from './band-text'
 import {
-  decisionRecord,
   heldGroupFields,
   LOG_WRITER,
   logLocation,
-  type DecisionAction,
+  recordFromEvaluation,
+  snapshotTrigger,
+  type ClearedBy,
   type DecisionReason,
-  type HeldRecordFields,
-  type TriggerValues,
+  type Evaluation,
+  type HandoffRequest,
+  type SettledHandoff,
+  type Trigger,
 } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import {
+  FINAL_MESSAGES,
+  busyRefusalMessage,
+  clearFailedMessage,
+  sessionEndedMessage,
   HANDOFF_PROMPT,
-  handedOffMessage,
   handoffMessage,
   groupHeldPrompts,
   holdsPrompt,
   joinPrompts,
-  noteInBoxMessage,
-  noteNotCarriedMessage,
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
@@ -64,12 +68,15 @@ import {
   beginBeforeClear,
   beginOwnClear,
   beginNoteWindow,
+  claimPending,
   createState,
   preClearOutcome,
+  type PreClearOutcome,
   endHandoff,
   endMainTurn,
   isCarriedByHandoff,
   isHoldingForHandoff,
+  noteCacheReads,
   recordSessionEnd,
   releaseCarried,
   releaseCarriedGroup,
@@ -89,7 +96,6 @@ import {
   busyRefusalTrigger,
   contextFromStep,
   type Button,
-  type Signal,
 } from './signals'
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
@@ -101,10 +107,7 @@ const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
-const SESSION_ENDED = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
-const BUSY_REFUSAL =
-  'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
@@ -116,75 +119,19 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Her
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
-type Trigger = {
-  point: TriggerValues['point']
-  signal: Signal
-  isBusy: boolean
-  contextTokens: number
-  cacheReadTokens: number
-}
-
-type Evaluation = Trigger & {
-  action: DecisionAction
-  reason?: DecisionReason
-  note?: NoteDelivery
-  heldFields?: HeldRecordFields
-  sessionId?: string
-}
-
-type HandoffRequest = {
-  trigger: Trigger
-  heldPrompt?: string
-  isUnattended: boolean
-}
-
-// What a handoff delivers once its held prompts are taken: one group per origin, each following its own flag.
-type SettledHandoff = {
-  trigger: Trigger
-  isUnattended: boolean
-  heldGroups: HeldPromptGroup[]
-}
-
-const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
-  point,
-  signal,
-  isBusy,
-  contextTokens: state.contextTokens,
-  cacheReadTokens: state.cacheReadTokens,
-})
-
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, heldFields, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
-      sessionId ?? $.session.id(),
+      evaluation.sessionId ?? $.session.id(),
       $.env.get('THRIFT_HOME'),
       $.env.get('HOME'),
     ])
     const location = logLocation(thriftHome, home)
     if (location === null) return debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
-    const record = decisionRecord({
-      now,
-      sessionId: id,
-      action,
-      engineVersion: state.engineVersion,
-      effectiveMode: state.mode,
-      triggerValues: {
-        point,
-        signal,
-        context_tokens: contextTokens,
-        threshold: state.threshold,
-        is_background_busy: isBusy,
-        setting: state.setting,
-        cache_read_tokens: cacheReadTokens,
-        ...(reason ? { reason } : {}),
-        ...(note ? { note } : {}),
-        ...heldFields,
-      },
-    })
+    const record = recordFromEvaluation(state, evaluation, now, id)
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
       stdin: `${JSON.stringify(record)}\n`,
     })
@@ -244,14 +191,8 @@ const runCompaction = async ($: EngineInterface, state: SessionState, trigger: T
   }
 }
 
-const claim = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
-  if (state.pending !== null) return false
-  state.pending = kind
-  return true
-}
-
 const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger): boolean => {
-  if (!claim(state, 'compact')) return false
+  if (!claimPending(state, 'compact')) return false
   $.clock.after(0, () => {
     void logFailure($, runCompaction($, state, trigger))
   })
@@ -388,6 +329,7 @@ const abandonHandoff = async (
     ...settledHandoff.trigger,
     action: 'none',
     reason,
+    compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
@@ -407,16 +349,22 @@ const writeNote = async ($: EngineInterface): Promise<string | null> => {
   }
 }
 
-const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger, sessionId: string) => {
+// Whether the session was compacted: a vetoed or failed compaction leaves it as it was.
+const compactBeforeClearing = async (
+  $: EngineInterface,
+  state: SessionState,
+  trigger: Trigger,
+  sessionId: string,
+): Promise<boolean> => {
   try {
     const compaction = await $.session.compact()
-    if (compaction.skip !== undefined) {
-      await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
-    }
+    if (compaction.skip === undefined) return true
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
   } catch (error) {
     debug($, `compaction before the clear failed: ${String(error)}`)
     await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
   }
+  return false
 }
 
 const clearSession = async ($: EngineInterface): Promise<boolean> => {
@@ -449,13 +397,6 @@ const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: b
   if (!isUnattended && (await refillBox($, text))) return 'in_box'
   keepInTranscript($, text)
   return 'not_carried'
-}
-
-const FINAL_MESSAGES: Record<NoteDelivery, (oldId: string) => string> = {
-  appended: handedOffMessage,
-  submitted: handedOffMessage,
-  in_box: noteInBoxMessage,
-  not_carried: noteNotCarriedMessage,
 }
 
 const announce = ($: EngineInterface, message: string) => {
@@ -491,6 +432,7 @@ const continueInFreshSession = async (
   oldId: string,
   note: string,
   hasTurnAfterNote: boolean,
+  clearedBy: ClearedBy,
 ) => {
   await registerHandoffCommand($)
   const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
@@ -508,6 +450,8 @@ const continueInFreshSession = async (
     action: 'cleared',
     sessionId: oldId,
     note: noteDelivery,
+    clearedBy,
+    compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
@@ -521,6 +465,10 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   try {
     await redrawBand($, state, WRITING)
     $.ui.toast(WRITING_STATUS)
+    // SAFETY: a session end between scheduleHandoff and this read would make oldId the new session's id. That needs a
+    // /clear in the same clock.after(0) tick as /handoff, which a person typing cannot produce; SDK or bridge commands
+    // sent back to back could. No guard: the note would still be delivered, but the resume line and the cleared record's
+    // session_id would name the new session instead of the one the note came from.
     oldId = await $.session.id()
     beginNoteWindow(state)
     const note = await writeNote($)
@@ -543,6 +491,75 @@ const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
   $.ui.toast(WAITING_STATUS)
 }
 
+// Once a session end decided the outcome, no clear will run: the wait is for delivering the note or for stopping.
+const WAIT_STARTED_LINES = {
+  none: 'waiting for a running turn to end before the handoff goes on',
+  cleared_by_person: 'waiting for a running turn to end before delivering the note',
+  other: 'waiting for a running turn to end before stopping the handoff',
+} as const satisfies Record<'none' | NonNullable<SessionState['sessionEndBeforeClear']>, string>
+
+const waitStartedLine = (state: SessionState): string => WAIT_STARTED_LINES[state.sessionEndBeforeClear ?? 'none']
+
+// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
+const CLEARED_BY = {
+  clear: 'handoff',
+  deliver_to_person_clear: 'person',
+} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy'>, ClearedBy>
+
+type ClearWindow = {
+  outcome: PreClearOutcome
+  hasCompactedBeforeClear: boolean
+  isBusy: boolean
+  // Set only when the outcome is 'clear': the handoff's own /clear, already started.
+  clearing: Promise<boolean> | null
+}
+
+// Waits out running turns, compacts if asked, and checks for background work, then starts the clear.
+// SAFETY: on the clear path, no await sits between the last isTurnRunning read and the $.command.run inside
+// clearSession. Every awaited step before the clear (the waiting status, the compaction, the busy check) is followed by
+// another pass through the wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the
+// gap. That is why the clear starts here, in the same synchronous run as the last read, and the caller only awaits the
+// promise it gets back: returning the outcome first and clearing in the caller would put an await in the gap.
+// clearSession's first step is the synchronous command call. Do not add an await after the loop, or move the clear
+// behind a helper that awaits first. The person-cleared branch may await in the caller: no clear runs there.
+const waitForClearWindow = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  oldId: string,
+): Promise<ClearWindow> => {
+  const mustRefuseWhenBusy = request.trigger.point !== 'command'
+  let isCompacted = !state.compactBeforeClear
+  let isBusy = false
+  let hasShownWaiting = false
+  let hasCompactedBeforeClear = false
+  for (;;) {
+    while (state.isTurnRunning) {
+      if (!hasShownWaiting) {
+        hasShownWaiting = true
+        debug($, waitStartedLine(state))
+        await showWaitingStatus($, state)
+        continue
+      }
+      await waitForTurnEnd(state)
+      debug($, 'resumed after the wait for a running turn')
+    }
+    if (state.sessionEndBeforeClear !== null) break
+    if (!isCompacted) {
+      isCompacted = true
+      hasCompactedBeforeClear = await compactBeforeClearing($, state, request.trigger, oldId)
+      continue
+    }
+    if (!mustRefuseWhenBusy) break
+    isBusy = await isBackgroundBusy($, state)
+    if (!state.isTurnRunning) break
+  }
+  const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
+  if (outcome !== 'clear') return { outcome, hasCompactedBeforeClear, isBusy, clearing: null }
+  beginOwnClear(state)
+  return { outcome, hasCompactedBeforeClear, isBusy, clearing: clearSession($) }
+}
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -555,66 +572,39 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    // SAFETY: no await sits between the last isTurnRunning read and the $.command.run inside clearSession. Every awaited
-    // step before the clear (the waiting status, the compaction, the busy check) is followed by another pass through the
-    // wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's
-    // first step is the synchronous command call. Do not add an await after the loop, or move the clear behind a helper
-    // that awaits first.
-    const mustRefuseWhenBusy = request.trigger.point !== 'command'
-    let isCompacted = !state.compactBeforeClear
-    let isBusy = false
-    let hasShownWaiting = false
-    for (;;) {
-      while (state.isTurnRunning) {
-        if (!hasShownWaiting) {
-          hasShownWaiting = true
-          debug($, 'waiting for a running turn to end before the clear')
-          await showWaitingStatus($, state)
-          continue
-        }
-        await waitForTurnEnd(state)
-        debug($, 'resumed after the wait for a running turn')
-      }
-      if (state.sessionEndBeforeClear !== null) break
-      if (!isCompacted) {
-        isCompacted = true
-        await compactBeforeClearing($, state, request.trigger, prepared.oldId)
-        continue
-      }
-      if (!mustRefuseWhenBusy) break
-      isBusy = await isBackgroundBusy($, state)
-      if (!state.isTurnRunning) break
-    }
-    const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
+    const { outcome, hasCompactedBeforeClear, isBusy, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
+    const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED, prepared.oldId)
+      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, prepared.oldId), prepared.oldId)
     }
     if (outcome === 'abandon_busy') {
-      const busySettled = { ...settleHandoff(state, request), trigger: busyRefusalTrigger(request.trigger) }
-      return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL, prepared.oldId)
+      const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
+      return await abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), prepared.oldId)
     }
     const hasTurnAfterNote = state.hasTurnAfterNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
-    if (outcome === 'clear') {
-      beginOwnClear(state)
-      isCleared = await clearSession($)
+    if (clearing !== null) {
+      isCleared = await clearing
     } else {
       // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
+      // SAFETY: a resume that lands during this await gets the note in the resumed session, as one landing during
+      // registerHandoffCommand already does. Each window is one engine round trip wide. No guard.
       await takeDownBand($, state)
     }
-    const settledHandoff = settleHandoff(state, request)
+    const settledHandoff = settleAfterWait()
     if (!isCleared) {
       return await abandonHandoff(
         $,
         state,
         settledHandoff,
         'clear_failed',
-        'The handoff was written but /clear failed. This session is unchanged.',
+        clearFailedMessage(hasCompactedBeforeClear),
         prepared.oldId,
       )
     }
-    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote)
+    const clearedBy = CLEARED_BY[outcome]
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
   } finally {
     endHandoff(state)
     state.pending = null
@@ -627,7 +617,7 @@ const scheduleHandoff = (
   request: HandoffRequest,
   beforeRun?: () => Promise<void>,
 ): boolean => {
-  if (!claim(state, 'handoff')) return false
+  if (!claimPending(state, 'handoff')) return false
   state.heldPrompt = null
   beginBeforeClear(state)
   beginHandoffHold(
@@ -640,10 +630,6 @@ const scheduleHandoff = (
   return true
 }
 
-const noteCacheReads = (state: SessionState, e: TurnCompleteInput) => {
-  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
-}
-
 const evaluateTurnEnd = async (
   $: EngineInterface,
   state: SessionState,
@@ -651,7 +637,7 @@ const evaluateTurnEnd = async (
   hasFinishedTask: boolean,
 ) => {
   if (state.pending !== null) return
-  noteCacheReads(state, e)
+  noteCacheReads(state, e.usage?.cache_read_input_tokens)
   const isBusy = await isBackgroundBusy($, state)
   const { signal, outcome } = planTurnEnd({
     contextTokens: state.contextTokens,
@@ -662,7 +648,7 @@ const evaluateTurnEnd = async (
     isUnattended: state.isTurnUnattended,
     backoffFrom: state.backoffFrom,
   })
-  const trigger = snapshot(state, 'turn-end', signal, isBusy)
+  const trigger = snapshotTrigger(state, 'turn-end', signal, isBusy)
   if (outcome.kind === 'back-off') {
     await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
@@ -787,7 +773,7 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
     mode: state.mode,
     isUnattended,
   })
-  const trigger = snapshot(state, 'prompt', signal, isBusy)
+  const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {
     const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
@@ -834,7 +820,7 @@ const redrawIfStillShown = async ($: EngineInterface, state: SessionState, shown
 }
 
 const refuseToClear = async ($: EngineInterface, state: SessionState, offer: Offer, trigger: Trigger) => {
-  $.ui.toast(BUSY_REFUSAL)
+  $.ui.toast(busyRefusalMessage(false))
   await redrawIfStillShown($, state, offer, offerWithBusyState(offer, state.contextTokens, true))
   await writeRecord($, state, { ...busyRefusalTrigger(trigger), action: 'none', reason: 'background_busy' })
 }
@@ -846,7 +832,7 @@ const runPress = async ($: EngineInterface, state: SessionState, { offer, button
     debug($, `dropped a ${button} press: a ${state.pending} is already pending`)
     return $.ui.toast(ALREADY_PENDING)
   }
-  const trigger = snapshot(state, 'button', offer.signal, isBusy)
+  const trigger = snapshotTrigger(state, 'button', offer.signal, isBusy)
   if (isBusy && clearsSession(button)) return refuseToClear($, state, offer, trigger)
   if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
   if (button === 'not-now') state.backoffFrom = state.contextTokens
@@ -925,7 +911,7 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 }
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
-  const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
+  const trigger = snapshotTrigger(state, 'command', 'none', await isBackgroundBusy($, state))
   const heldPrompt = state.heldPrompt
   const emptyBox = heldPrompt === null ? undefined : () => emptyBoxIfHolding($, heldPrompt)
   const isClaimed = scheduleHandoff(
@@ -955,7 +941,7 @@ export const register: Register = (on, options) => {
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
       if (setting !== 'off') $.ui.toast(`Untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
-      await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
+      await writeRecord($, state, { ...snapshotTrigger(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
   }).catch(($, e, next) => next(e))
@@ -1007,7 +993,7 @@ export const register: Register = (on, options) => {
     state.deferredPress = null
     try {
       if (deferredPress !== null) {
-        noteCacheReads(state, e)
+        noteCacheReads(state, e.usage?.cache_read_input_tokens)
         await claimAndRunPress($, state, deferredPress)
       } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
       else await refreshBandBusyState($, state)
