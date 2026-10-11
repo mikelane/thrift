@@ -664,6 +664,34 @@ const waitForClearWindow = async (
   return { ...clearWindow, clearing: clearSession($) }
 }
 
+type AbandonCause = 'session_ended' | 'busy' | 'clear_failed'
+
+// Abandons a handoff after the wait: the session ended, background work was running, or the clear failed.
+// No clear starts here, so the no-await rule on waitForClearWindow does not apply.
+const abandonAfterWait = (
+  $: EngineInterface,
+  state: SessionState,
+  settledHandoff: SettledHandoff,
+  cause: AbandonCause,
+  hasCompactedBeforeClear: boolean,
+  oldId: string,
+): ReturnType<typeof abandonHandoff> => {
+  switch (cause) {
+    case 'session_ended':
+      return abandonHandoff($, state, settledHandoff, 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, oldId), oldId)
+    case 'busy': {
+      const busySettled = { ...settledHandoff, trigger: busyRefusalTrigger(settledHandoff.trigger) }
+      return abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), oldId)
+    }
+    case 'clear_failed':
+      return abandonHandoff($, state, settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
+    default: {
+      const unhandled: never = cause
+      return unhandled
+    }
+  }
+}
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -678,13 +706,8 @@ const runHandoff = async (
     if (prepared === null) return
     const { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
-    if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, prepared.oldId), prepared.oldId)
-    }
-    if (outcome === 'abandon_busy') {
-      const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
-      return await abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), prepared.oldId)
-    }
+    if (outcome === 'abandon_session_ended') return await abandonAfterWait($, state, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_busy') return await abandonAfterWait($, state, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {
@@ -697,14 +720,7 @@ const runHandoff = async (
     }
     const settledHandoff = settleAfterWait()
     if (!isCleared) {
-      return await abandonHandoff(
-        $,
-        state,
-        settledHandoff,
-        'clear_failed',
-        clearFailedMessage(hasCompactedBeforeClear),
-        prepared.oldId,
-      )
+      return await abandonAfterWait($, state, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
     const clearedBy = CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
@@ -1041,6 +1057,7 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
+// Long because every on(...) call lives here: the engine lets $ pass only to functions declared at the top of this file.
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   // SAFETY: a hot reload (a code change under --plugin-dir watch, or a setting changed in /config) runs register again, and
