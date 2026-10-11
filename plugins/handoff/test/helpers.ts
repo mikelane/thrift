@@ -34,7 +34,7 @@ const parseLogRecord = (line: string): LogRecord => {
   return parsed
 }
 
-export type Box = { text: string; cursor: number }
+type Box = { text: string; cursor: number }
 
 export type World = {
   clock: MockClock
@@ -102,52 +102,47 @@ const noUsage = { startedAt: 0, rateLimits: [] }
 
 type Environment = { home?: string | null; thriftHome?: string; hasClock?: boolean }
 
-export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
-  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
-  mock.env(on, {
-    ...(home === null ? {} : { HOME: home }),
-    ...(thriftHome === undefined ? {} : { THRIFT_HOME: thriftHome }),
-  })
-  const world: World = {
-    clock,
-    effects: [],
-    records: [],
-    logTargets: [],
-    debugLines: [],
-    sessionId: 'old-session',
-    nextSessionId: 'new-session',
-    contextTokens: undefined,
-    version: { version: '2.1.295', base: '2.1.295' },
-    versionThrows: false,
-    branch: null,
-    gitCalls: 0,
-    agents: [],
-    agentListThrows: false,
-    onAgentList: undefined,
-    box: { text: '', cursor: 0 },
-    fillRefusal: undefined,
-    fork: async () => answered('The handoff note.'),
-    compact: async () => compacted(48_000),
-    clearThrows: false,
-    appendDenied: false,
-    forkPrompts: [],
-    registerThrows: false,
-    logWrite: 'ok',
-    stateSetThrows: false,
-    usageDenied: false,
-    boxReadDenied: false,
-    sessionIdDenials: 0,
-    submitThrows: false,
-    submitDropped: false,
-    submitHooks: [],
-    gitThrows: false,
-    gitFailure: false,
-    step: { usage: null, advisorCalls: 0 },
-    toolResult: {},
-    toolMode: 'ok',
-    appended: [],
-  }
+const defaultWorld = (clock: MockClock): World => ({
+  clock,
+  effects: [],
+  records: [],
+  logTargets: [],
+  debugLines: [],
+  sessionId: 'old-session',
+  nextSessionId: 'new-session',
+  contextTokens: undefined,
+  version: { version: '2.1.295', base: '2.1.295' },
+  versionThrows: false,
+  branch: null,
+  gitCalls: 0,
+  agents: [],
+  agentListThrows: false,
+  onAgentList: undefined,
+  box: { text: '', cursor: 0 },
+  fillRefusal: undefined,
+  fork: async () => answered('The handoff note.'),
+  compact: async () => compacted(48_000),
+  clearThrows: false,
+  appendDenied: false,
+  forkPrompts: [],
+  registerThrows: false,
+  logWrite: 'ok',
+  stateSetThrows: false,
+  usageDenied: false,
+  boxReadDenied: false,
+  sessionIdDenials: 0,
+  submitThrows: false,
+  submitDropped: false,
+  submitHooks: [],
+  gitThrows: false,
+  gitFailure: false,
+  step: { usage: null, advisorCalls: 0 },
+  toolResult: {},
+  toolMode: 'ok',
+  appended: [],
+})
 
+const installSessionMocks = (on: On, world: World) => {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => {
@@ -173,6 +168,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     world.appended.push(first?.type === 'text' ? String(first.text) : '')
     return next(e)
   })
+}
+
+const installModelMocks = (on: On, world: World) => {
   on('model.fork', async (_$, e) => {
     world.effects.push('fork')
     world.forkPrompts.push(e.prompt)
@@ -183,6 +181,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     if (world.agentListThrows) throw new Error('agent list failed')
     return ok(world.agents)
   })
+}
+
+const installPromptMocks = (on: On, world: World) => {
   on('prompt.read', () => (world.boxReadDenied ? { deny: 'no box' } : ok(world.box)))
   on('prompt.fill', (_$, e) => {
     if (world.fillRefusal !== undefined) return { isFilled: false, refusal: world.fillRefusal }
@@ -197,6 +198,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     world.effects.push(`entered:${e.origin.kind}:${e.text}`)
     return { text: e.text }
   })
+}
+
+const installCommandMocks = ($: Engine, on: On, world: World) => {
   on('command.register', (_$, e) => {
     if (world.registerThrows) throw new Error('register refused')
     world.effects.push(`register:${e.name}`)
@@ -211,6 +215,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     await $.session.end({ reason: 'clear', sessionId: ended, resume: { id: ended } })
     return {}
   })
+}
+
+const installUiMocks = (on: On, world: World) => {
   on('ui.toast', (_$, e) => {
     world.effects.push(`toast:${e.text}`)
     return ok(undefined)
@@ -220,6 +227,10 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     if (e.to === 'debug') world.debugLines.push(e.text)
     return ok(undefined)
   })
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }))
+}
+
+const installProcessMocks = (on: On, world: World) => {
   on('process.run', (_$, e) => {
     const [program, ...args] = e.argv
     const finished = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -232,6 +243,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     world.records.push(parseLogRecord(e.init?.stdin ?? '{}'))
     return ok(finished)
   })
+}
+
+const installTurnMocks = (on: On, world: World) => {
   on('turn.step', async function* (_$, e) {
     return {
       turnId: e.turnId,
@@ -249,18 +263,41 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
       usage: world.step.usage,
     }
   })
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+}
+
+const installStateMocks = (on: On, world: World) => {
   on('state.set', (_$, e, next) => {
     if (world.stateSetThrows) return { deny: 'cannot write' }
     return next(e)
   })
-  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine band'] }))
-  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
-  on('turn.complete', (_$, e) => ({ text: e.answer }))
+}
+
+const installToolMocks = (on: On, world: World) => {
   on('tool.call', (_$, e) => {
     if (world.toolMode === 'deny') return { deny: 'blocked' }
     if (world.toolMode === 'error') return { isError: true as const, result: 'failed', text: 'failed' }
     return { result: world.toolResult, text: `ran ${e.tool}` }
   })
+}
+
+export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
+  mock.env(on, {
+    ...(home === null ? {} : { HOME: home }),
+    ...(thriftHome === undefined ? {} : { THRIFT_HOME: thriftHome }),
+  })
+  const world = defaultWorld(clock)
+  installSessionMocks(on, world)
+  installModelMocks(on, world)
+  installPromptMocks(on, world)
+  installCommandMocks($, on, world)
+  installUiMocks(on, world)
+  installProcessMocks(on, world)
+  installTurnMocks(on, world)
+  installStateMocks(on, world)
+  installToolMocks(on, world)
   return world
 }
 

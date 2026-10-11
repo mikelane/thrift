@@ -25,6 +25,7 @@ import {
   offerWithBusyState,
   statusText,
 } from './band-text'
+import { finishesTask } from './command-parse'
 import {
   decisionRecord,
   heldGroupFields,
@@ -79,19 +80,14 @@ import {
   asThreshold,
   bandButtons,
   busyRefusalTrigger,
-  branchTicketPrefix,
   classify,
   contextFromStep,
-  finishesTask,
-  hasTicketShapedToken,
-  namesNewWork,
   respond,
-  ticketUrlPrefixes,
-  workRefs,
   type Button,
   type Signal,
 } from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
+import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
 const BACKOFF_TOKENS = 50_000
 const BRANCH_READ_TIMEOUT_MS = 5000
