@@ -595,6 +595,8 @@ type ClearWindow = {
   outcome: PreClearOutcome
   hasCompactedBeforeClear: boolean
   isBusy: boolean
+  // Read in the same synchronous run that starts the clear, so a turn that the clear lets in cannot change it.
+  hasTurnAfterNote: boolean
   // Set only when the outcome is 'clear': the handoff's own /clear, already started.
   clearing: Promise<boolean> | null
 }
@@ -640,9 +642,10 @@ const waitForClearWindow = async (
     if (!state.isTurnRunning) break
   }
   const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
-  if (outcome !== 'clear') return { outcome, hasCompactedBeforeClear, isBusy, clearing: null }
+  const window = { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote: state.hasTurnAfterNote }
+  if (outcome !== 'clear') return { ...window, clearing: null }
   beginOwnClear(state)
-  return { outcome, hasCompactedBeforeClear, isBusy, clearing: clearSession($) }
+  return { ...window, clearing: clearSession($) }
 }
 
 const runHandoff = async (
@@ -657,7 +660,7 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    const { outcome, hasCompactedBeforeClear, isBusy, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
+    const { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') {
       return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, prepared.oldId), prepared.oldId)
@@ -666,7 +669,6 @@ const runHandoff = async (
       const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
       return await abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), prepared.oldId)
     }
-    const hasTurnAfterNote = state.hasTurnAfterNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {
