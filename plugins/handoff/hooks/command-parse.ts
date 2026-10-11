@@ -36,58 +36,60 @@ const skipHeredocBody = (command: string, start: number, heredoc: Heredoc): numb
   return Math.min(index, command.length)
 }
 
+const skipHeredocBodies = (command: string, start: number, heredocs: readonly Heredoc[]): number =>
+  heredocs.reduce((index, heredoc) => skipHeredocBody(command, index, heredoc), start)
+
+const isWordStart = (command: string, index: number): boolean =>
+  index === 0 || /\s/.test(command.charAt(index - 1)) || SEPARATORS.has(command.charAt(index - 1))
+
+export type QuotingStep = { text: string; index: number; quote: string | null }
+
+// Handles the characters whose meaning depends on quoting: text inside quotes, backslash escapes, and an opening quote. Returns
+// null when the character at `index` is outside all three, so the caller treats it as shell syntax.
+export const scanQuoting = (command: string, index: number, quote: string | null): QuotingStep | null => {
+  const char = command.charAt(index)
+  const next = command[index + 1]
+  if (quote === "'" || (quote === '"' && char !== '\\')) {
+    return { text: char, index: index + 1, quote: char === quote ? null : quote }
+  }
+  if (char === '\\' && next === '\n') return { text: '', index: index + 2, quote }
+  if (char === '\\' && next !== undefined) return { text: char + next, index: index + 2, quote }
+  if (quote) return { text: char, index: index + 1, quote }
+  if (char === "'" || char === '"') return { text: char, index: index + 1, quote: char }
+  return null
+}
+
 export const commandSegments = (command: string): string[] => {
   const segments: string[] = []
   const pending: Heredoc[] = []
   let current = ''
   let quote: string | null = null
   let index = 0
-
   const endSegment = () => {
     if (current.trim() !== '') segments.push(current.trim())
     current = ''
   }
-  const isWordStart = () => index === 0 || /\s/.test(command.charAt(index - 1)) || SEPARATORS.has(command.charAt(index - 1))
-
   while (index < command.length) {
     const char = command.charAt(index)
-    const next = command[index + 1]
-
-    if (quote === "'" || (quote === '"' && char !== '\\')) {
-      current += char
-      if (char === quote) quote = null
-      index += 1
-    } else if (char === '\\' && next === '\n') {
-      index += 2
-    } else if (char === '\\' && next !== undefined) {
-      current += char + next
-      index += 2
-    } else if (quote) {
-      current += char
-      index += 1
-    } else if (char === "'" || char === '"') {
-      quote = char
-      current += char
-      index += 1
-    } else if (char === '#' && isWordStart()) {
+    const quoting = scanQuoting(command, index, quote)
+    if (quoting) {
+      current += quoting.text
+      index = quoting.index
+      quote = quoting.quote
+    } else if (char === '#' && isWordStart(command, index)) {
       while (index < command.length && command[index] !== '\n') index += 1
     } else if (char === '\n') {
       endSegment()
-      index += 1
-      for (const heredoc of pending.splice(0)) index = skipHeredocBody(command, index, heredoc)
+      index = skipHeredocBodies(command, index + 1, pending.splice(0))
     } else if (SEPARATORS.has(char)) {
       endSegment()
       index += 1
     } else if (command.startsWith('<<', index)) {
       const opened = readHeredoc(command, index)
-      if (opened) {
-        pending.push(opened.heredoc)
-        current += command.slice(index, opened.end)
-        index = opened.end
-      } else {
-        current += '<<'
-        index += 2
-      }
+      const end = opened ? opened.end : index + 2
+      if (opened) pending.push(opened.heredoc)
+      current += command.slice(index, end)
+      index = end
     } else {
       current += char
       index += 1

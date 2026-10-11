@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commandSegments, finishesTask } from '../hooks/command-parse'
+import { commandSegments, finishesTask, scanQuoting } from '../hooks/command-parse'
 
 const segmentCases = [
   ['git status', ['git status']],
@@ -133,5 +133,29 @@ const finishesTaskCases = [
 for (const [command, expected] of finishesTaskCases) {
   test(`It returns ${expected} from finishesTask for ${JSON.stringify(command)}`, () => {
     expect(finishesTask(command)).toBe(expected)
+  })
+}
+
+const quotingCases = [
+  ['a', 0, null, null],
+  ['a;b', 1, null, null],
+  ["'x", 0, null, { text: "'", index: 1, quote: "'" }],
+  ['"x', 0, null, { text: '"', index: 1, quote: '"' }],
+  ["x'", 1, "'", { text: "'", index: 2, quote: null }],
+  ['x"', 1, '"', { text: '"', index: 2, quote: null }],
+  ['a;b', 1, "'", { text: ';', index: 2, quote: "'" }],
+  ['a;b', 1, '"', { text: ';', index: 2, quote: '"' }],
+  ["\\'", 0, "'", { text: '\\', index: 1, quote: "'" }],
+  ['\\"', 0, '"', { text: '\\"', index: 2, quote: '"' }],
+  ['\\;', 0, null, { text: '\\;', index: 2, quote: null }],
+  ['\\\n', 0, null, { text: '', index: 2, quote: null }],
+  ['\\\n', 0, '"', { text: '', index: 2, quote: '"' }],
+  ['\\', 0, null, null],
+  ['\\', 0, '"', { text: '\\', index: 1, quote: '"' }],
+] as const
+
+for (const [command, index, quote, expected] of quotingCases) {
+  test(`It returns ${JSON.stringify(expected)} from scanQuoting for ${JSON.stringify(command)} at ${index} in ${JSON.stringify(quote)}`, () => {
+    expect(scanQuoting(command, index, quote)).toEqual(expected)
   })
 }
