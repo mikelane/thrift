@@ -664,6 +664,26 @@ const waitForClearWindow = async (
   return { ...clearWindow, clearing: clearSession($) }
 }
 
+type AbandonCause = 'session_ended' | 'busy' | 'clear_failed'
+
+const abandonAfterWait = (
+  $: EngineInterface,
+  state: SessionState,
+  settledHandoff: SettledHandoff,
+  cause: AbandonCause,
+  hasCompactedBeforeClear: boolean,
+  oldId: string,
+) => {
+  if (cause === 'session_ended') {
+    return abandonHandoff($, state, settledHandoff, 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, oldId), oldId)
+  }
+  if (cause === 'busy') {
+    const busySettled = { ...settledHandoff, trigger: busyRefusalTrigger(settledHandoff.trigger) }
+    return abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), oldId)
+  }
+  return abandonHandoff($, state, settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
+}
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -678,13 +698,8 @@ const runHandoff = async (
     if (prepared === null) return
     const { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
-    if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, prepared.oldId), prepared.oldId)
-    }
-    if (outcome === 'abandon_busy') {
-      const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
-      return await abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), prepared.oldId)
-    }
+    if (outcome === 'abandon_session_ended') return await abandonAfterWait($, state, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_busy') return await abandonAfterWait($, state, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {
@@ -697,14 +712,7 @@ const runHandoff = async (
     }
     const settledHandoff = settleAfterWait()
     if (!isCleared) {
-      return await abandonHandoff(
-        $,
-        state,
-        settledHandoff,
-        'clear_failed',
-        clearFailedMessage(hasCompactedBeforeClear),
-        prepared.oldId,
-      )
+      return await abandonAfterWait($, state, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
     const clearedBy = CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
