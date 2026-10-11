@@ -101,9 +101,10 @@ export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['poin
   effectiveMode: state.mode,
 })
 
-// umask only applies when the file is created, so a log that already exists is made owner-only by the chmod. `--` ends the
-// options, so a directory name can never be read as one.
-export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 -- "$2"', 'sh'] as const
+// umask only applies when the file is created, so a log that already exists is made owner-only by the chmod. `mkdir -p --`
+// works on BSD and GNU alike. chmod takes no `--`: BSD chmod (macOS) reads it as a file operand, sets the mode, then fails on it
+// and exits 1, while GNU chmod accepts it. The file is always absolute (see isUsableThriftHome), so it cannot read as an option.
+export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh'] as const
 
 // A person asked for these, so the plugin acted on their request whatever mode it ran in.
 const isPersonAction = (point: TriggerValues['point']): boolean => point === 'command' || point === 'button'
@@ -159,5 +160,7 @@ export const logLocation = (
   home: string | undefined,
 ): { dir: string; file: string } | null => {
   const dir = isUsableThriftHome(thriftHome) ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
+  // THRIFT_HOME=/ strips to nothing: the log then goes in the root directory itself, as asked.
+  if (dir === '') return { dir: '/', file: '/decisions.jsonl' }
   return dir === null ? null : { dir, file: `${dir}/decisions.jsonl` }
 }

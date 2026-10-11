@@ -64,7 +64,7 @@ plugins/<name>/
   - `engine_version`: the Claude Code release (`$.session.version()`'s `base`), or its `version`
     when `base` is missing. A change in behavior then shows up as a split between versions.
   - `trigger_values`: scalars only. Never prompt text, file contents, or paths the person typed.
-- Append with `sh -c 'umask 077 && mkdir -p -- "$dir" && cat >> "$file" && chmod 600 -- "$file"'`
+- Append with `sh -c 'umask 077 && mkdir -p -- "$dir" && cat >> "$file" && chmod 600 "$file"'`
   through `$.process.run`, so the file is owner-only: `umask` applies only when the file is
   created, so the `chmod` covers a file that already exists. A failed write goes to the debug log and the turn continues.
   Nothing from the log is ever written into context.

@@ -146,9 +146,12 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
       $.env.get('THRIFT_HOME'),
       $.env.get('HOME'),
     ])
-    if (thriftHome && !isUsableThriftHome(thriftHome)) debug($, 'THRIFT_HOME is not an absolute path, so the default log location is used')
     const location = logLocation(thriftHome, home)
-    if (location === null) return debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
+    const isThriftHomeIgnored = Boolean(thriftHome) && !isUsableThriftHome(thriftHome)
+    if (isThriftHomeIgnored) {
+      debug($, `THRIFT_HOME is not an absolute path, so ${location === null ? 'HOME is needed for a log location, and it is not set' : 'the default log location is used'}`)
+    }
+    if (location === null) return isThriftHomeIgnored ? undefined : debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
     const record = recordFromEvaluation(state, evaluation, now, id)
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
       stdin: `${JSON.stringify(record)}\n`,
@@ -807,23 +810,26 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
 
 // -- Prompts held while a handoff is pending. Kept together so the whole rule can move out of this file as one piece.
 
-const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
-  if (!(await refillBox($, text))) keepInTranscript($, typedHere(text))
+const returnToBox = async ($: EngineInterface, text: string, placement: BoxPlacement): Promise<void> => {
+  if (!(await refillBox($, text, placement))) keepInTranscript($, typedHere(text))
 }
 
 // An attachment or context can't be resent, so the prompt is handed back instead. A person at this terminal gets it in the
 // box to send again. For any other sender the box is not where they are, and filling it could displace the draft of the
 // person who is: the engine has no channel back to the sender beyond the drop reason, so the text goes in the transcript.
-const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput): Promise<void> => {
-  if (isComposerOrigin(e.origin.kind)) return returnToBox($, e.text)
+const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput, placement: BoxPlacement): Promise<void> => {
+  if (isComposerOrigin(e.origin.kind)) return returnToBox($, e.text, placement)
   $.ui.log(keptRefusedPrompt(e.origin.kind, e.text))
 }
 
-const refuseDuringHandoff = ($: EngineInterface, e: PromptSubmitInput): { drop: string } => {
+// A prompt refused while the held ones are being put back comes after them in the box, as a held late arrival does. The phase
+// is read now: by the time the clock fires, the delivery may be over.
+const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
+  const placement: BoxPlacement = state.handoffHold.phase === 'sending' ? 'after_draft' : 'before_draft'
   debug($, 'refused a prompt with attachments or context during the handoff')
   $.ui.toast(REFUSED_TOAST)
   $.clock.after(0, () => {
-    void logFailure($, handBackRefused($, e))
+    void logFailure($, handBackRefused($, e, placement))
   })
   return { drop: REFUSED_DURING_HANDOFF }
 }
@@ -852,7 +858,7 @@ const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
     debug($, 'dropped a repeat of the prompt the handoff carries')
     return { drop: REPEAT_NOT_ADDED }
   }
-  if (action === 'refuse') return refuseDuringHandoff($, e)
+  if (action === 'refuse') return refuseDuringHandoff($, state, e)
   if (action === 'hold') return holdForHandoff($, state, e)
   return undefined
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts } from '../hooks/handoff-note'
-import { bash, completeTurn, dropOf, growTo200k, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
+import { bash, runCommand, completeTurn, dropOf, growTo200k, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 
@@ -176,5 +176,75 @@ describe('the transcript wording for a scheduled turn handoff note that could no
     await completeTurn($)
     await world.clock.settle()
     expect(world.effects.filter(effect => effect.startsWith('log:The handoff note could not be sent or put in the prompt box'))).toEqual([])
+  })
+})
+
+const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
+
+type TogetherArrival = Arrival & { attachments?: typeof IMAGE }
+
+// Every arrival lands during the first submit of the restore, in the order given.
+const arriveTogether = ($: Parameters<typeof submitPerson>[0], world: World, arrivals: TogetherArrival[]) => {
+  world.submitHooks = [
+    () => {
+      for (const { text, kind = 'composer', attachments } of arrivals) void submitPerson($, text, { kind, ...(attachments ? { attachments } : {}) })
+    },
+  ]
+}
+
+const LATE = [{ text: 'late typed' }, { text: 'late bridge', kind: 'bridge' }] as const satisfies TogetherArrival[]
+const RESTORED_IN_ORDER = [['entered:plugin:nightly job', 'entered:plugin:late bridge'], 'held one\nlate typed']
+
+describe('restore order on every abandon reason', () => {
+  test('It restores held and late prompts in order when the clear fails', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    world.clearThrows = true
+    arriveTogether($, world, [...LATE])
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
+  })
+
+  test('It restores held and late prompts in order when the session ends before the clear', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    arriveTogether($, world, [...LATE])
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
+  })
+
+  test('It restores held and late prompts in order when the handoff fails before the note', async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    world.sessionIdDenials = 1
+    await runCommand($, 'handoff')
+    await submitPerson($, 'held one')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    arriveTogether($, world, [...LATE])
+    await world.clock.settle()
+    expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
+  })
+})
+
+describe('a refused late arrival during a restore', () => {
+  test('It puts a refused person prompt that arrived mid-restore in the box after the held person prompt', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await submitPerson($, 'held one')
+    arriveTogether($, world, [{ text: 'late with image', attachments: IMAGE }])
+    await failNote()
+    expect(world.box.text).toBe('held one\nlate with image')
+  })
+
+  test('It puts a refused person prompt in front of the draft when no handoff is running', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await finishNote()
+    world.box = { text: 'draft', cursor: 5 }
+    await submitPerson($, 'with image', { attachments: IMAGE })
+    await world.clock.settle()
+    expect(world.box.text).toBe('draft')
   })
 })

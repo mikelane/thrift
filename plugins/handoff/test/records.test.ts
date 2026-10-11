@@ -117,6 +117,8 @@ const locationCases = [
   ['~/thrift', '/home/u', { dir: '/home/u/.claude/thrift', file: '/home/u/.claude/thrift/decisions.jsonl' }],
   ['./thrift', '/home/u', { dir: '/home/u/.claude/thrift', file: '/home/u/.claude/thrift/decisions.jsonl' }],
   ['relative/dir', undefined, null],
+  ['/', '/home/u', { dir: '/', file: '/decisions.jsonl' }],
+  ['//', undefined, { dir: '/', file: '/decisions.jsonl' }],
 ] as const
 
 for (const [thriftHome, home, expected] of locationCases) {
@@ -130,7 +132,7 @@ test('It creates the log owner-only in LOG_WRITER', () => {
 })
 
 test('It runs exactly the append convention plus the end-of-options guard and the owner-only mode in LOG_WRITER', () => {
-  expect(LOG_WRITER).toEqual(['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 -- "$2"', 'sh'])
+  expect(LOG_WRITER).toEqual(['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh'])
 })
 
 const handoffParts = ['task', 'goal', 'done', 'decisions', 'open threads', 'next', 'rediscover'] as const
