@@ -66,9 +66,11 @@ for (const [setting, effectiveMode] of effectiveModeCases) {
 }
 
 test('It rejects a reason outside DecisionReason at compile time', () => {
+  // The control line compiles, so the expected error below can only be the rejected literal.
+  const known: NonNullable<TriggerValues['reason']> = 'backoff'
   // @ts-expect-error 'bogus' is not a DecisionReason
-  const bogus: TriggerValues = { ...triggerValues, reason: 'bogus' }
-  expect(bogus.reason).toBe('bogus')
+  const bogus: NonNullable<TriggerValues['reason']> = 'bogus'
+  expect([known, bogus]).toEqual(['backoff', 'bogus'])
 })
 
 // Must match the sample record in plugins/handoff/README.md.
