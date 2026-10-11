@@ -833,3 +833,139 @@ test('It keeps a person prompt held while the waiting status is up', async ($, o
   await world.clock.settle()
   expect(world.effects).toContain('entered:plugin:next thing')
 })
+
+const WAITING_TOAST = `toast:${WAITING}`
+const SECOND_LATE_TURN_MESSAGE = `${SECOND_MESSAGE}\n\n${turnAfterNoteLine('new-session')}`
+
+const bandText = async ($: Engine) => shownText(await mountBand($))
+
+// Handoff 1 ends by the person's clear, so sessionEndBeforeClear is left at 'cleared_by_person' until the next handoff.
+const firstHandoffEndsByPersonClear = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  return world
+}
+
+test('It adds the turn-after-note line on a second handoff after the first ended by the person clearing', async ($, on) => {
+  const world = await firstHandoffEndsByPersonClear($, on)
+  expect(world.appended).toEqual([BASE_MESSAGE])
+  const fork = holdFork(world)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  fork.release(answered('Second note.'))
+  await world.clock.settle()
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toEqual([BASE_MESSAGE, SECOND_LATE_TURN_MESSAGE])
+})
+
+test('It adds the turn-after-note line on a second handoff when a turn starts before the second handoff is scheduled', async ($, on) => {
+  const world = await firstHandoffEndsByPersonClear($, on)
+  const fork = holdFork(world)
+  await startTurn($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  fork.release(answered('Second note.'))
+  await world.clock.settle()
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toEqual([BASE_MESSAGE, SECOND_LATE_TURN_MESSAGE])
+})
+
+test('It keeps the line for an old-session turn that started during the note and ended before the person cleared', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  await completeTurn($)
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+})
+
+test('It keeps the line for an old-session turn when a fresh-session turn also runs after the person clears', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  await completeTurn($)
+  await world.clock.settle()
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  await notify($, 'bg1')
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+})
+
+test('It keeps the line and takes the band down when the person clears while the waiting status is up', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  expect(await bandText($)).toEqual([WAITING])
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+  expect(await bandText($)).toEqual(['engine band'])
+})
+
+test('It takes the band down when the person clears before the note starts and the note is delivered', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await runCommand($, 'clear')
+  await world.clock.settle()
+  expect(world.appended).toHaveLength(1)
+  expect(await bandText($)).toEqual(['engine band'])
+})
+
+test('It shows no waiting toast when the person cleared and a fresh-session turn runs', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).not.toContain(WAITING_TOAST)
+  expect(world.appended).toEqual([BASE_MESSAGE])
+})
+
+test('It sends a person prompt held during the silent wait in the cleared-to session after the note', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  await submitPerson($, 'next thing')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.appended).toEqual([BASE_MESSAGE])
+  expect(world.effects).toContain('entered:plugin:next thing')
+})
+
+test('It shows the waiting status again on a second handoff after the first ended by the person clearing', async ($, on) => {
+  const world = await firstHandoffEndsByPersonClear($, on)
+  const fork = holdFork(world)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await startTurn($)
+  fork.release(answered('Second note.'))
+  await world.clock.settle()
+  expect(await bandText($)).toEqual([WAITING])
+})
