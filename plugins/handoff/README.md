@@ -443,7 +443,7 @@ prompts are delivered, and it is not guarded. After a reload, run `/handoff` aga
 | `hooks/turn-end-plan.ts` | What a turn's end calls for: the signal and the plan from `planTurnEnd` (advise, compact, hand off, back off, or nothing), and the back-off window (`isBackedOff`) |
 | `hooks/prompt-plan.ts` | What a submitted prompt calls for: prompt origins (`isPersonOrigin`, `isComposerOrigin`, `isUnattendedOrigin`), the sender named in a message (`senderLabel`), attachments or context (`carriesExtras`), what to do with one that arrives during a handoff (`planPromptDuringHandoff`), whether one can be held (`canHoldPrompt`), and the plan for new work (`planNewWorkPrompt`) |
 | `hooks/tool-call-tracking.ts` | What a tool call tells the state: background tasks that start or stop, and a finished task (`noteToolCall`) |
-| `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), and `finishesTask` |
+| `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), its quote scan (`scanQuoting`), and `finishesTask` |
 | `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefixes`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
