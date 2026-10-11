@@ -308,6 +308,8 @@ the log, and nothing from it is written into the session.
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
+| `trigger_values.held_groups` | Present only on a `cleared` or `none` record written by a handoff: how many groups of prompts held while the note was written (`0`, `1`, or `2`: one for person prompts, one for scheduled ones). A count, never prompt text |
+| `trigger_values.held_unattended` | Present with `held_groups`, on the same records only: `true` when a scheduled (unattended) group was held, `false` otherwise |
 
 A prompt is evaluated, and so logged, only when it names new work.
 

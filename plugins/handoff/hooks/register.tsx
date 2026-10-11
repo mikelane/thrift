@@ -25,7 +25,15 @@ import {
   offerWithBusyState,
   statusText,
 } from './band-text'
-import { decisionRecord, LOG_WRITER, logLocation, type DecisionAction, type TriggerValues } from './decision-record'
+import {
+  decisionRecord,
+  heldGroupFields,
+  LOG_WRITER,
+  logLocation,
+  type DecisionAction,
+  type HeldGroupFields,
+  type TriggerValues,
+} from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import {
   HANDOFF_PROMPT,
@@ -118,6 +126,7 @@ type Evaluation = Trigger & {
   action: DecisionAction
   reason?: string
   note?: NoteDelivery
+  held?: HeldGroupFields
   sessionId?: string
 }
 
@@ -145,7 +154,7 @@ const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, sessionId } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, held, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
@@ -171,6 +180,7 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
         cache_read_tokens: cacheReadTokens,
         ...(reason ? { reason } : {}),
         ...(note ? { note } : {}),
+        ...held,
       },
     })
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
@@ -364,7 +374,7 @@ const abandonHandoff = async (
 ) => {
   await takeDownBand($, state)
   announce($, message)
-  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason, sessionId })
+  await writeRecord($, state, { ...settledHandoff.trigger, action: 'none', reason, held: heldGroupFields(settledHandoff.heldGroups), sessionId })
   for (const { text, isUnattended } of settledHandoff.heldGroups) {
     await restorePrompt($, text, isUnattended)
     releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
@@ -459,7 +469,13 @@ const continueInFreshSession = async (
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
-  await writeRecord($, state, { ...settledHandoff.trigger, action: 'cleared', sessionId: oldId, note: noteDelivery })
+  await writeRecord($, state, {
+    ...settledHandoff.trigger,
+    action: 'cleared',
+    sessionId: oldId,
+    note: noteDelivery,
+    held: heldGroupFields(settledHandoff.heldGroups),
+  })
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
   for (const group of groupsToSend) {

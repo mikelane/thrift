@@ -1,4 +1,5 @@
 import type { NoteDelivery } from './handoff-note'
+import type { HeldPromptGroup } from './session-state'
 import type { Mode, Signal } from './signals'
 
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
@@ -13,7 +14,16 @@ export type TriggerValues = {
   cache_read_tokens: number
   reason?: string
   note?: NoteDelivery
+  held_groups?: number
+  held_unattended?: boolean
 }
+
+export type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
+
+export const heldGroupFields = (groups: readonly HeldPromptGroup[]): HeldGroupFields => ({
+  held_groups: groups.length,
+  held_unattended: groups.some(group => group.isUnattended),
+})
 
 type RecordInput = {
   now: number
