@@ -958,6 +958,28 @@ test_dot_name_is_rejected_instead_of_checking_the_plugins_directory() {
   assert_file_lacks "$STUB_LOG" 'plugin validate plugins/.'
 }
 
+test_all_pass_log_still_opens_an_issue_as_the_ci_yml_comment_promises() {
+  add_log handoff '(pass) every line passed'
+  run_report false
+  assert_rc 0
+  assert_gh_calls 'issue create --title Claude Code 2.1.300 breaks handoff' 1
+}
+test_empty_log_still_opens_an_issue() {
+  : > "$FAILURES/handoff.txt"
+  run_report false
+  assert_rc 0
+  assert_gh_calls 'issue create --title Claude Code 2.1.300 breaks handoff' 1
+}
+test_plugin_is_found_among_a_listing_larger_than_a_pipe_buffer() {
+  local i
+  for i in $(seq 1 20000); do echo "zz-plugin-$i"; done > "$GH_PLUGINS"
+  echo handoff >> "$GH_PLUGINS"
+  add_log handoff
+  run_report false
+  assert_rc 0
+  assert_gh_calls 'issue create' 1
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue

@@ -172,6 +172,10 @@ jobs:
           # length or more is withheld from the body, so the fence cannot push the body past the
           # limit.
           MAX_FENCE: 64
+        # Without a shell key Actions runs `bash -e`. This pins `bash -eo pipefail` so the script runs
+        # under the same options in the harness, which is stricter, and so no pipeline below depends on
+        # an unstated default.
+        shell: bash
         run: |
           problems=0
           failures="$RUNNER_TEMP/failures"
@@ -230,7 +234,7 @@ jobs:
             if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]] \
               || [ "$log" != "$failures/${plugin}.txt" ] \
               || [ -L "$log" ] || [ ! -f "$log" ] \
-              || ! printf '%s\n' "$plugins" | grep -qxF -- "$plugin"; then
+              || ! grep -qxF -- "$plugin" <<< "$plugins"; then
               printf 'Skipping an untrusted log: %q\n' "$plugin"
               problems=1
               continue
@@ -258,9 +262,10 @@ jobs:
               continue
             fi
             # Passing-test lines are most of a long log and would push the failing test out of the
-            # tail. grep exiting 1 on an all-pass log is harmless: the pipeline status is tr's.
-            grep -av '^(pass) ' "$log" | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
-            longest=$(grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
+            # tail. grep exits 1 when nothing is left to print, which pipefail would turn into a failed
+            # job, so each grep is allowed to find nothing.
+            { grep -av '^(pass) ' "$log" || true; } | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
+            longest=$({ grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" || true; } | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
             {
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
               echo "Full log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
