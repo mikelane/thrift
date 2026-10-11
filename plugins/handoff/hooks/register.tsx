@@ -31,6 +31,7 @@ import {
   LOG_WRITER,
   logLocation,
   type DecisionAction,
+  type DecisionReason,
   type HeldGroupFields,
   type TriggerValues,
 } from './decision-record'
@@ -124,7 +125,7 @@ type Trigger = {
 
 type Evaluation = Trigger & {
   action: DecisionAction
-  reason?: string
+  reason?: DecisionReason
   note?: NoteDelivery
   heldFields?: HeldGroupFields
   sessionId?: string
@@ -368,7 +369,7 @@ const abandonHandoff = async (
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
-  reason: string,
+  reason: DecisionReason,
   message: string,
   sessionId?: string,
 ) => {
