@@ -60,12 +60,13 @@ plugins/<name>/
   `{ ts, session_id, component, mode, action, engine_version, trigger_values }`.
   - `ts`: ISO 8601 UTC.
   - `component`: the plugin's name.
-  - `mode`: `shadow` only when the action is `none` and the plugin ran in `off` (the setting, or a fallback that holds it there); otherwise `active`.
+  - `mode`: `shadow` only when the action is `none` and the plugin ran in `off` (the setting, or a fallback that holds it there); otherwise `active`. A band press, like `/handoff`, is always `active`.
   - `engine_version`: the Claude Code release (`$.session.version()`'s `base`), or its `version`
     when `base` is missing. A change in behavior then shows up as a split between versions.
   - `trigger_values`: scalars only. Never prompt text, file contents, or paths the person typed.
-- Append with `sh -c 'umask 077 && mkdir -p "$dir" && cat >> "$file"'` through `$.process.run`,
-  so the file is created owner-only. A failed write goes to the debug log and the turn continues.
+- Append with `sh -c 'umask 077 && mkdir -p -- "$dir" && cat >> "$file" && chmod 600 -- "$file"'`
+  through `$.process.run`, so the file is owner-only: `umask` applies only when the file is
+  created, so the `chmod` covers a file that already exists. A failed write goes to the debug log and the turn continues.
   Nothing from the log is ever written into context.
 
 ## Checks before every push
