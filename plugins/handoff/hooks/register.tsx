@@ -39,6 +39,7 @@ import {
 import { isUntestedEngine } from './engine-version'
 import {
   FINAL_MESSAGES,
+  busyRefusalMessage,
   clearFailedMessage,
   HANDOFF_PROMPT,
   handedOffMessage,
@@ -110,8 +111,6 @@ const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fr
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const SESSION_ENDED = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
-const BUSY_REFUSAL =
-  'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
@@ -471,7 +470,8 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
     $.ui.toast(WRITING_STATUS)
     // SAFETY: a session end between scheduleHandoff and this read would make oldId the new session's id. That needs a
     // /clear in the same clock.after(0) tick as /handoff, which a person typing cannot produce; SDK or bridge commands
-    // sent back to back could. No guard: the note would still be delivered, only the resume line would name the wrong id.
+    // sent back to back could. No guard: the note would still be delivered, but the resume line and the cleared record's
+    // session_id would name the new session instead of the one the note came from.
     oldId = await $.session.id()
     beginNoteWindow(state)
     const note = await writeNote($)
@@ -553,7 +553,7 @@ const runHandoff = async (
     }
     if (outcome === 'abandon_busy') {
       const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
-      return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL, prepared.oldId)
+      return await abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), prepared.oldId)
     }
     const hasTurnAfterNote = state.hasTurnAfterNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
@@ -795,7 +795,7 @@ const redrawIfStillShown = async ($: EngineInterface, state: SessionState, shown
 }
 
 const refuseToClear = async ($: EngineInterface, state: SessionState, offer: Offer, trigger: Trigger) => {
-  $.ui.toast(BUSY_REFUSAL)
+  $.ui.toast(busyRefusalMessage(false))
   await redrawIfStillShown($, state, offer, offerWithBusyState(offer, state.contextTokens, true))
   await writeRecord($, state, { ...busyRefusalTrigger(trigger), action: 'none', reason: 'background_busy' })
 }

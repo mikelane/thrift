@@ -1043,3 +1043,13 @@ test('It records cleared_by person and compacted_before_clear when the person cl
   })
   expect(world.effects).not.toContain('clear')
 })
+
+const BUSY_COMPACTED_MESSAGE =
+  'Background work started, and a handoff would cut it off. The session was compacted but not cleared. Type /handoff to hand off anyway.'
+
+test('It says the session was compacted but not cleared in the busy refusal that follows a compaction', ACT_COMPACTING, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(world.effects).toContain(`toast:${BUSY_COMPACTED_MESSAGE}`)
+  expect(world.effects).toContain(`log:${BUSY_COMPACTED_MESSAGE}`)
+  expect(world.effects).not.toContain(BUSY_TOAST)
+})
