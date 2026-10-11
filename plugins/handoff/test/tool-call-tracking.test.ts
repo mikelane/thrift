@@ -61,3 +61,11 @@ for (const [name, call, ran, tasksBefore, tasksAfter, hasFinishedTask] of callCa
     expect(noteCall(call, ran, tasksBefore)).toEqual({ tasks: tasksAfter, hasFinishedTask })
   })
 }
+
+test('It refuses a call that names no tool', () => {
+  const state = createState({ setting: 'ask', threshold: 150_000, compactBeforeClear: false })
+  const ran: TrackedResult = { result: {} }
+  // @ts-expect-error a result is not a call: it has no tool
+  noteToolCall(state, ran, ran)
+  expect(state.backgroundTasks.size).toBe(0)
+})
