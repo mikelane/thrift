@@ -9,7 +9,8 @@ type Settings = {
 
 export type ButtonPress = { offer: Offer; button: Button }
 
-export type HeldPrompt = { text: string; isUnattended: boolean }
+// origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: string }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt

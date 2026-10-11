@@ -71,6 +71,8 @@ export type Evaluation = Trigger & {
 export type HandoffRequest = {
   trigger: Trigger
   heldPrompt?: string
+  // The origin kind of heldPrompt; the composer when absent, as for a prompt held in the box.
+  heldPromptOrigin?: string
   isUnattended: boolean
 }
 

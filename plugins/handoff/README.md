@@ -101,13 +101,15 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       carry no `handoff:` prefix.
    8. Deliver any held prompts in the fresh session. If the note was not appended, held prompts of
       the handoff's own origin ride with it. Every other held group is sent on its own: submitted
-      first, then put in the prompt box if a person sent it, then written to the transcript. The
+      first, then put in the prompt box if it was typed at this terminal, then written to the transcript. The
       `cleared` record's `held_other_delivery` field says how those groups went. This holds whether
       the handoff was started by handing it off first or by running `/handoff` while the prompt was
       held.
       A prompt that arrives while this step runs is held too. It is delivered after everything above,
       one prompt at a time in the order it arrived, the same way: submitted, then put in the prompt box
-      if a person sent it, then written to the transcript. It never enters ahead of the note or the held
+      if it was typed at this terminal, then written to the transcript. A prompt from the bridge, the SDK,
+      or a scheduled trigger is never put in the box: its sender is not at the terminal, and filling the
+      box could displace the draft of the person who is. It never enters ahead of the note or the held
       prompts, but one of them left in the prompt box waits for Enter, so a later prompt can run first.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
@@ -196,8 +198,10 @@ Special cases:
     prompt the handoff is already carrying (say, "Hand off and send it" sent again). The drop says
     the repeat was not added. Every other prompt is kept, so two identical prompts sent on purpose
     are both sent.
-  - On failure: if the handoff fails, a person prompt goes back in the box and a scheduled one is
-    submitted here, whichever kind of sender started the handoff.
+  - On failure: if the handoff fails, a prompt typed at this terminal goes back in the box and any
+    other is submitted here, whichever kind of sender started the handoff. Prompts are held while
+    this happens, as they are during the delivery: one that arrives meanwhile is put back after
+    them, one at a time in the order it arrived, the same way, so it cannot run ahead of the held prompts.
   - Refused: a prompt with attachments or context can't be held, because it can't be sent again. It
     is dropped with a short toast and is not sent in the fresh session. A prompt typed at this
     terminal is put back in the prompt box, or shown in the transcript if the box can't take it. A
@@ -289,7 +293,8 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
   already holds it as a whole line is left alone.
 - **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
-  the decision log), joined to the handoff if the append was refused, so it can be copied back.
+  the decision log), joined to the handoff if the append was refused, so it can be copied back. A
+  note that goes alone, with no held prompt, is labeled "The handoff note", not "Your prompt".
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 
@@ -336,11 +341,11 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 | `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear`) or `person` (you typed `/clear` before the handoff's own clear, so the note went into the fresh session you made and no second clear ran) |
 | `trigger_values.compacted_before_clear` | Present, as `true`, only on the record that ends a handoff (a `cleared` record, or the `none` record of an abandon) when `compactBeforeClear` was on and the compaction before the clear worked. It tells a `background_busy`, `clear_failed`, or `session_ended` record that left the session compacted from one that left it unchanged. A vetoed or failed compaction writes its own `none` record and leaves this off. A compaction in act mode outside a handoff writes a `compacted` record instead |
-| `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). It holds prompts from when it is scheduled until the note, every held prompt, and every prompt that arrived while those were delivered have been delivered (submitted, put in the prompt box, or written to the transcript). A prompt that arrived during the delivery counts toward the group of its origin. A handoff that is abandoned (including one whose `/clear` failed) holds prompts until it stops. A prompt sent after that is not counted. A count, never prompt text |
+| `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). It holds prompts from when it is scheduled until the note, every held prompt, and every prompt that arrived while those were delivered have been delivered (submitted, put in the prompt box, or written to the transcript). A prompt that arrived during the delivery counts toward the group of its origin. A handoff that is abandoned (including one whose `/clear` failed) holds prompts until they, and every prompt that arrived while they were put back, are back. A prompt sent after that is not counted. A count, never prompt text |
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
 | `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note when the note is not appended |
-| `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the held groups the note did not carry, and any prompt that arrived during the delivery, were delivered in the fresh session. An appended note carries no group, so every held group is sent separately; a note that is not appended carries the group of the handoff's origin, so only the other group is. Each group, and each prompt that arrived during the delivery, is submitted first; if that fails, one from a person is put in the prompt box. `submitted` (entered into the session), `in_box` (left in the prompt box, unsent), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (nothing was sent separately). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. Never prompt text |
-| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group from a person goes back in the prompt box first; if that fails, or the group came from a scheduled trigger, it is submitted. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With two groups, the worst outcome: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
+| `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the held groups the note did not carry, and any prompt that arrived during the delivery, were delivered in the fresh session. An appended note carries no group, so every held group is sent separately; a note that is not appended carries the group of the handoff's origin, so only the other group is. Each group, and each prompt that arrived during the delivery, is submitted first; if that fails, one typed at this terminal is put in the prompt box. `submitted` (entered into the session), `in_box` (left in the prompt box, unsent), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (nothing was sent separately). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. Never prompt text |
+| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group typed at this terminal goes back in the prompt box first; if that fails, or the group came from the bridge, the SDK, or a scheduled trigger (or mixes them with prompts typed here), it is submitted. A prompt that arrived while the groups were put back is put back after them in the same way and counts here and in `held_groups`. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With two groups, the worst outcome: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
 
 A prompt is evaluated, and so logged, only when it names new work.
 

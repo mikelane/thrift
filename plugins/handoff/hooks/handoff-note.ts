@@ -1,3 +1,4 @@
+import { isComposerOrigin } from './prompt-plan'
 import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
 
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
@@ -62,14 +63,19 @@ const PROMPT_SEPARATOR = '\n\n'
 export const joinPrompts = (handoff: string, heldPrompts: string | undefined): string =>
   heldPrompts ? `${handoff}${PROMPT_SEPARATOR}${heldPrompts}` : handoff
 
+// A group is the composer's only while every prompt in it is; one remote prompt keeps the whole group out of the box, because
+// the box is where the person at this terminal reviews what they typed.
+const groupOrigin = (groupSoFar: string, joining: string): string =>
+  isComposerOrigin(groupSoFar) && isComposerOrigin(joining) ? groupSoFar : [groupSoFar, joining].find(origin => !isComposerOrigin(origin)) ?? joining
+
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
   const groups: HeldPromptGroup[] = []
-  for (const { text, isUnattended } of prompts) {
+  for (const { text, isUnattended, origin } of prompts) {
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
-    if (group === undefined) groups.push({ text, isUnattended })
-    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended }
+    if (group === undefined) groups.push({ text, isUnattended, origin })
+    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended, origin: groupOrigin(group.origin, origin) }
   }
   return groups
 }

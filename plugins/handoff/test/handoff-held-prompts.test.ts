@@ -95,8 +95,8 @@ const repeatOnSubmitAfter = ($: Engine, world: World, submitsBefore: number) => 
   return outcome
 }
 
-const personGroup = { text: 'person says', isUnattended: false }
-const scheduledGroup = { text: 'nightly job', isUnattended: true }
+const personGroup = { text: 'person says', isUnattended: false, origin: 'composer' }
+const scheduledGroup = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' }
 
 describe('holding prompts while the note is written', () => {
   test('It drops a person prompt sent while the note is written', async ($, on) => {
@@ -337,15 +337,16 @@ describe('abandoning a handoff and restoring held prompts', () => {
     ])
   })
 
-  test('It runs here a carried prompt the person re-sends from the box while a failed handoff is still restoring', ASK, async ($, on) => {
+  test('It holds a carried prompt the person re-sends from the box while a failed handoff is still restoring', ASK, async ($, on) => {
     const { world, fork } = await carriedPlusScheduled($, on)
     const outcome = repeatOnSubmitAfter($, world, 0)
     fork.release({ isAnswered: false, reason: 'nothing-to-fork' })
     await world.clock.settle()
     expect(outcome.repeat).not.toBeNull()
-    expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
-      undefined,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
+    expect([dropOf(await outcome.repeat), entered(world), world.box.text]).toEqual([
+      HELD_FOR_HANDOFF,
+      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job'],
+      'now ENG-2',
     ])
   })
 })
@@ -480,21 +481,21 @@ describe('groupHeldPrompts', () => {
   })
 
   test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
-    expect(groupHeldPrompts([{ text: 'a', isUnattended: false }, { text: 'a', isUnattended: false }])).toEqual([
-      { text: 'a\n\na', isUnattended: false },
+    expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer' }, { text: 'a', isUnattended: false, origin: 'composer' }])).toEqual([
+      { text: 'a\n\na', isUnattended: false, origin: 'composer' },
     ])
   })
 
   test('It keeps one group per origin, ordered by first arrival, in groupHeldPrompts', () => {
     expect(
       groupHeldPrompts([
-        { text: 'u1', isUnattended: true },
-        { text: 'p1', isUnattended: false },
-        { text: 'u2', isUnattended: true },
+        { text: 'u1', isUnattended: true, origin: 'scheduled-trigger' },
+        { text: 'p1', isUnattended: false, origin: 'composer' },
+        { text: 'u2', isUnattended: true, origin: 'scheduled-trigger' },
       ]),
     ).toEqual([
-      { text: 'u1\n\nu2', isUnattended: true },
-      { text: 'p1', isUnattended: false },
+      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger' },
+      { text: 'p1', isUnattended: false, origin: 'composer' },
     ])
   })
 })
