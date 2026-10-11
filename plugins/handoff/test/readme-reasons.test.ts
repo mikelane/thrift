@@ -1,8 +1,18 @@
 import { expect, test } from 'claude-code/testing'
 
-import { driftMessages, readmeReasons, reasonDrift } from '../hooks/readme-reasons'
+import { DECISION_REASONS } from '../hooks/decision-reasons'
+import { findReasonDrift, formatDriftMessages, parseReadmeReasons } from '../hooks/readme-reasons'
 
 const reasonRow = (cell: string) => `| \`trigger_values.reason\` | ${cell} |`
+const backticked = (values: readonly string[]) => values.map(value => `\`${value}\``).join(', ')
+
+const NO_ROW = 'The README has no table row whose first cell is `trigger_values.reason`. Add one that lists every value in DECISION_REASONS.'
+const rowsError = (count: number) =>
+  `The README has ${count} table rows whose first cell is \`trigger_values.reason\`. Keep one and delete the others.`
+const missingFromReadme = (reason: string) =>
+  `"${reason}" is in DECISION_REASONS but not in the README's trigger_values.reason row. Add it to the row, or remove it from DECISION_REASONS.`
+const missingFromUnion = (reason: string) =>
+  `"${reason}" is in the README's trigger_values.reason row but not in DECISION_REASONS. Remove it from the row, or add it to DECISION_REASONS.`
 
 const cases: { name: string; readme: string; expected: string[] }[] = [
   { name: 'plain backticked values', readme: reasonRow('`backoff`, `not_now`, or `send_here`'), expected: ['backoff', 'not_now', 'send_here'] },
@@ -12,7 +22,7 @@ const cases: { name: string; readme: string; expected: string[] }[] = [
     expected: ['session_ended', 'band_failed'],
   },
   {
-    name: 'backticks inside parentheses',
+    name: 'the values around backticks inside parentheses',
     readme: reasonRow('`session_ended` (you did not type `/clear`) or `backoff`'),
     expected: ['session_ended', 'backoff'],
   },
@@ -22,75 +32,105 @@ const cases: { name: string; readme: string; expected: string[] }[] = [
     expected: ['backoff', 'not_now'],
   },
   {
-    name: 'nested parentheses',
+    name: 'the values around nested parentheses',
     readme: reasonRow('`a` (outer (inner `x`) `y`) and `b`'),
     expected: ['a', 'b'],
   },
+  {
+    name: 'only the reason row values when a held_groups row names reasons in backticks',
+    readme: ['| `trigger_values.held_groups` | on reason `handoff_failed` |', reasonRow('`backoff`')].join('\n'),
+    expected: ['backoff'],
+  },
+  {
+    name: 'only the second cell of the reason row',
+    readme: '| `trigger_values.reason` | `backoff` | `extra_column` |',
+    expected: ['backoff'],
+  },
+  { name: 'the values in README order', readme: reasonRow('`z`, `a`, `m`'), expected: ['z', 'a', 'm'] },
+  { name: 'an empty list when the reason row has no value cell', readme: '| `trigger_values.reason`', expected: [] },
+  { name: 'an empty list when the value cell has no backticked values', readme: reasonRow('none yet'), expected: [] },
 ]
 
 for (const { name, readme, expected } of cases) {
-  test(`It reads ${name} from the reason row`, () => {
-    expect(readmeReasons(readme)).toEqual(expected)
+  test(`It returns ${name}`, () => {
+    expect(parseReadmeReasons(readme)).toEqual(expected)
   })
 }
 
-test('It ignores a held_groups row that names reasons in backticks', () => {
-  const readme = ['| `trigger_values.held_groups` | on reason `handoff_failed` |', reasonRow('`backoff`')].join('\n')
-  expect(readmeReasons(readme)).toEqual(['backoff'])
-})
+const noRowCases: { name: string; readme: string }[] = [
+  { name: 'is empty', readme: '' },
+  { name: 'is prose with no table', readme: 'trigger_values.reason lists `backoff`.' },
+  { name: 'has only other rows', readme: '| `trigger_values.point` | `turn-end` |' },
+  { name: 'names the key outside the first cell', readme: '| `point` | `trigger_values.reason` |' },
+  { name: 'names the key without backticks', readme: '| trigger_values.reason | `backoff` |' },
+]
 
-test('It reads only the second cell of the reason row', () => {
-  const readme = '| `trigger_values.reason` | `backoff` | `extra_column` |'
-  expect(readmeReasons(readme)).toEqual(['backoff'])
-})
+for (const { name, readme } of noRowCases) {
+  test(`It throws the missing-row error when the README ${name}`, () => {
+    expect(() => parseReadmeReasons(readme)).toThrow(NO_ROW)
+  })
+}
 
-test('It returns the values in README order, whatever the order', () => {
-  expect(readmeReasons(reasonRow('`z`, `a`, `m`'))).toEqual(['z', 'a', 'm'])
-})
+const extraRowCases: { count: number; readme: string }[] = [
+  { count: 2, readme: [reasonRow('`backoff`'), reasonRow('`not_now`')].join('\n') },
+  { count: 3, readme: [reasonRow('`backoff`'), reasonRow('`not_now`'), reasonRow('`send_here`')].join('\n') },
+]
 
-test('It throws when the README has more than one reason row', () => {
-  const readme = [reasonRow('`backoff`'), reasonRow('`not_now`')].join('\n')
-  expect(() => readmeReasons(readme)).toThrow('more than one')
-})
+for (const { count, readme } of extraRowCases) {
+  test(`It throws an error naming ${count} rows when the README has ${count} reason rows`, () => {
+    expect(() => parseReadmeReasons(readme)).toThrow(rowsError(count))
+  })
+}
 
-test('It throws when the README has no reason row', () => {
-  expect(() => readmeReasons('| `trigger_values.point` | `turn-end` |')).toThrow('trigger_values.reason')
-})
-
-const driftCases: { name: string; union: string[]; readme: string[]; expected: ReturnType<typeof reasonDrift> }[] = [
-  { name: 'nothing when the two match', union: ['a', 'b'], readme: ['a', 'b'], expected: { missingFromReadme: [], missingFromUnion: [] } },
-  { name: 'nothing when the two match in another order', union: ['a', 'b'], readme: ['b', 'a'], expected: { missingFromReadme: [], missingFromUnion: [] } },
+const driftCases: { name: string; union: string[]; readme: string[]; expected: ReturnType<typeof findReasonDrift> }[] = [
+  { name: 'no drift when the two match', union: ['a', 'b'], readme: ['a', 'b'], expected: { missingFromReadme: [], missingFromUnion: [] } },
+  { name: 'no drift when the two match in another order', union: ['a', 'b'], readme: ['b', 'a'], expected: { missingFromReadme: [], missingFromUnion: [] } },
   { name: 'a union member the README lacks', union: ['a', 'b'], readme: ['a'], expected: { missingFromReadme: ['b'], missingFromUnion: [] } },
   { name: 'a README value the union lacks', union: ['a'], readme: ['a', 'x'], expected: { missingFromReadme: [], missingFromUnion: ['x'] } },
-  { name: 'both directions at once', union: ['a', 'b'], readme: ['b', 'x'], expected: { missingFromReadme: ['a'], missingFromUnion: ['x'] } },
-  { name: 'a README value listed twice once', union: ['a'], readme: ['a', 'a', 'x', 'x'], expected: { missingFromReadme: [], missingFromUnion: ['x'] } },
+  { name: 'drift in both directions at once', union: ['a', 'b'], readme: ['b', 'x'], expected: { missingFromReadme: ['a'], missingFromUnion: ['x'] } },
+  { name: 'a README value listed twice only once', union: ['a'], readme: ['a', 'a', 'x', 'x'], expected: { missingFromReadme: [], missingFromUnion: ['x'] } },
+  { name: 'a union member listed twice only once', union: ['a', 'b', 'b'], readme: ['a'], expected: { missingFromReadme: ['b'], missingFromUnion: [] } },
   { name: 'every member when the README lists none', union: ['a', 'b'], readme: [], expected: { missingFromReadme: ['a', 'b'], missingFromUnion: [] } },
 ]
 
 for (const { name, union, readme, expected } of driftCases) {
-  test(`It reports ${name}`, () => {
-    expect(reasonDrift(union, readme)).toEqual(expected)
+  test(`It returns ${name}`, () => {
+    expect(findReasonDrift(union, readme)).toEqual(expected)
   })
 }
 
-test('It writes no messages when nothing drifted', () => {
-  expect(driftMessages({ missingFromReadme: [], missingFromUnion: [] })).toEqual([])
+test('It returns no messages when nothing drifted', () => {
+  expect(formatDriftMessages({ missingFromReadme: [], missingFromUnion: [] })).toEqual([])
 })
 
-test('It writes one message per value missing from the README', () => {
-  expect(driftMessages({ missingFromReadme: ['a', 'b'], missingFromUnion: [] })).toEqual([
-    'DecisionReason has "a", but the README trigger_values.reason row does not list it.',
-    'DecisionReason has "b", but the README trigger_values.reason row does not list it.',
-  ])
+test('It returns one message per value missing from the README', () => {
+  expect(formatDriftMessages({ missingFromReadme: ['a', 'b'], missingFromUnion: [] })).toEqual([missingFromReadme('a'), missingFromReadme('b')])
 })
 
-test('It writes one message per value missing from the union', () => {
-  expect(driftMessages({ missingFromReadme: [], missingFromUnion: ['x'] })).toEqual([
-    'The README trigger_values.reason row lists "x", but DecisionReason does not have it.',
-  ])
+test('It returns one message per value missing from the union', () => {
+  expect(formatDriftMessages({ missingFromReadme: [], missingFromUnion: ['x'] })).toEqual([missingFromUnion('x')])
 })
 
-test('It writes the README-side messages before the union-side ones', () => {
-  expect(driftMessages({ missingFromReadme: ['a'], missingFromUnion: ['x'] })).toHaveLength(2)
-  expect(driftMessages({ missingFromReadme: ['a'], missingFromUnion: ['x'] })[0]).toContain('"a"')
+test('It returns the README-side messages before the union-side ones', () => {
+  expect(formatDriftMessages({ missingFromReadme: ['a'], missingFromUnion: ['x'] })).toEqual([missingFromReadme('a'), missingFromUnion('x')])
+})
+
+test('It returns DECISION_REASONS with no value listed twice', () => {
+  expect(new Set(DECISION_REASONS).size).toBe(DECISION_REASONS.length)
+})
+
+test('It returns a message naming a DECISION_REASONS value that the README row drops', () => {
+  const [dropped = '', ...kept] = DECISION_REASONS
+  const readme = reasonRow(`Present when it explains a \`none\`: ${backticked(kept)}`)
+  expect(formatDriftMessages(findReasonDrift(DECISION_REASONS, parseReadmeReasons(readme)))).toEqual([missingFromReadme(dropped)])
+})
+
+test('It returns a message naming a README row value that DECISION_REASONS lacks', () => {
+  const readme = reasonRow(`Present when it explains a \`none\`: ${backticked([...DECISION_REASONS, 'not_a_reason'])}`)
+  expect(formatDriftMessages(findReasonDrift(DECISION_REASONS, parseReadmeReasons(readme)))).toEqual([missingFromUnion('not_a_reason')])
+})
+
+test('It returns no messages when the README row lists every DECISION_REASONS value', () => {
+  const readme = reasonRow(`Present when it explains a \`none\`: ${backticked([...DECISION_REASONS].reverse())}`)
+  expect(formatDriftMessages(findReasonDrift(DECISION_REASONS, parseReadmeReasons(readme)))).toEqual([])
 })

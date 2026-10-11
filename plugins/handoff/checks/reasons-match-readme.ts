@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs'
 
 import { DECISION_REASONS } from '../hooks/decision-reasons.ts'
-import { driftMessages, readmeReasons, reasonDrift } from '../hooks/readme-reasons.ts'
+import { findReasonDrift, formatDriftMessages, parseReadmeReasons } from '../hooks/readme-reasons.ts'
 
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
-const messages = driftMessages(reasonDrift(DECISION_REASONS, readmeReasons(readme)))
+const messages = formatDriftMessages(findReasonDrift(DECISION_REASONS, parseReadmeReasons(readme)))
 
 for (const message of messages) {
   console.error(message)

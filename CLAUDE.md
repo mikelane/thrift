@@ -80,15 +80,15 @@ the type declarations, then runs these in order and stops at the first failure:
    `test-coverage-mapper` reports no uncovered changed function. Go back to a measured 100%
    once `plugin test` reports coverage.
 
-A check that needs a plugin's files on disk, which `plugin test` cannot read (it has no fs), goes
-in `plugins/<name>/checks/*.ts`. `scripts/check.sh` runs each one with
-`node --experimental-strip-types` after `tsc` and before `plugin test`, and a non-zero exit fails
-the run. Such a file imports its siblings with explicit `.ts` extensions, so those modules import
-nothing and use only erasable TypeScript. It needs Node 22.6 or newer (older Node exits with
-"bad option", which fails the step). `tsc` does not cover `checks/`: they need `@types/node` for
-`node:fs` and `allowImportingTsExtensions`, so a check only reads
-the file, calls pure functions in `hooks/`, prints, and sets the exit code. Everything else lives
-in `hooks/`, which `tsc` and `plugin test` cover.
+A check that reads a plugin's files goes in `plugins/<name>/checks/*.ts`, because `plugin test`
+has no file system. `scripts/check.sh` runs each one with `node --experimental-strip-types` after
+`tsc` and before `plugin test`. A non-zero exit, or a dangling symlink in `checks/`, fails the run.
+This needs Node 22.6 or newer; older Node exits with "bad option", which also fails the run. Node
+strips types without resolving imports, so a check imports its siblings with explicit `.ts`
+extensions, and each module it imports uses only erasable TypeScript and has no runtime imports.
+`tsc` does not cover `checks/` (that would need `@types/node` and `allowImportingTsExtensions`),
+so a check only reads files, calls pure functions in `hooks/`, prints, and sets the exit code.
+Everything else lives in `hooks/`, where `tsc` and `plugin test` cover it.
 
 Tests use `claude-code/testing`. The kit mocks the clock, store, env, and `session.append`
 directly (`mock.*`). Every other engine call (`model.fork`, `process.run`, `agent.list`,

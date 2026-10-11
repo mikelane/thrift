@@ -70,13 +70,14 @@ run_labeled_step() {
   return "$rc"
 }
 
-# Runs every plugins/<name>/checks/*.ts under Node's type stripping: a check that needs the plugin's
-# files on disk, which `claude plugin test` cannot read. A plugin without a checks/ directory skips it.
+# Runs each plugins/<name>/checks/*.ts with Node's type stripping. These checks read the plugin's
+# files, which `claude plugin test` cannot. A plugin with no checks/ directory has nothing to run.
 run_file_checks() {
   local plugin_dir="$1" check
   for check in "$plugin_dir"/checks/*.ts; do
     if [[ -L "$check" && ! -e "$check" ]]; then
-      echo "FAILED: $plugin_dir: $check is a dangling symlink. Fix its target or remove it." >&2
+      echo "## file check: $(basename "$check")"
+      echo "FAILED: $plugin_dir: file check: $(basename "$check") is a dangling symlink. Point it at an existing file or delete it." >&2
       return 1
     fi
     [[ -e "$check" ]] || continue

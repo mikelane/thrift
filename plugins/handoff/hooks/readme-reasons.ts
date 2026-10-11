@@ -5,37 +5,42 @@ const withoutParentheses = (text: string): string => {
   return stripped === text ? text : withoutParentheses(stripped)
 }
 
-export type ReasonDrift = { missingFromReadme: string[]; missingFromUnion: string[] }
+type ReasonDrift = { missingFromReadme: string[]; missingFromUnion: string[] }
 
-export const reasonDrift = (union: readonly string[], readme: readonly string[]): ReasonDrift => {
-  const declared = new Set(union)
-  const documented = new Set(readme)
+export const findReasonDrift = (declaredReasons: readonly string[], documentedReasons: readonly string[]): ReasonDrift => {
+  const declared = new Set(declaredReasons)
+  const documented = new Set(documentedReasons)
   return {
     missingFromReadme: [...declared].filter(reason => !documented.has(reason)),
     missingFromUnion: [...documented].filter(reason => !declared.has(reason)),
   }
 }
 
-export const driftMessages = ({ missingFromReadme, missingFromUnion }: ReasonDrift): string[] => [
-  ...missingFromReadme.map(reason => `DecisionReason has "${reason}", but the README trigger_values.reason row does not list it.`),
-  ...missingFromUnion.map(reason => `The README trigger_values.reason row lists "${reason}", but DecisionReason does not have it.`),
+export const formatDriftMessages = ({ missingFromReadme, missingFromUnion }: ReasonDrift): string[] => [
+  ...missingFromReadme.map(
+    reason => `"${reason}" is in DECISION_REASONS but not in the README's trigger_values.reason row. Add it to the row, or remove it from DECISION_REASONS.`,
+  ),
+  ...missingFromUnion.map(
+    reason => `"${reason}" is in the README's trigger_values.reason row but not in DECISION_REASONS. Remove it from the row, or add it to DECISION_REASONS.`,
+  ),
 ]
 
-// SAFETY: The README table is written by hand, and these valid shapes are not supported. Each one
-// makes the check fail loudly (a missing row, or values the union does not have), never pass:
-// a padded or double-backtick code span, a table with no leading pipe, `\|` inside a cell, and a
-// fenced example row placed before the real row.
-export const readmeReasons = (readme: string): string[] => {
+// SAFETY: The README table is written by hand. The parser does not support these valid Markdown
+// shapes: a padded or double-backtick code span, a table with no leading pipe, `\|` inside a cell,
+// and a fenced example row above the real row. Each one makes the check fail (no row, two rows, or
+// values DECISION_REASONS does not have), so a misread row can never pass.
+export const parseReadmeReasons = (readme: string): string[] => {
   const rows = readme.split('\n').filter(line => line.split('|')[1]?.trim() === REASON_ROW_KEY)
   const [row, ...extraRows] = rows
   if (row === undefined) {
-    throw new Error(`The README has no table row whose first cell is ${REASON_ROW_KEY}.`)
+    throw new Error(`The README has no table row whose first cell is ${REASON_ROW_KEY}. Add one that lists every value in DECISION_REASONS.`)
   }
   if (extraRows.length > 0) {
-    throw new Error(`The README has more than one table row whose first cell is ${REASON_ROW_KEY}.`)
+    throw new Error(`The README has ${rows.length} table rows whose first cell is ${REASON_ROW_KEY}. Keep one and delete the others.`)
   }
   const valueCell = row.split('|')[2] ?? ''
   const listed = withoutParentheses(valueCell)
   const afterLeadIn = listed.slice(listed.indexOf(':') + 1)
-  return [...afterLeadIn.matchAll(/`([^`]+)`/g)].map(match => match[1] as string)
+  // SAFETY: the capture group always matches, so `value` is never undefined. The check only narrows the type.
+  return [...afterLeadIn.matchAll(/`([^`]+)`/g)].flatMap(([, value]) => (value === undefined ? [] : [value]))
 }
