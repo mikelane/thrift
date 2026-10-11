@@ -302,8 +302,9 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   transcript.
 - **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
   the decision log), joined to the handoff if the append was refused, so it can be copied back. The
-  notice names what it holds: the prompt, the handoff note, or both. It says the prompt box was tried only when it was: for text that was typed at this
-  terminal, or a note started there that carries no prompt from elsewhere.
+  notice names what it holds: the prompt, the handoff note, or both. It says the prompt box was
+  tried only when it was: for text that was typed at this terminal, or a note started there that
+  carries no prompt from elsewhere.
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 
