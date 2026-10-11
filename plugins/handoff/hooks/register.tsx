@@ -49,6 +49,14 @@ import {
   type NoteDelivery,
 } from './handoff-note'
 import {
+  canHoldPrompt,
+  carriesExtras,
+  duringHandoffAction,
+  isPersonOrigin,
+  isUnattendedOrigin,
+  planNewWorkPrompt,
+} from './prompt-plan'
+import {
   addHeldPrompt,
   beginHandoffHold,
   beginBeforeClear,
@@ -83,7 +91,6 @@ import {
 } from './signals'
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
-import { canHoldPrompt, carriesExtras, duringHandoffAction, isPersonOrigin, isUnattendedOrigin, planNewWorkPrompt } from './prompt-plan'
 import { planTurnEnd } from './turn-end-plan'
 import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
