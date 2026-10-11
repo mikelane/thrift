@@ -4,7 +4,7 @@ import { dropOf, lastRecord, submitPerson, writingTheNote, type World } from './
 import type { Engine } from 'claude-code/testing'
 
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes. If the handoff fails, it goes back in the prompt box, or is sent here if a scheduled task sent it.'
 
 type Arrival = { text: string; kind?: 'composer' | 'scheduled-trigger' }
 

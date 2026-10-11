@@ -19,7 +19,7 @@ import {
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes. If the handoff fails, it goes back in the prompt box, or is sent here if a scheduled task sent it.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
