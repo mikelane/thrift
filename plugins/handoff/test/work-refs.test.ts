@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from '../hooks/work-refs'
+import { branchTicketPrefixes, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from '../hooks/work-refs'
 
 const urlPrefixCases = [
   ['see https://linear.app/acme/issue/ENG-12/fix-the-thing', ['ENG']],
@@ -29,8 +29,8 @@ const branchCases = [
 ] as const
 
 for (const [branch, expected] of branchCases) {
-  test(`It returns ${JSON.stringify(expected)} from branchTicketPrefix for ${JSON.stringify(branch)}`, () => {
-    expect(branchTicketPrefix(branch)).toEqual(expected)
+  test(`It returns ${JSON.stringify(expected)} from branchTicketPrefixes for ${JSON.stringify(branch)}`, () => {
+    expect(branchTicketPrefixes(branch)).toEqual(expected)
   })
 }
 

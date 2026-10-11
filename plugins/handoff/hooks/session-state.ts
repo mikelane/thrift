@@ -163,7 +163,7 @@ export type BoxPlacement = 'before_draft' | 'after_draft'
 // A prompt refused while the held ones are being put back comes after them in the box, as a held late arrival does.
 export const refusedPromptPlacement = (hold: HandoffHold): BoxPlacement => (hold.phase === 'sending' ? 'after_draft' : 'before_draft')
 
-export const isCarriedByHandoff =(state: SessionState, text: string): boolean =>
+export const isCarriedByHandoff = (state: SessionState, text: string): boolean =>
   state.handoffHold.phase !== 'idle' && state.handoffHold.promptCarriedByHandoff === text
 
 // Once taken, a prompt that arrives is no longer held, until beginSending holds again: a handoff that goes on to the fresh

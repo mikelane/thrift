@@ -61,3 +61,14 @@ for (const [name, call, ran, tasksBefore, tasksAfter, hasFinishedTask] of callCa
     expect(noteCall(call, ran, tasksBefore)).toEqual({ tasks: tasksAfter, hasFinishedTask })
   })
 }
+
+// The directive is the check: once a call may leave out its tool, it is unused and tsc fails.
+test('It leaves tasks [] and finished false after a call that names no tool, which the type check refuses', () => {
+  const result = noteCall(
+    // @ts-expect-error a call with no tool is not a TrackedCall
+    { command: 'git commit -m x' },
+    { result: { backgroundTaskId: 'bg1' } },
+    [],
+  )
+  expect(result).toEqual({ tasks: [], hasFinishedTask: false })
+})

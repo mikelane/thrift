@@ -302,8 +302,9 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   transcript.
 - **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
   the decision log), joined to the handoff if the append was refused, so it can be copied back. The
-  notice names what it holds: the prompt, the handoff note, or both. It says the prompt box was tried only when it was: for text that was typed at this
-  terminal, or a note started there that carries no prompt from elsewhere.
+  notice names what it holds: the prompt, the handoff note, or both. It says the prompt box was
+  tried only when it was: for text that was typed at this terminal, or a note started there that
+  carries no prompt from elsewhere.
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 
@@ -443,7 +444,7 @@ prompts are delivered, and it is not guarded. After a reload, run `/handoff` aga
 | `hooks/prompt-plan.ts` | What a submitted prompt calls for: prompt origins (`isPersonOrigin`, `isComposerOrigin`, `isUnattendedOrigin`), the sender named in a message (`senderLabel`), attachments or context (`carriesExtras`), what to do with one that arrives during a handoff (`planPromptDuringHandoff`), whether one can be held (`canHoldPrompt`), and the plan for new work (`planNewWorkPrompt`) |
 | `hooks/tool-call-tracking.ts` | What a tool call tells the state: background tasks that start or stop, and a finished task (`noteToolCall`) |
 | `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), and `finishesTask` |
-| `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefix`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
+| `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefixes`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
 | `hooks/handoff-note.ts` | `HANDOFF_PROMPT`, the handoff message, `NoteDelivery` (`appended`, `submitted`, `in_box`, `not_carried`) and `Carried` (the same without `appended`), the message the person sees for each delivery, and the grouping of held prompts |

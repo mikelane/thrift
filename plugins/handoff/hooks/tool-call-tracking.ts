@@ -3,7 +3,7 @@ import type { SessionState } from './session-state'
 import { fieldOf, validTaskId } from './tasks'
 
 // Only the keys this reads, so a call's input and result need no cast to reach it (KillShell is in no tool union).
-export type TrackedCall = Readonly<Record<string, unknown>>
+export type TrackedCall = { readonly tool: string } & Readonly<Record<string, unknown>>
 export type TrackedResult = { readonly deny?: string; readonly isError?: boolean; readonly result?: unknown }
 
 export const noteToolCall = (state: SessionState, call: TrackedCall, ran: TrackedResult): void => {

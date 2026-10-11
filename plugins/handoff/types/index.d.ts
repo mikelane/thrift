@@ -1,7 +1,7 @@
 export type Offer = {
   signal: 'strong' | 'weak'
   contextTokens: number
-  heldPrompt: boolean
+  hasHeldPrompt: boolean
   isBusy: boolean
 }
 
@@ -11,6 +11,6 @@ export type BandState = Offer | Writing
 
 declare module 'claude-code' {
   interface PluginState {
-    handoff: { offer: BandState | null }
+    handoff: { offer: Shaped<BandState | null> }
   }
 }

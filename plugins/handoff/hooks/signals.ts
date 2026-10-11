@@ -3,7 +3,7 @@ export type Signal = 'none' | 'strong' | 'weak'
 type StoppingPoint = 'finished-task' | 'new-work' | null
 export type Button = 'handoff' | 'handoff-send' | 'send-here' | 'compact' | 'not-now'
 
-type Response =
+type SignalResponse =
   | { kind: 'none' }
   | { kind: 'handoff'; holdsPrompt: boolean }
   | { kind: 'compact' }
@@ -59,29 +59,29 @@ type RespondInput = {
   isUnattended: boolean
 }
 
-const NONE: Response = { kind: 'none' }
+const NONE: SignalResponse = { kind: 'none' }
 
-type BandShape = { signal: Signal; heldPrompt: boolean; isBusy: boolean }
+type BandShape = { signal: Signal; hasHeldPrompt: boolean; isBusy: boolean }
 
-export const bandButtons = ({ signal, heldPrompt, isBusy }: BandShape): readonly Button[] => {
-  if (heldPrompt) return isBusy ? ['send-here'] : ['handoff-send', 'send-here']
+export const bandButtons = ({ signal, hasHeldPrompt, isBusy }: BandShape): readonly Button[] => {
+  if (hasHeldPrompt) return isBusy ? ['send-here'] : ['handoff-send', 'send-here']
   if (signal === 'strong') return ['handoff', 'not-now']
   return isBusy ? ['compact', 'not-now'] : ['compact', 'handoff', 'not-now']
 }
 
-const respondToStrong = (mode: 'ask' | 'act', stoppingPoint: StoppingPoint): Response => {
+const respondToStrong = (mode: 'ask' | 'act', stoppingPoint: StoppingPoint): SignalResponse => {
   const holdsPrompt = stoppingPoint === 'new-work'
   if (mode === 'act') return { kind: 'handoff', holdsPrompt }
-  const buttons = bandButtons({ signal: 'strong', heldPrompt: holdsPrompt, isBusy: false })
+  const buttons = bandButtons({ signal: 'strong', hasHeldPrompt: holdsPrompt, isBusy: false })
   return { kind: 'advise', holdsPrompt, buttons }
 }
 
-const respondToWeak = (mode: 'ask' | 'act', isBusy: boolean): Response => {
+const respondToWeak = (mode: 'ask' | 'act', isBusy: boolean): SignalResponse => {
   if (mode === 'act') return { kind: 'compact' }
-  return { kind: 'advise', holdsPrompt: false, buttons: bandButtons({ signal: 'weak', heldPrompt: false, isBusy }) }
+  return { kind: 'advise', holdsPrompt: false, buttons: bandButtons({ signal: 'weak', hasHeldPrompt: false, isBusy }) }
 }
 
-export const respond = ({ mode, signal, stoppingPoint, isBackgroundBusy, isUnattended }: RespondInput): Response => {
+export const respond = ({ mode, signal, stoppingPoint, isBackgroundBusy, isUnattended }: RespondInput): SignalResponse => {
   if (mode === 'off' || signal === 'none') return NONE
   if (isUnattended) return signal === 'strong' ? { kind: 'handoff', holdsPrompt: stoppingPoint === 'new-work' } : NONE
   return signal === 'strong' ? respondToStrong(mode, stoppingPoint) : respondToWeak(mode, isBackgroundBusy)

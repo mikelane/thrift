@@ -111,7 +111,7 @@ import {
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
-import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
+import { branchTicketPrefixes, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
 const BRANCH_READ_TIMEOUT_MS = 5000
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
@@ -139,7 +139,8 @@ const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be
 const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): string =>
   `Untested on Claude Code ${engineVersion}, so this session only logs decisions.${isInteractive ? ' /handoff still works.' : ''}`
 
-const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
+// The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
+const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
@@ -245,11 +246,11 @@ const takeDownBandFromBeforeReload = async ($: EngineInterface, state: SessionSt
   await takeDownBand($, state)
 }
 
-const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, heldPrompt: boolean) => {
+const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, hasHeldPrompt: boolean) => {
   const offer: Offer = {
     signal: trigger.signal === 'strong' ? 'strong' : 'weak',
     contextTokens: trigger.contextTokens,
-    heldPrompt,
+    hasHeldPrompt,
     isBusy: trigger.isBusy,
   }
   try {
@@ -354,6 +355,9 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
   }
 }
 
+// SAFETY: the record is written after restoreHeldGroups and sendHeldGroups return, so a throw inside either loop would lose
+// the record. refillBox and submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no
+// async calls, so no test can make a loop throw. Any call added to a loop must not throw either.
 const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
@@ -396,9 +400,6 @@ const abandonHandoff = async (
   await takeDownBand($, state)
   announce($, message)
   const recordedSessionId = sessionId ?? (await readSessionId($))
-  // SAFETY: the record is written after restoreHeldGroups returns, so a throw inside it would lose the record. refillBox and
-  // submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
-  // can make the loop throw. Any call added to the loop must not throw either.
   const restores = await restoreHeldGroups($, state, settledHandoff)
   const late = await restoreLateArrivals($, state)
   await writeRecord($, state, {
@@ -543,9 +544,6 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  // SAFETY: the record is written after sendHeldGroups returns, so a throw inside it would lose the record. submitEntered
-  // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
-  // can make the loop throw. Any call added to the loop must not throw either.
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
   const late = await sendLateArrivals($, state)
   await writeRecord($, state, {
@@ -779,7 +777,7 @@ const readBranch = async ($: EngineInterface): Promise<string> => {
 
 const inspectPrompt = async ($: EngineInterface, state: SessionState, text: string): Promise<boolean> => {
   for (const prefix of ticketUrlPrefixes(text)) state.urlPrefixes.add(prefix)
-  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefix(await readBranch($)) : []
+  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefixes(await readBranch($)) : []
   const prefixes = [...state.urlPrefixes, ...branchPrefixes]
   const isNewWork = namesNewWork(text, state.seenRefs, prefixes)
   for (const ref of workRefs(text, prefixes)) state.seenRefs.add(ref)
@@ -828,6 +826,9 @@ const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput, placeme
 }
 
 // The placement is read now: by the time the clock fires, the delivery may be over.
+// SAFETY: during a restore, a refused composer prompt can land in the box after a held composer prompt that arrived later,
+// because the hand-back waits for clock.after(0). That takes two composer submits within one engine round trip, which a real
+// session cannot produce, so no code guards it.
 const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
   const placement = refusedPromptPlacement(state.handoffHold)
   debug($, 'refused a prompt with attachments or context during the handoff')
