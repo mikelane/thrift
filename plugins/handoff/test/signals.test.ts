@@ -11,7 +11,6 @@ import {
   respond,
 } from '../hooks/signals'
 
-
 const asModeCases = [
   ['off', 'off'],
   ['ask', 'ask'],

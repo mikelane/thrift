@@ -39,7 +39,6 @@ export const contextFromStep = ({ input, created, read, advisorCalls, reported }
 
 export const formatTokens = (tokens: number): string => `${Math.round(tokens / 1000)}k`
 
-
 type ClassifyInput = {
   contextTokens: number
   threshold: number

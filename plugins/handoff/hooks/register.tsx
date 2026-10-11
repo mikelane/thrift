@@ -25,6 +25,7 @@ import {
   offerWithBusyState,
   statusText,
 } from './band-text'
+import { finishesTask } from './command-parse'
 import {
   decisionRecord,
   heldGroupFields,
@@ -74,7 +75,6 @@ import {
   type HeldPromptGroup,
   type SessionState,
 } from './session-state'
-import { finishesTask } from './command-parse'
 import {
   asMode,
   asThreshold,
