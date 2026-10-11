@@ -892,6 +892,55 @@ test_open_issue_with_the_exact_title_is_not_opened_again() {
   assert_out_has 'Issue already open for Claude Code 2.1.300 breaks handoff; not opening another.'
 }
 
+test_dot_dot_name_is_rejected() {
+  make_repo a
+  run_check_script -- ..
+  assert_rc 1
+  assert_out_has 'Invalid plugin name'
+}
+test_doubled_plugins_prefix_is_rejected() {
+  make_repo a
+  run_check_script -- plugins/plugins/a
+  assert_rc 1
+  assert_out_has 'Invalid plugin name'
+}
+test_nested_name_is_rejected() {
+  make_repo a
+  mkdir -p "$REPO/plugins/a/b"
+  run_check_script -- a/b
+  assert_rc 1
+  assert_out_has 'Invalid plugin name'
+}
+test_parent_directory_name_is_rejected_before_any_check_runs() {
+  make_repo a
+  mkdir -p "$REPO/x/.claude-plugin"
+  run_check_script -- ../x
+  assert_rc 1
+  assert_out_has 'Invalid plugin name'
+  assert_file_lacks "$STUB_LOG" 'plugins/../x'
+}
+test_plugins_prefix_in_log_mode_writes_the_log_under_the_bare_name() {
+  make_repo a b
+  run_check_script CHECK_LOG_DIR="$FAILURES" STUB_TSC_FAIL=a -- plugins/a
+  assert_rc 1
+  assert_file_has "$FAILURES/a.txt" 'FAILED: plugins/a: tsc -p exited 2'
+}
+test_plugins_prefix_is_accepted_the_same_as_the_bare_name() {
+  make_repo a b
+  run_check_script -- plugins/a
+  assert_rc 0
+  assert_file_has "$STUB_LOG" 'claude plugin test plugins/a'
+  assert_file_lacks "$STUB_LOG" 'plugins/plugins'
+}
+test_rejected_name_in_log_mode_writes_a_log_inside_the_log_directory() {
+  make_repo a
+  mkdir -p "$REPO/x/.claude-plugin"
+  run_check_script CHECK_LOG_DIR="$FAILURES" -- ../x
+  assert_rc 1
+  assert_file_has "$FAILURES/.._x.txt" 'Invalid plugin name'
+  assert_file_exists "$FAILURES/checked"
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue
