@@ -484,6 +484,8 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  // SAFETY: the record goes out only after sendGroups returns. That relies on every call in its loop (submit, fill,
+  // and keepInTranscript's $.ui.log) catching its own errors, which no test can break. A throw there would lose the record.
   const deliveries = await sendGroups($, state, groupsToSend, settledHandoff.isUnattended)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
