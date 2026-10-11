@@ -878,6 +878,7 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
     isBackgroundBusy: isBusy,
     mode: state.mode,
     isUnattended,
+    isComposer: isComposerOrigin(e.origin.kind),
   })
   const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {

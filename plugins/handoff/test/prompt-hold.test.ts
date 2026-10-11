@@ -36,6 +36,28 @@ test('It drops a prompt that names new work and holds it in ask mode', ASK, asyn
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
 })
 
+for (const kind of ['bridge', 'sdk'] as const) {
+  test(`It lets a ${kind} prompt that names new work run in ask mode`, ASK, async ($, on) => {
+    const world = await ready($, on)
+    const result = await submitPerson($, 'now ENG-2', { kind })
+    await world.clock.settle()
+    expect([dropOf(result), world.box.text, world.effects.includes('fill:now ENG-2')]).toEqual([undefined, '', false])
+  })
+}
+
+test('It logs a none record at the prompt point for a bridge prompt that names new work in ask mode', ASK, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2', { kind: 'bridge' })
+  expect(lastRecord(world)).toMatchObject({ action: 'none', mode: 'active', trigger_values: { point: 'prompt', signal: 'strong' } })
+})
+
+test('It still hands a bridge prompt that names new work off first in act mode', ACT, async ($, on) => {
+  const world = await ready($, on)
+  const result = await submitPerson($, 'now ENG-2', { kind: 'bridge' })
+  expect(dropOf(result)).toBe('Handing off first. Your prompt will be sent in the fresh session.')
+  await world.clock.settle()
+})
+
 test('It refills the box with the held prompt once the clock fires', ASK, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')

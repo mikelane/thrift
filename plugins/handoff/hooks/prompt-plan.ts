@@ -10,6 +10,7 @@ type NewWorkInput = {
   isBackgroundBusy: boolean
   mode: Mode
   isUnattended: boolean
+  isComposer: boolean
 }
 
 export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind)
@@ -57,6 +58,8 @@ export const planNewWorkPrompt = (input: NewWorkInput): { signal: Signal; action
     isUnattended: input.isUnattended,
   })
   if (response.kind === 'handoff') return { signal, action: 'handoff' }
-  if (response.kind === 'advise' && response.holdsPrompt) return { signal, action: 'hold' }
+  // Only a prompt typed at this terminal is held for the band: the sender of any other is somewhere else, and a refill
+  // would put their prompt in the box of the person who is here. The turn it starts can still raise the band.
+  if (response.kind === 'advise' && response.holdsPrompt && input.isComposer) return { signal, action: 'hold' }
   return { signal, action: 'none' }
 }

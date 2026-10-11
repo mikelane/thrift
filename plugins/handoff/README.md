@@ -159,7 +159,7 @@ into a weak one.
 | Signal | `off` | `ask` | `act` |
 |---|---|---|---|
 | Strong, finished task | Log only | Band: Hand off and clear, Not now | Hand off |
-| Strong, prompt names new work | Log only | Hold the prompt and refill the box. Band: Hand off and send it, Send here. Enter again sends it here. | Drop the prompt, hand off, resend it in the fresh session |
+| Strong, prompt names new work | Log only | Hold the prompt and refill the box (only a prompt typed in this terminal; one from the bridge or an SDK client runs at once, and the turn it starts can still raise the band). Band: Hand off and send it, Send here. Enter again sends it here. | Drop the prompt, hand off, resend it in the fresh session |
 | Weak, background work running | Log only | Band: Compact, Not now. No handoff button. | Compact |
 | Weak, otherwise | Log only | Band: Compact, Hand off and clear, Not now | Compact |
 

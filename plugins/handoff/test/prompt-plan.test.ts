@@ -111,6 +111,7 @@ const newWork = (overrides: Partial<NewWorkInput>): NewWorkInput => ({
   isBackgroundBusy: false,
   mode: 'ask',
   isUnattended: false,
+  isComposer: true,
   ...overrides,
 })
 
@@ -119,6 +120,8 @@ const newWorkCases = [
   ['off mode past the threshold', { mode: 'off' }, 'strong', 'none'],
   ['ask mode past the threshold', {}, 'strong', 'hold'],
   ['act mode past the threshold', { mode: 'act' }, 'strong', 'handoff'],
+  ['a remote prompt in ask mode past the threshold', { isComposer: false }, 'strong', 'none'],
+  ['a remote prompt in act mode past the threshold', { isComposer: false, mode: 'act' }, 'strong', 'handoff'],
   ['ask mode with background work busy', { isBackgroundBusy: true }, 'weak', 'none'],
   ['act mode with background work busy', { mode: 'act', isBackgroundBusy: true }, 'weak', 'none'],
   ['an unattended prompt past the threshold', { isUnattended: true }, 'strong', 'handoff'],
