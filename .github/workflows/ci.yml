@@ -66,13 +66,14 @@ jobs:
         env:
           CLAUDE_CODE_VERSION: ${{ matrix.version }}
         run: |
-          npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" typescript@5.6.3
+          npm ci
+          npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           echo "$RUNNER_TEMP/tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Show the installed builds
         run: |
           claude --version
-          tsc --version
+          node_modules/.bin/tsc --version
 
       - name: Check the pinned build is the one every plugin was tested through
         if: matrix.channel == 'pinned'
@@ -95,22 +96,13 @@ jobs:
           done
 
       - name: Validate, type-check, and test every plugin
+        env:
+          CHECK_LOG_DIR: ${{ runner.temp }}/failures
         run: |
-          mkdir -p "$RUNNER_TEMP/failures"
           status=0
-          for dir in plugins/*/; do
-            name=$(basename "$dir")
-            log="$RUNNER_TEMP/failures/$name.txt"
-            {
-              echo '## claude plugin validate'
-              claude plugin validate "plugins/$name" &&
-                echo '## tsc -p' &&
-                tsc -p "plugins/$name" &&
-                echo '## claude plugin test' &&
-                claude plugin test "plugins/$name"
-            } > "$log" 2>&1 && rm "$log" || { cat "$log"; status=1; }
-          done
-          touch "$RUNNER_TEMP/failures/checked"
+          scripts/check.sh || status=1
+          mkdir -p "$CHECK_LOG_DIR"
+          touch "$CHECK_LOG_DIR/checked"
           exit "$status"
 
       - name: Record the Claude Code version for the canary issue job
