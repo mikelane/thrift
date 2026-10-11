@@ -3,9 +3,10 @@
 # (`report`) job and the `scripts/check.sh` run that feeds it.
 #
 # The `report` job checks out nothing, so its script has to stay inline in ci.yml. This harness
-# pulls the real step scripts out of ci.yml and runs them under `bash -eo pipefail`, which is what
-# `shell: bash` gives and is stricter than the `bash -e` a step without `shell:` gets. A stub `gh`,
-# a stub `claude` and a stub `tsc` stand in for the real tools. No network and no API key.
+# pulls the real step scripts out of ci.yml and runs each under the shell Actions gives it: the
+# report step declares `shell: bash`, so `bash -eo pipefail`, and the others have no `shell:` key,
+# so `bash -e`. Extraction fails if a step gains or changes a key the harness does not model. A stub
+# `gh`, a stub `claude` and a stub `tsc` stand in for the real tools. No network and no API key.
 #
 # Usage: .github/tests/canary-report.sh [name-fragment]   (runs the tests whose name contains it)
 # CANARY_CI_YML points the harness at another copy of ci.yml, which is how the extraction guard
@@ -27,28 +28,69 @@ for tool in jq openssl; do
 done
 
 # Prints the body of one step's `run:` from a workflow file, de-indented. Exits 1, and says why,
-# when the step is not found at the indentation the workflow uses, or is found more than once, so a
-# renamed, re-indented or duplicated step fails the harness instead of testing a stale copy.
+# when the step is not found at the indentation the workflow uses, is found more than once, or has
+# a key the harness does not model, so a renamed, re-indented, duplicated or conditional step fails
+# the harness instead of testing a script that Actions would not run, or would run differently.
+#
+# The third argument lists the step's keys, one per line, besides `name` and `run`:
+#   key        allowed, any value
+#   key=value  allowed only with exactly that value
+#   +key=value required as well
+# Every key at the step's indentation, before or after `run`, must be listed.
 extract_step() {
-  local ci_yml="$1" step_name="$2" script occurrences
+  local ci_yml="$1" step_name="$2" spec="$3" script occurrences status=0
   occurrences=$(grep -cxF -- "      - name: $step_name" "$ci_yml" || true)
   if [[ "$occurrences" -gt 1 ]]; then
     echo "The step '$step_name' appears $occurrences times in $ci_yml, so the harness cannot tell which one runs." >&2
     return 1
   fi
-  script=$(awk -v want="      - name: $step_name" '
-    state == 0 { if ($0 == want) state = 1; next }
-    state == 1 {
-      if ($0 == "        run: |") { state = 2; next }
-      if (index($0, "        run: ") == 1) { print substr($0, 14); exit }
-      if ($0 ~ /^      - / || $0 ~ /^  [A-Za-z]/) exit
-      next
+  script=$(SPEC="$spec" awk -v want="      - name: $step_name" '
+    BEGIN {
+      count = split(ENVIRON["SPEC"], entries, "\n")
+      for (i = 1; i <= count; i++) {
+        entry = entries[i]
+        if (entry == "") continue
+        required = (substr(entry, 1, 1) == "+")
+        if (required) entry = substr(entry, 2)
+        eq = index(entry, "=")
+        key = eq ? substr(entry, 1, eq - 1) : entry
+        if (eq) value[key] = substr(entry, eq + 1)
+        allowed[key] = 1
+        if (required) needed[key] = 1
+      }
+      allowed["run"] = 1
+      state = 0
     }
+    function check_key(    key) {
+      key = $0
+      sub(/^        /, "", key)
+      sub(/:.*/, "", key)
+      seen[key] = 1
+      if (!(key in allowed)) problem = "has the key \"" key "\", which the harness does not model"
+      else if ((key in value) && $0 != "        " key ": " value[key]) problem = "has \"" key "\" set to something other than \"" value[key] "\""
+    }
+    state == 4 { next }
+    state == 0 { if ($0 == want) state = 1; next }
+    $0 ~ /^      - / || $0 ~ /^  [A-Za-z]/ { state = 4; next }
     state == 2 {
-      if ($0 == "") { print ""; next }
+      if ($0 ~ /^ *$/) { print ""; next }
       if (substr($0, 1, 10) == "          ") { print substr($0, 11); next }
-      exit
-    }' "$ci_yml")
+      state = 3
+    }
+    $0 ~ /^        [A-Za-z_-]+:/ {
+      check_key()
+      if (state == 1 && $0 == "        run: |") state = 2
+      else if (state == 1 && index($0, "        run: ") == 1) { print substr($0, 14); state = 3 }
+    }
+    END {
+      if (state == 0) exit
+      if (problem == "") for (key in needed) if (!(key in seen)) problem = "lacks the key \"" key "\""
+      if (problem != "") { print problem > "/dev/stderr"; exit 3 }
+    }' "$ci_yml" 2> "$WORK/extract.err") || status=$?
+  if [[ "$status" == 3 ]]; then
+    echo "The step '$step_name' in $ci_yml $(cat "$WORK/extract.err")." >&2
+    return 1
+  fi
   if [[ -z "$script" ]]; then
     echo "Could not extract the step '$step_name' from $ci_yml. Was it renamed or re-indented?" >&2
     return 1
@@ -56,11 +98,20 @@ extract_step() {
   printf '%s\n' "$script"
 }
 
-# Prints the value of one `KEY: value` setting of the report step.
+REPORT_SPEC=$'env\n+shell=bash'
+# shellcheck disable=SC2016 # the workflow expression is matched literally
+RECORD_SPEC=$'+if=always() && (github.event_name == \'schedule\' || github.event_name == \'workflow_dispatch\') && matrix.channel == \'latest\''
+CHECK_SPEC=$'env'
+extract_report_step() { extract_step "$1" "$REPORT_STEP" "$REPORT_SPEC"; }
+
+# Prints the value of one `KEY: value` setting of the report step's env.
 workflow_setting() {
-  local value
-  value=$(sed -n "s/^          $1: //p" "$CI_YML" | head -n 1)
-  [[ -n "$value" ]] || { echo "Could not read $1 from $CI_YML." >&2; return 1; }
+  local ci_yml="$1" key="$2" value
+  value=$(awk -v want="      - name: $REPORT_STEP" -v key="          $key: " '
+    $0 == want { inside = 1; next }
+    inside && ($0 ~ /^      - / || $0 ~ /^  [A-Za-z]/) { exit }
+    inside && index($0, key) == 1 { print substr($0, length(key) + 1); exit }' "$ci_yml")
+  [[ -n "$value" ]] || { echo "Could not read $key from the report step in $ci_yml." >&2; return 1; }
   printf '%s\n' "$value"
 }
 
@@ -68,18 +119,18 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 extract_or_die() {
-  local step_name="$1" must_contain="$2" target="$3"
-  extract_step "$CI_YML" "$step_name" > "$target" || exit 2
+  local step_name="$1" spec="$2" must_contain="$3" target="$4"
+  extract_step "$CI_YML" "$step_name" "$spec" > "$target" || exit 2
   grep -qF -- "$must_contain" "$target" || {
     echo "The step '$step_name' no longer contains '$must_contain', so the harness would test the wrong script." >&2
     exit 2
   }
 }
-extract_or_die "$REPORT_STEP" 'gh issue create' "$WORK/report.sh"
-extract_or_die "$RECORD_STEP" 'claude-version' "$WORK/record.sh"
-extract_or_die "$CHECK_STEP" 'scripts/check.sh' "$WORK/check-step.sh"
-MAX_ISSUES=$(workflow_setting MAX_ISSUES) || exit 2
-MAX_FENCE=$(workflow_setting MAX_FENCE) || exit 2
+extract_or_die "$REPORT_STEP" "$REPORT_SPEC" 'gh issue create' "$WORK/report.sh"
+extract_or_die "$RECORD_STEP" "$RECORD_SPEC" 'claude-version' "$WORK/record.sh"
+extract_or_die "$CHECK_STEP" "$CHECK_SPEC" 'scripts/check.sh' "$WORK/check-step.sh"
+MAX_ISSUES=$(workflow_setting "$CI_YML" MAX_ISSUES) || exit 2
+MAX_FENCE=$(workflow_setting "$CI_YML" MAX_FENCE) || exit 2
 
 # ---------------------------------------------------------------------------------------------
 # Stubs
@@ -276,42 +327,79 @@ run_check() {
     PATH="$REPO/bin:/usr/bin:/bin" HOME="$T/home" TMPDIR="$T/tmp" \
     ANTHROPIC_API_KEY=leaked CLAUDE_CODE_OAUTH_TOKEN=leaked CLAUDE_CONFIG_DIR=/caller-config \
     ${settings[@]+"${settings[@]}"} \
-    "$BASH" --noprofile --norc -eo pipefail "$script" ${1+"$@"}) > "$OUT" 2>&1 || RC=$?
+    "$BASH" --noprofile --norc -e "$script" ${1+"$@"}) > "$OUT" 2>&1 || RC=$?
 }
 run_check_script() { run_check "$REPO/scripts/check.sh" "$@"; }
 run_check_step() { run_check "$WORK/check-step.sh" "$@"; }
 
 run_record_step() {
   RC=0
-  (cd "$T" && env RUNNER_TEMP="$T" PATH="$1" "$BASH" --noprofile --norc -eo pipefail "$WORK/record.sh") > "$OUT" 2>&1 || RC=$?
+  (cd "$T" && env RUNNER_TEMP="$T" PATH="$1" "$BASH" --noprofile --norc -e "$WORK/record.sh") > "$OUT" 2>&1 || RC=$?
 }
 
 # ---------------------------------------------------------------------------------------------
 # Extraction guard
 # ---------------------------------------------------------------------------------------------
 test_extraction_finds_the_report_step_in_the_real_workflow() {
-  extract_step "$CI_YML" "$REPORT_STEP" > "$T/out" 2>&1 || fail 'extraction failed'
+  extract_report_step "$CI_YML" > "$T/out" 2>&1 || fail 'extraction failed'
   assert_file_has "$T/out" 'gh issue create'
 }
 test_extraction_fails_when_the_step_is_renamed() {
   sed 's/- name: Open an issue for each plugin/- name: Open issues for each plugin/' "$CI_YML" > "$T/ci.yml"
-  extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed on a renamed step'
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed on a renamed step'
   return 0
 }
 test_extraction_fails_when_the_step_name_appears_twice() {
   { cat "$CI_YML"; printf '  decoy:\n    steps:\n      - name: %s\n        run: |\n          gh issue create\n' "$REPORT_STEP"; } > "$T/ci.yml"
-  extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed with the step name in two places'
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed with the step name in two places'
   return 0
 }
 test_extraction_fails_when_the_workflow_is_re_indented() {
   sed 's/^/  /' "$CI_YML" > "$T/ci.yml"
-  extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed on a re-indented workflow'
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed on a re-indented workflow'
   return 0
 }
 test_extraction_fails_when_the_run_block_is_replaced_by_a_uses_step() {
   sed 's/^        run: |$/        with: |/' "$CI_YML" > "$T/ci.yml"
-  extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed with no run block'
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed with no run block'
   return 0
+}
+test_extraction_fails_when_the_report_step_gains_an_if_condition() {
+  sed "s/^      - name: ${REPORT_STEP}\$/&\\
+        if: false/" "$CI_YML" > "$T/ci.yml"
+  grep -qxF '        if: false' "$T/ci.yml" || { fail 'the fixture did not add the if: line'; return; }
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed on a step that never runs'
+  return 0
+}
+test_extraction_fails_when_the_report_step_loses_its_shell_key() {
+  grep -vxF '        shell: bash' "$CI_YML" > "$T/ci.yml"
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed with no shell key, so Actions would drop pipefail'
+  return 0
+}
+test_extraction_fails_when_the_report_step_runs_under_another_shell() {
+  sed 's/^        shell: bash$/        shell: sh/' "$CI_YML" > "$T/ci.yml"
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed with shell: sh'
+  return 0
+}
+test_extraction_fails_when_a_key_follows_the_run_block() {
+  # shellcheck disable=SC2016 # the sed pattern holds a literal $
+  sed 's/^          exit "\$problems"$/&\
+        continue-on-error: true/' "$CI_YML" > "$T/ci.yml"
+  grep -qxF '        continue-on-error: true' "$T/ci.yml" || { fail 'the fixture did not add the key'; return; }
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 && fail 'extraction passed with a key after the run block'
+  return 0
+}
+test_extraction_keeps_a_whitespace_only_line_shorter_than_the_indentation() {
+  extract_report_step "$CI_YML" > "$T/expected"
+  awk '{ print } /^          failures="\$RUNNER_TEMP\/failures"$/ { getline; print "   " }' "$CI_YML" > "$T/ci.yml"
+  extract_report_step "$T/ci.yml" > "$T/out" 2>&1 || fail 'extraction failed on a short whitespace-only line'
+  [[ "$(wc -l < "$T/out")" == "$(wc -l < "$T/expected")" ]] || fail 'the script was cut short at the whitespace-only line'
+}
+test_workflow_setting_ignores_the_same_key_in_another_step() {
+  sed "s/^          CLAUDE_CODE_VERSION: .*\$/&\\
+          MAX_FENCE: 1/" "$CI_YML" > "$T/ci.yml"
+  grep -qxF '          MAX_FENCE: 1' "$T/ci.yml" || { fail 'the fixture did not add the decoy'; return; }
+  [[ "$(workflow_setting "$T/ci.yml" MAX_FENCE)" == "$MAX_FENCE" ]] || fail 'MAX_FENCE was read from another step'
 }
 test_harness_exits_2_when_the_workflow_it_is_pointed_at_lost_a_step() {
   sed 's/- name: Open an issue for each plugin/- name: Open issues for each plugin/' "$CI_YML" > "$T/ci.yml"
