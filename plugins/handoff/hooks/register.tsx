@@ -272,10 +272,10 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
-// The engine has no way to submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', and the
-// test kit does not show it to the plugin's own prompt.submit hook. So the turn it starts takes the origin the prompt first
-// came from here, at the call. A hook beneath the plugin that refuses the prompt makes
-// submit resolve with { drop } instead of rejecting.
+// The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which the
+// prompt.submit hook above does not classify. So the flag for the turn it starts is set here, from the origin the prompt first
+// had, and put back if the prompt does not enter. A hook beneath the plugin that refuses the prompt makes submit resolve with
+// { drop } instead of rejecting.
 // SAFETY: a person prompt that lands in the one engine round trip a submit takes, with no handoff holding, sets the flag itself,
 // and a refused submit then puts back the value from before it. That needs a failed restore of a scheduled prompt, a person
 // typing in that window, and the turn before it unattended. The cost is one turn judged by the wrong origin, so a band is
