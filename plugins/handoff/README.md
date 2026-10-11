@@ -372,7 +372,9 @@ plugin without any error. Four layers guard against that:
    shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
    fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
    an interactive run, so a hot reload mid-session stays `off` until the next session start.
-   `/handoff` still works, because you asked for it at a moment you chose.
+   In an interactive session `/handoff` still works, because you asked for it at a moment you
+   chose, and the toast says so. A session with no prompt (`-p`, the SDK) never registers
+   `/handoff`, so there the toast does not mention it.
 4. **`engine_version` on every log record.**
 
 | Release | Tested through Claude Code |

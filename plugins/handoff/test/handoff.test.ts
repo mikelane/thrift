@@ -241,6 +241,20 @@ for (const [name, version] of untestedBuilds) {
   })
 }
 
+test('It does not say /handoff works in the untested toast of a session with no prompt', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($, false)
+  expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual(['toast:Untested on Claude Code 2.1.296, so it only logs this session.'])
+})
+
+test('It registers no /handoff command in a session with no prompt', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($, false)
+  expect(world.effects).not.toContain('register:handoff')
+})
+
 test('It names the base version in the untested toast', ACT, async ($, on) => {
   const world = install($, on)
   world.version = { version: '2.1.296', base: '2.1.296' }

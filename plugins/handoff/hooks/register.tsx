@@ -129,6 +129,10 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. H
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
 
+// /handoff is registered only when a person is at the prompt, so only then is it there to mention.
+const untestedEngineToast = (engineVersion: string, isInteractive: boolean): string =>
+  `Untested on Claude Code ${engineVersion}, so it only logs this session.${isInteractive ? ' /handoff still works.' : ''}`
+
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
@@ -1044,7 +1048,7 @@ export const register: Register = (on, options) => {
     state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
-      if (setting !== 'off') $.ui.toast(`Untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
+      if (setting !== 'off') $.ui.toast(untestedEngineToast(engineVersion, e.isInteractive))
       await writeRecord($, state, { ...snapshotTrigger(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
