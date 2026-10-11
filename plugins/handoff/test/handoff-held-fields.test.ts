@@ -7,6 +7,7 @@ import type { HeldPromptGroup } from '../hooks/session-state'
 import {
   answered,
   growTo200k,
+  holdFork,
   install,
   lastRecord,
   runCommand,
@@ -32,15 +33,6 @@ const SUBMISSIONS: Record<HeldKind, ($: Engine) => Promise<unknown>> = {
   person: $ => submitPerson($, GROUP_OF.person.text),
   'person again': $ => submitPerson($, GROUP_OF['person again'].text),
   scheduled: $ => submitPerson($, GROUP_OF.scheduled.text, { kind: 'scheduled-trigger' }),
-}
-
-const holdFork = (world: World) => {
-  const pending: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pending.release = resolve
-    })
-  return pending
 }
 
 const handoffWithHeld = async ($: Engine, on: On, held: readonly HeldKind[]) => {

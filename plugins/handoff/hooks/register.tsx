@@ -59,14 +59,15 @@ import {
   carriesExtras,
   planPromptDuringHandoff,
   isPersonOrigin,
-  isTerminalOrigin,
+  isComposerOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
+  senderLabel,
 } from './prompt-plan'
 import {
   addHeldPrompt,
   beginSending,
-  dropResubmittedTurn,
+  removeResubmittedPrompt,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -82,13 +83,13 @@ import {
   noteCacheReads,
   recordSessionEnd,
   releaseCarried,
-  queueResubmittedTurn,
+  queueResubmittedPrompt,
   releaseCarriedGroup,
   releaseTurnEndWaiter,
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
-  takeLateArrivals,
+  takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type ButtonPress,
   type HeldPrompt,
@@ -114,13 +115,13 @@ const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes. If the handoff fails, it goes back in the prompt box, or is sent here if a scheduled task sent it.'
+const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
 const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
-const keptRefusedPrompt = (kind: string, text: string) =>
-  `A prompt from ${kind}, which is not this terminal, was refused during the handoff, so it was not sent. Here it is:\n${text}`
+const keptRefusedPrompt = (kind: string, text: string): string =>
+  `A prompt from ${senderLabel(kind)} had attachments or context, so it could not be held during the handoff and did not run. Its attachments and context were not kept. Its text, to send again after the handoff:\n${text}`
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
@@ -260,18 +261,19 @@ const registerHandoffCommand = async ($: EngineInterface) => {
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
-// before_draft puts a restored prompt ahead of whatever the person has typed. after_draft keeps the order of prompts that
-// reach the box one after another, so each lands behind the one before it.
+// before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box
+// one after another keep their order.
 type BoxPlacement = 'before_draft' | 'after_draft'
 
-// A prompt the box already holds is not added again, so an identical prompt typed twice shows once; the box is for the
-// person to review and send, and a second copy of a line they can see would only be noise to delete.
+// A prompt the box already holds as whole lines is not added again, so an identical prompt sent twice shows once; the box
+// is for the person to review and send, and a second copy of a line they can see would only be noise to delete.
 const refillBox = async ($: EngineInterface, text: string, placement: BoxPlacement = 'before_draft'): Promise<boolean> => {
   try {
     const draft = (await $.prompt.read()).text
     if (holdsPrompt(draft, text)) return true
     const withDraft = placement === 'before_draft' ? `${text}\n${draft}` : `${draft}\n${text}`
     const filled = await $.prompt.fill({ text: draft === '' ? text : withDraft, mode: 'replace' })
+    if (!filled.isFilled) debug($, `the prompt box refused the prompt: ${filled.refusal ?? 'refused by a hook'}`)
     return filled.isFilled
   } catch (error) {
     debug($, `could not refill the prompt box: ${String(error)}`)
@@ -281,17 +283,18 @@ const refillBox = async ($: EngineInterface, text: string, placement: BoxPlaceme
 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
-// The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which the
-// prompt.submit hook above does not classify, and submit resolves once the prompt is queued, not once its turn starts. So the
-// origin goes into a queue here and the turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes
-// submit resolve with { drop } instead of rejecting.
+// The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
+// plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
+// the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
+// turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of
+// rejecting.
 const submitEntered = async (
   $: EngineInterface,
   state: SessionState,
   prompt: HeldPrompt,
   failureLabel: string,
 ): Promise<boolean> => {
-  queueResubmittedTurn(state, prompt)
+  queueResubmittedPrompt(state, prompt)
   try {
     const result = await $.prompt.submit({ text: prompt.text })
     if (result.drop === undefined) return true
@@ -299,7 +302,7 @@ const submitEntered = async (
   } catch (error) {
     debug($, `${failureLabel}: ${String(error)}`)
   }
-  dropResubmittedTurn(state, prompt)
+  removeResubmittedPrompt(state, prompt)
   return false
 }
 
@@ -454,11 +457,13 @@ const sendHeldGroups = async (
   return deliveries
 }
 
+type LateArrivals = { prompts: HeldPrompt[]; deliveries: Carried[] }
+
 // Prompts that arrived during the delivery go in one by one in arrival order, and more may arrive while they do.
-const sendLateArrivals = async ($: EngineInterface, state: SessionState) => {
+const sendLateArrivals = async ($: EngineInterface, state: SessionState): Promise<LateArrivals> => {
   const prompts: HeldPrompt[] = []
   const deliveries: Carried[] = []
-  for (let arrived = takeLateArrivals(state); arrived.length > 0; arrived = takeLateArrivals(state)) {
+  for (let arrived = takeLateArrivalsOrEndSending(state); arrived.length > 0; arrived = takeLateArrivalsOrEndSending(state)) {
     for (const prompt of arrived) {
       // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
       await inspectPrompt($, state, prompt.text)
@@ -478,7 +483,8 @@ const continueInFreshSession = async (
   hasTurnAfterNote: boolean,
   clearedBy: ClearedBy,
 ) => {
-  // Before the first await: from here a prompt that arrives is held until the note and the held prompts have gone in.
+  // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
+  // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
   await registerHandoffCommand($)
   const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
@@ -763,7 +769,7 @@ const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
 // box to send again. For any other sender the box is not where they are, and filling it could displace the draft of the
 // person who is: the engine has no channel back to the sender beyond the drop reason, so the text goes in the transcript.
 const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput): Promise<void> => {
-  if (isTerminalOrigin(e.origin.kind)) return returnToBox($, e.text)
+  if (isComposerOrigin(e.origin.kind)) return returnToBox($, e.text)
   $.ui.log(keptRefusedPrompt(e.origin.kind, e.text))
 }
 
@@ -983,8 +989,8 @@ export const register: Register = (on, options) => {
   // the new state starts with pending null and nothing held. A handoff already running keeps the old state and its old
   // closures. Its prompts are no longer held, so they pass through and /clear can land inside their turn. The old hooks are
   // gone too, so nothing releases a wait for a turn to end, and that handoff waits forever and never clears. Both need a
-  // reload in the middle of a handoff, which only someone editing the plugin can cause. No guard: carrying the state across
-  // a reload would need it in an atom, and a handoff takes a few seconds. After a reload, run /handoff again.
+  // reload while a handoff runs, from the note being written until its prompts are delivered. No guard: carrying the state
+  // across a reload would need it in an atom. After a reload, run /handoff again.
   const state = createState({
     setting,
     threshold: asThreshold(options.handoffContextTokens),

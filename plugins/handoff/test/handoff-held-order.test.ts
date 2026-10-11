@@ -1,24 +1,22 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, lastRecord, runCommand, submitPerson, writingTheNote, type World } from './helpers'
+import { dropOf, growTo200k, lastRecord, runCommand, submitPerson, writingTheNote, type World } from './helpers'
 import type { Engine } from 'claude-code/testing'
 
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes. If the handoff fails, it goes back in the prompt box, or is sent here if a scheduled task sent it.'
+const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
+const REFUSED_DURING_HANDOFF =
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
 
 type Arrival = { text: string; kind?: 'composer' | 'scheduled-trigger' }
 
-// One-shot callbacks, one per upcoming prompt.submit in order: each submit that carries a callback lets that prompt arrive
-// in the fresh session while the handoff is still delivering.
-const arriveDuringSubmits = ($: Engine, world: World, arrivals: Array<Arrival | undefined>) => {
+// One-shot callbacks, one per upcoming prompt.submit in order: each lets its prompt arrive in the fresh session while the
+// handoff is still delivering. A test that needs a submit with no arrival puts an undefined slot in world.submitHooks itself.
+const arriveDuringSubmits = ($: Engine, world: World, arrivals: Arrival[]) => {
   const results: Array<Promise<unknown>> = []
-  world.submitHooks = arrivals.map(arrival =>
-    arrival === undefined
-      ? undefined
-      : () => {
-          results.push(submitPerson($, arrival.text, arrival.kind === undefined ? {} : { kind: arrival.kind }))
-        },
-  )
+  world.submitHooks = arrivals.map(({ text, kind = 'composer' }) => () => {
+    results.push(submitPerson($, text, { kind }))
+  })
   return results
 }
 
@@ -38,14 +36,15 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'held one')
     const results = arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(dropOf(await results[0])).toBe(HELD_FOR_HANDOFF)
+    expect([dropOf(await results[0]), entered(world)]).toEqual([HELD_FOR_HANDOFF, ['entered:plugin:held one', 'entered:plugin:late']])
   })
 
   test('It sends a prompt that arrives mid-delivery after both held groups', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'person says')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    arriveDuringSubmits($, world, [undefined, { text: 'late' }])
+    arriveDuringSubmits($, world, [{ text: 'late' }])
+    world.submitHooks.unshift(undefined)
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:person says', 'entered:plugin:nightly job', 'entered:plugin:late'])
   })
@@ -94,15 +93,15 @@ describe('prompts that arrive while the handoff delivers', () => {
     expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}\n\nheld one`, 'entered:plugin:late'])
   })
 
-  test('It sends a prompt that arrives while the note lands in the box after nothing else', async ($, on) => {
+  test('It sends a prompt that arrives mid-delivery once the refused note and held prompt went in the box', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     world.submitDropped = true
     await submitPerson($, 'held one')
-    arriveDuringSubmits($, world, [{ text: 'late' }, undefined])
-    world.submitHooks[1] = () => {
+    arriveDuringSubmits($, world, [{ text: 'late' }])
+    world.submitHooks.push(() => {
       world.submitDropped = false
-    }
+    })
     await finishNote()
     expect([entered(world), world.box.text]).toEqual([['entered:plugin:late'], `${NOTE_MESSAGE}\n\nheld one`])
   })
@@ -151,7 +150,7 @@ describe('events that land while the handoff delivers', () => {
       },
     ]
     await finishNote()
-    expect([dropOf(await late) === undefined, world.box.text]).toEqual([false, 'late picture'])
+    expect([dropOf(await late), entered(world), world.box.text]).toEqual([REFUSED_DURING_HANDOFF, ['entered:plugin:held one'], 'late picture'])
   })
 })
 
@@ -176,16 +175,43 @@ describe('the record of a handoff that held prompts while it delivered', () => {
     const { world, finishNote } = await writingTheNote($, on)
     world.fillRefusal = 'dialog'
     await submitPerson($, 'held one')
-    const afterFirstSubmit = () => {
+    const refuseTheLateSubmit = () => {
       world.submitDropped = true
     }
     world.submitHooks = [
       () => {
         void submitPerson($, 'late')
       },
-      afterFirstSubmit,
+      refuseTheLateSubmit,
     ]
     await finishNote()
+    expect(entered(world)).toEqual(['entered:plugin:held one'])
     expect(lastRecord(world).trigger_values).toMatchObject({ held_other_delivery: 'not_carried' })
+  })
+
+  test('It writes a debug line when the box refuses a prompt that arrived mid-delivery', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    world.fillRefusal = 'dialog'
+    world.submitDropped = true
+    arriveDuringSubmits($, world, [{ text: 'late' }])
+    await finishNote()
+    expect(world.debugLines.join('\n')).toContain('the prompt box refused the prompt')
+  })
+})
+
+describe('tickets named by a prompt that arrived while the handoff delivered', () => {
+  test('It does not call a ticket that a prompt arriving mid-delivery named new work later', { options: { handoffMode: 'ask' } }, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.branch = 'alice/eng-1-start'
+    await submitPerson($, 'start on ENG-1')
+    arriveDuringSubmits($, world, [{ text: 'now ENG-2' }])
+    await finishNote()
+    await growTo200k($, world)
+    const result = await submitPerson($, 'keep going on ENG-2')
+    expect([dropOf(result), entered(world)]).toEqual([
+      undefined,
+      ['entered:plugin:start on ENG-1', 'entered:plugin:now ENG-2', 'entered:composer:keep going on ENG-2'],
+    ])
   })
 })

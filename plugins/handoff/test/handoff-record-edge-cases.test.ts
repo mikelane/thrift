@@ -1,20 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, On } from 'claude-code'
+import type { On } from 'claude-code'
 
-import { answered, completeTurn, growTo200k, install, lastRecord, runCommand, startSession, startTurn, type World } from './helpers'
+import { answered, completeTurn, growTo200k, holdFork, install, lastRecord, runCommand, startSession, startTurn, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
-
-const holdFork = (world: World) => {
-  const pendingFork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pendingFork.release = resolve
-    })
-  return pendingFork
-}
 
 const personClear = ($: Engine) => $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
 

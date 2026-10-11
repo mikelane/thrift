@@ -1,24 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, On } from 'claude-code'
+import type { On } from 'claude-code'
 
 import type { DecisionReason } from '../hooks/decision-reasons'
-import { answered, bash, completeTurn, growTo200k, install, runCommand, startSession, startTurn, submitPerson, type LogRecord, type World } from './helpers'
+import { answered, bash, completeTurn, growTo200k, holdFork, install, runCommand, startSession, startTurn, submitPerson, type LogRecord, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const ASK = { options: { handoffMode: 'ask' } } as const
 const END_REASONS: readonly DecisionReason[] = ['no_handoff_written', 'handoff_failed', 'session_ended', 'background_busy', 'clear_failed']
 
 const isEndReason = (value: unknown): boolean => END_REASONS.some(reason => reason === value)
-
-const holdFork = (world: World) => {
-  const pending: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pending.release = resolve
-    })
-  return pending
-}
 
 const endRecords = (world: World): LogRecord[] =>
   world.records.filter(record => record.action === 'cleared' || isEndReason(record.trigger_values.reason))

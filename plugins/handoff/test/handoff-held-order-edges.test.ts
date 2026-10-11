@@ -98,7 +98,7 @@ describe('the box order when the fresh session refuses every submit', () => {
       },
     ]
     await finishNote()
-    expect(world.box.text).toBe('held one\nlate')
+    expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate'])
   })
 
   test('It leaves prompts that arrived mid-delivery in the box in arrival order', async ($, on) => {
@@ -114,7 +114,7 @@ describe('the box order when the fresh session refuses every submit', () => {
       },
     ]
     await finishNote()
-    expect(world.box.text).toBe('held one\nlate one\nlate two')
+    expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate one\nlate two'])
   })
 })
 
@@ -132,6 +132,6 @@ describe('identical prompts that arrived mid-delivery when the box takes them', 
       },
     ]
     await finishNote()
-    expect(world.box.text).toBe('held one\nagain')
+    expect([entered(world), world.box.text]).toEqual([[], 'held one\nagain'])
   })
 })

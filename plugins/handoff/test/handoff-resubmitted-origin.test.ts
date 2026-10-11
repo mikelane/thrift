@@ -81,6 +81,15 @@ describe('the origin of a prompt the handoff resubmits', () => {
     expect(handoffsStarted(world)).toBe(1)
   })
 
+  test('It leaves the turn attended when submitting the resubmitted scheduled prompt throws', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    world.submitThrows = true
+    await finishNote()
+    await endStrongTurnInFreshSession($, world, 'nightly job')
+    expect(handoffsStarted(world)).toBe(1)
+  })
+
   test('It leaves a plugin prompt the handoff did not resubmit as it was', ASK, async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()

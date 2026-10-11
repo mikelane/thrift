@@ -3,8 +3,8 @@ import { expect, test } from 'claude-code/testing'
 import {
   addHeldPrompt,
   beginSending,
-  dropResubmittedTurn,
-  queueResubmittedTurn,
+  removeResubmittedPrompt,
+  queueResubmittedPrompt,
   preClearOutcome,
   beginHandoffHold,
   beginBeforeClear,
@@ -26,7 +26,7 @@ import {
   releaseCarriedGroup,
   resetForNewSession,
   takeHeldPrompts,
-  takeLateArrivals,
+  takeLateArrivalsOrEndSending,
 } from '../hooks/session-state'
 
 const settings = { setting: 'ask', threshold: 120_000, compactBeforeClear: true } as const
@@ -45,7 +45,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     backgroundTasks: new Set(),
     hasFinishedTask: false,
     isTurnUnattended: false,
-    resubmittedTurns: [],
+    resubmittedPrompts: [],
     backoffFrom: null,
     pending: null,
     heldPrompt: null,
@@ -472,29 +472,29 @@ test('It returns the number of prompts that arrived while sending from addHeldPr
   expect([addHeldPrompt(state, nightly), addHeldPrompt(state, person)]).toEqual([1, 2])
 })
 
-test('It returns the prompts that arrived while sending, oldest first, from takeLateArrivals', () => {
+test('It returns the prompts that arrived while sending, oldest first, from takeLateArrivalsOrEndSending', () => {
   const state = sendingState()
   addHeldPrompt(state, nightly)
   addHeldPrompt(state, person)
-  expect(takeLateArrivals(state)).toEqual([nightly, person])
+  expect(takeLateArrivalsOrEndSending(state)).toEqual([nightly, person])
 })
 
-test('It keeps holding after takeLateArrivals returned prompts, so more can still arrive', () => {
+test('It keeps holding after takeLateArrivalsOrEndSending returned prompts, so more can still arrive', () => {
   const state = sendingState()
   addHeldPrompt(state, nightly)
-  takeLateArrivals(state)
-  expect([addHeldPrompt(state, person), takeLateArrivals(state)]).toEqual([1, [person]])
+  takeLateArrivalsOrEndSending(state)
+  expect([addHeldPrompt(state, person), takeLateArrivalsOrEndSending(state)]).toEqual([1, [person]])
 })
 
-test('It ends the sending when takeLateArrivals finds no prompt', () => {
+test('It ends the sending when takeLateArrivalsOrEndSending finds no prompt', () => {
   const state = sendingState()
-  expect([takeLateArrivals(state), state.handoffHold, isHoldingForHandoff(state)]).toEqual([[], { phase: 'idle' }, false])
+  expect([takeLateArrivalsOrEndSending(state), state.handoffHold, isHoldingForHandoff(state)]).toEqual([[], { phase: 'idle' }, false])
 })
 
-test('It returns nothing from takeLateArrivals when the handoff is not sending', () => {
+test('It returns nothing from takeLateArrivalsOrEndSending when the handoff is not sending', () => {
   const state = createState(settings)
   beginHandoffHold(state, person)
-  expect([takeLateArrivals(state), state.handoffHold.phase]).toEqual([[], 'holding'])
+  expect([takeLateArrivalsOrEndSending(state), state.handoffHold.phase]).toEqual([[], 'holding'])
 })
 
 test('It stops watching the carried prompt after releaseCarried while sending, and keeps holding', () => {
@@ -505,10 +505,10 @@ test('It stops watching the carried prompt after releaseCarried while sending, a
 
 test('It judges a turn start by the first queued resubmitted prompt whose text the turn contains', () => {
   const state = createState(settings)
-  queueResubmittedTurn(state, nightly)
-  queueResubmittedTurn(state, person)
+  queueResubmittedPrompt(state, nightly)
+  queueResubmittedPrompt(state, person)
   startMainTurn(state, 'nightly job')
-  expect([state.isTurnUnattended, state.resubmittedTurns]).toEqual([true, [person]])
+  expect([state.isTurnUnattended, state.resubmittedPrompts]).toEqual([true, [person]])
 })
 
 test('It leaves the turn origin alone at a turn start when no resubmitted prompt is queued', () => {
@@ -518,24 +518,37 @@ test('It leaves the turn origin alone at a turn start when no resubmitted prompt
   expect(state.isTurnUnattended).toBe(true)
 })
 
-test('It removes a prompt that did not enter from the queue in dropResubmittedTurn', () => {
+test('It removes a prompt that did not enter from the queue in removeResubmittedPrompt', () => {
   const state = createState(settings)
-  queueResubmittedTurn(state, nightly)
-  queueResubmittedTurn(state, person)
-  dropResubmittedTurn(state, nightly)
-  expect(state.resubmittedTurns).toEqual([person])
+  queueResubmittedPrompt(state, nightly)
+  queueResubmittedPrompt(state, person)
+  removeResubmittedPrompt(state, nightly)
+  expect(state.resubmittedPrompts).toEqual([person])
 })
 
-test('It ignores a prompt that is not queued in dropResubmittedTurn', () => {
+test('It ignores a prompt that is not queued in removeResubmittedPrompt', () => {
   const state = createState(settings)
-  queueResubmittedTurn(state, person)
-  dropResubmittedTurn(state, nightly)
-  expect(state.resubmittedTurns).toEqual([person])
+  queueResubmittedPrompt(state, person)
+  removeResubmittedPrompt(state, nightly)
+  expect(state.resubmittedPrompts).toEqual([person])
 })
 
 test('It leaves the queue alone at a turn start whose text matches no queued prompt', () => {
   const state = createState(settings)
-  queueResubmittedTurn(state, nightly)
+  queueResubmittedPrompt(state, nightly)
   startMainTurn(state, '<task-notification>done</task-notification>')
-  expect([state.isTurnUnattended, state.resubmittedTurns]).toEqual([false, [nightly]])
+  expect([state.isTurnUnattended, state.resubmittedPrompts]).toEqual([false, [nightly]])
+})
+
+test('It watches no carried prompt after beginSending from an idle hold', () => {
+  const state = createState(settings)
+  beginSending(state)
+  expect(state.handoffHold).toEqual({ phase: 'sending', promptCarriedByHandoff: null, lateArrivals: [] })
+})
+
+test('It judges a turn start by a queued resubmitted prompt that the turn text frames', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, nightly)
+  startMainTurn(state, 'The handoff plugin sent a message: nightly job')
+  expect([state.isTurnUnattended, state.resubmittedPrompts]).toEqual([true, []])
 })

@@ -15,9 +15,19 @@ type NewWorkInput = {
 export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind)
 
 // Only the composer is typed at this terminal; the other person origins have a sender who is somewhere else.
-export const isTerminalOrigin = (kind: string): boolean => kind === 'composer'
+export const isComposerOrigin = (kind: string): boolean => kind === 'composer'
 
 export const isUnattendedOrigin = (kind: string): boolean => kind === 'scheduled-trigger'
+
+const SENDER_LABELS = new Map([
+  ['composer', 'this terminal'],
+  ['bridge', 'the bridge'],
+  ['sdk', 'an SDK client'],
+  ['scheduled-trigger', 'a scheduled task'],
+])
+
+// Who sent a prompt, as a reader would say it. Only the person origins are named; any other origin never reaches a message.
+export const senderLabel = (kind: string): string => SENDER_LABELS.get(kind) ?? 'a sender outside this terminal'
 
 // A held prompt comes back as text alone, so one that carries an attachment or context can't be held.
 export const carriesExtras = (prompt: { attachments?: readonly unknown[]; context?: readonly unknown[] }): boolean =>
