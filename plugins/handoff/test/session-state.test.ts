@@ -257,20 +257,20 @@ const isPending = async (promise: Promise<void>): Promise<boolean> =>
 
 test('It marks a turn running and started since the note from startMainTurn', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   expect(state).toMatchObject({ isTurnRunning: true, hasTurnAfterNote: true })
 })
 
 test('It counts a turn already running when the note began as missing from the note in beginNoteWindow', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   beginNoteWindow(state)
   expect(state.hasTurnAfterNote).toBe(true)
 })
 
 test('It forgets a turn that ended before the note began in beginNoteWindow', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   endMainTurn(state)
   beginNoteWindow(state)
   expect(state.hasTurnAfterNote).toBe(false)
@@ -278,35 +278,35 @@ test('It forgets a turn that ended before the note began in beginNoteWindow', ()
 
 test('It keeps a running turn running in beginNoteWindow', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   beginNoteWindow(state)
   expect(state.isTurnRunning).toBe(true)
 })
 
 test('It marks no turn running from endMainTurn', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   endMainTurn(state)
   expect(state.isTurnRunning).toBe(false)
 })
 
 test('It keeps hasTurnAfterNote after the turn ends in endMainTurn', () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   endMainTurn(state)
   expect(state.hasTurnAfterNote).toBe(true)
 })
 
 test('It stays pending in waitForTurnEnd until the waiter is released', async () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   const waiting = waitForTurnEnd(state)
   expect(await isPending(waiting)).toBe(true)
 })
 
 test('It resolves waitForTurnEnd once the waiter is released', async () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   const waiting = waitForTurnEnd(state)
   endMainTurn(state)
   releaseTurnEndWaiter(state)
@@ -322,7 +322,7 @@ test('It does nothing in releaseTurnEndWaiter when no one is waiting', () => {
 
 test('It leaves the waiter pending in resetForNewSession so the handoff resumes after the session end hook', async () => {
   const state = createState(settings)
-  startMainTurn(state)
+  startMainTurn(state, '')
   const waiting = waitForTurnEnd(state)
   resetForNewSession(state)
   expect(await isPending(waiting)).toBe(true)
@@ -503,18 +503,18 @@ test('It stops watching the carried prompt after releaseCarried while sending, a
   expect([isCarriedByHandoff(state, person.text), isHoldingForHandoff(state)]).toEqual([false, true])
 })
 
-test('It judges the next turn start by the oldest queued resubmitted prompt', () => {
+test('It judges a turn start by the first queued resubmitted prompt whose text the turn contains', () => {
   const state = createState(settings)
   queueResubmittedTurn(state, nightly)
   queueResubmittedTurn(state, person)
-  startMainTurn(state)
+  startMainTurn(state, 'nightly job')
   expect([state.isTurnUnattended, state.resubmittedTurns]).toEqual([true, [person]])
 })
 
 test('It leaves the turn origin alone at a turn start when no resubmitted prompt is queued', () => {
   const state = createState(settings)
   state.isTurnUnattended = true
-  startMainTurn(state)
+  startMainTurn(state, '')
   expect(state.isTurnUnattended).toBe(true)
 })
 
@@ -531,4 +531,11 @@ test('It ignores a prompt that is not queued in dropResubmittedTurn', () => {
   queueResubmittedTurn(state, person)
   dropResubmittedTurn(state, nightly)
   expect(state.resubmittedTurns).toEqual([person])
+})
+
+test('It leaves the queue alone at a turn start whose text matches no queued prompt', () => {
+  const state = createState(settings)
+  queueResubmittedTurn(state, nightly)
+  startMainTurn(state, '<task-notification>done</task-notification>')
+  expect([state.isTurnUnattended, state.resubmittedTurns]).toEqual([false, [nightly]])
 })

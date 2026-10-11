@@ -7,17 +7,17 @@ const ASK = { options: { handoffMode: 'ask' } } as const
 
 // The turn a resubmitted prompt starts in the fresh session ends past the threshold. Ask mode acts on that alone only for
 // an unattended turn; an attended one is offered a band.
-const endStrongTurnInFreshSession = async ($: Engine, world: World) => {
+const endStrongTurnInFreshSession = async ($: Engine, world: World, promptText: string) => {
   await growTo200k($, world)
-  await startTurn($)
+  await startTurn($, promptText)
   await bash($, world, 'git commit -m x')
   await completeTurn($)
   await world.clock.settle()
 }
 
 // A resubmitted prompt's turn starts and ends before the next one is judged, as it does in a session.
-const runTurnWithoutContext = async ($: Engine) => {
-  await startTurn($)
+const runTurnWithoutContext = async ($: Engine, promptText: string) => {
+  await startTurn($, promptText)
   await completeTurn($)
 }
 
@@ -28,7 +28,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'nightly job')
     expect(handoffsStarted(world)).toBe(2)
   })
 
@@ -36,7 +36,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'person says')
     await finishNote()
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'person says')
     expect(handoffsStarted(world)).toBe(1)
   })
 
@@ -44,9 +44,9 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
-    await runTurnWithoutContext($)
+    await runTurnWithoutContext($, 'nightly job')
     await submitPerson($, 'after')
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'after')
     expect(handoffsStarted(world)).toBe(1)
   })
 
@@ -59,8 +59,8 @@ describe('the origin of a prompt the handoff resubmits', () => {
       },
     ]
     await finishNote()
-    await runTurnWithoutContext($)
-    await endStrongTurnInFreshSession($, world)
+    await runTurnWithoutContext($, 'person says')
+    await endStrongTurnInFreshSession($, world, 'nightly job')
     expect(handoffsStarted(world)).toBe(2)
   })
 
@@ -68,7 +68,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await failNote()
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'nightly job')
     expect(handoffsStarted(world)).toBe(2)
   })
 
@@ -77,7 +77,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     world.submitDropped = true
     await finishNote()
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'nightly job')
     expect(handoffsStarted(world)).toBe(1)
   })
 
@@ -85,7 +85,27 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()
     await $.prompt.submit({ text: 'from a plugin', wait: false, origin: { kind: 'plugin', name: 'other' } })
-    await endStrongTurnInFreshSession($, world)
+    await endStrongTurnInFreshSession($, world, 'from a plugin')
     expect(handoffsStarted(world)).toBe(1)
+  })
+})
+
+describe('a turn that starts between resubmitted prompts', () => {
+  test('It keeps the origin of each resubmitted turn when a task notification starts a turn between them', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await submitPerson($, 'person says')
+    await finishNote()
+    await runTurnWithoutContext($, '<task-notification><task-id>b1</task-id><status>completed</status></task-notification>')
+    await endStrongTurnInFreshSession($, world, 'nightly job')
+    expect(handoffsStarted(world)).toBe(2)
+  })
+
+  test('It judges a resubmitted turn by its origin when the engine frames the prompt text', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await finishNote()
+    await endStrongTurnInFreshSession($, world, 'The handoff plugin sent a message: nightly job')
+    expect(handoffsStarted(world)).toBe(2)
   })
 })

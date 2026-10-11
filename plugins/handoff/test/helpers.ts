@@ -314,7 +314,7 @@ export const runStep = async ($: Engine, world: World, { usage, advisorCalls = 0
   return item.value
 }
 
-export const startTurn = ($: Engine) => $.turn.start({ text: 'work', turnId: 't1' })
+export const startTurn = ($: Engine, text = 'work') => $.turn.start({ text, turnId: 't1' })
 
 type Completion = { usage?: TurnUsage; reason?: 'answer' | 'aborted' | 'error'; agentId?: string }
 

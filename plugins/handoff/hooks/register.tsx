@@ -1039,7 +1039,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    startMainTurn(state)
+    startMainTurn(state, e.text)
     return next(e)
   }).catch(($, e, next) => next(e))
 

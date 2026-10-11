@@ -10,9 +10,9 @@ const ASK = { options: { handoffMode: 'ask' } } as const
 // $.prompt.submit resolves once the prompt entered and its turn started, or it was queued behind the running one
 // (PromptSubmitResult in the engine's declarations). So when the handoff resubmits two groups back to back, the first
 // group's turn is the one running when the second is queued, and the first turn to end is the first group's.
-const endFirstTurnInFreshSession = async ($: Engine, world: World) => {
+const endFirstTurnInFreshSession = async ($: Engine, world: World, promptText: string) => {
   await growTo200k($, world)
-  await startTurn($)
+  await startTurn($, promptText)
   await bash($, world, 'git commit -m x')
   await completeTurn($)
   await world.clock.settle()
@@ -26,7 +26,7 @@ describe('the origin of the first of several resubmitted turns', () => {
     await submitPerson($, 'person says')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
-    await endFirstTurnInFreshSession($, world)
+    await endFirstTurnInFreshSession($, world, 'person says')
     expect(handoffsStarted(world)).toBe(1)
   })
 
@@ -35,7 +35,7 @@ describe('the origin of the first of several resubmitted turns', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await submitPerson($, 'person says')
     await finishNote()
-    await endFirstTurnInFreshSession($, world)
+    await endFirstTurnInFreshSession($, world, 'nightly job')
     expect(handoffsStarted(world)).toBe(2)
   })
 
@@ -48,7 +48,7 @@ describe('the origin of the first of several resubmitted turns', () => {
       },
     ]
     await finishNote()
-    await endFirstTurnInFreshSession($, world)
+    await endFirstTurnInFreshSession($, world, 'person says')
     expect(handoffsStarted(world)).toBe(1)
   })
 })

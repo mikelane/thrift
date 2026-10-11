@@ -224,9 +224,10 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
 }
 
 // A turn in the session the person cleared to is not one the note missed, so it does not count.
-export const startMainTurn = (state: SessionState): void => {
+export const startMainTurn = (state: SessionState, turnText: string): void => {
   state.isTurnRunning = true
-  const resubmitted = state.resubmittedTurns.shift()
+  const index = state.resubmittedTurns.findIndex(prompt => turnText.includes(prompt.text))
+  const resubmitted = index === -1 ? undefined : state.resubmittedTurns.splice(index, 1)[0]
   if (resubmitted !== undefined) state.isTurnUnattended = resubmitted.isUnattended
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
 }
@@ -236,10 +237,13 @@ export const endMainTurn = (state: SessionState): void => {
 }
 
 // The engine has no origin to give a prompt the plugin submits, and submit resolves once the prompt is queued, not once its
-// turn starts. So the origins of the plugin's own submissions wait here in submit order, and each turn start takes the next.
-// SAFETY: turn.start names no origin, so a turn the plugin did not submit (a task notification, say) that starts while
-// entries wait takes one early and the turn it was meant for is judged by the wrong origin. That needs such a turn inside the
-// seconds a delivery takes. No guard: the cost is one band missing or shown once.
+// turn starts. So the origins of the plugin's own submissions wait here in submit order, and a turn start takes the first
+// whose text the turn's text contains: turn.start gives the text, which may carry a frame around what was submitted, so the
+// match is "contains", not "equals". A turn whose text matches none (a task notification, a peer's message) leaves the queue
+// alone.
+// SAFETY: a turn that merely contains a queued prompt's text, such as a task notification quoting it, would take its entry.
+// A person or a notification quoting a prompt the plugin is about to resubmit within the seconds a delivery takes is not a
+// case worth a guard; the cost is one band missing or shown once.
 export const queueResubmittedTurn = (state: SessionState, prompt: HeldPrompt): void => {
   state.resubmittedTurns.push(prompt)
 }
