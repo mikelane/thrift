@@ -393,6 +393,17 @@ test('It writes a background_busy record when it refuses to clear', ASK, async (
   })
 })
 
+test('It writes the background_busy record of a refused press with no held-prompt fields', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  const band = await weakBand($, world)
+  await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+  await band.press({ key: 'handoff' })
+  expect(Object.keys(world.records.at(-1)?.trigger_values ?? {}).sort()).toEqual(
+    ['cache_read_tokens', 'context_tokens', 'effective_mode', 'is_background_busy', 'point', 'reason', 'setting', 'signal', 'threshold'],
+  )
+})
+
 test('It still writes the record and toast when the busy band cannot be redrawn', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
