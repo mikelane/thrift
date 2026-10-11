@@ -1,5 +1,3 @@
-import type { Shaped } from 'claude-code'
-
 export type Offer = {
   signal: 'strong' | 'weak'
   contextTokens: number
