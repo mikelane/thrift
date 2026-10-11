@@ -64,6 +64,7 @@ export type SessionState = Settings & {
   backgroundTasks: Set<string>
   hasFinishedTask: boolean
   isTurnUnattended: boolean
+  resubmittedTurns: HeldPrompt[]
   backoffFrom: number | null
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
@@ -90,6 +91,7 @@ export const createState = (settings: Settings): SessionState => ({
   backgroundTasks: new Set(),
   hasFinishedTask: false,
   isTurnUnattended: false,
+  resubmittedTurns: [],
   backoffFrom: null,
   pending: null,
   heldPrompt: null,
@@ -224,11 +226,28 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
 // A turn in the session the person cleared to is not one the note missed, so it does not count.
 export const startMainTurn = (state: SessionState): void => {
   state.isTurnRunning = true
+  const resubmitted = state.resubmittedTurns.shift()
+  if (resubmitted !== undefined) state.isTurnUnattended = resubmitted.isUnattended
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
 }
 
 export const endMainTurn = (state: SessionState): void => {
   state.isTurnRunning = false
+}
+
+// The engine has no origin to give a prompt the plugin submits, and submit resolves once the prompt is queued, not once its
+// turn starts. So the origins of the plugin's own submissions wait here in submit order, and each turn start takes the next.
+// SAFETY: turn.start names no origin, so a turn the plugin did not submit (a task notification, say) that starts while
+// entries wait takes one early and the turn it was meant for is judged by the wrong origin. That needs such a turn inside the
+// seconds a delivery takes. No guard: the cost is one band missing or shown once.
+export const queueResubmittedTurn = (state: SessionState, prompt: HeldPrompt): void => {
+  state.resubmittedTurns.push(prompt)
+}
+
+// A prompt that did not enter starts no turn, so its place in the queue goes.
+export const dropResubmittedTurn = (state: SessionState, prompt: HeldPrompt): void => {
+  const index = state.resubmittedTurns.indexOf(prompt)
+  if (index !== -1) state.resubmittedTurns.splice(index, 1)
 }
 
 // The note's fork sees the conversation only up to here, so a turn already running now is missing from the note too.

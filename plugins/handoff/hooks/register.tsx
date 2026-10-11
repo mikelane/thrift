@@ -66,6 +66,7 @@ import {
 import {
   addHeldPrompt,
   beginSending,
+  dropResubmittedTurn,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -81,6 +82,7 @@ import {
   noteCacheReads,
   recordSessionEnd,
   releaseCarried,
+  queueResubmittedTurn,
   releaseCarriedGroup,
   releaseTurnEndWaiter,
   resetForNewSession,
@@ -258,11 +260,18 @@ const registerHandoffCommand = async ($: EngineInterface) => {
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
-const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => {
+// before_draft puts a restored prompt ahead of whatever the person has typed. after_draft keeps the order of prompts that
+// reach the box one after another, so each lands behind the one before it.
+type BoxPlacement = 'before_draft' | 'after_draft'
+
+// A prompt the box already holds is not added again, so an identical prompt typed twice shows once; the box is for the
+// person to review and send, and a second copy of a line they can see would only be noise to delete.
+const refillBox = async ($: EngineInterface, text: string, placement: BoxPlacement = 'before_draft'): Promise<boolean> => {
   try {
     const draft = (await $.prompt.read()).text
     if (holdsPrompt(draft, text)) return true
-    const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
+    const withDraft = placement === 'before_draft' ? `${text}\n${draft}` : `${draft}\n${text}`
+    const filled = await $.prompt.fill({ text: draft === '' ? text : withDraft, mode: 'replace' })
     return filled.isFilled
   } catch (error) {
     debug($, `could not refill the prompt box: ${String(error)}`)
@@ -273,21 +282,16 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
 // The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which the
-// prompt.submit hook above does not classify. So the flag for the turn it starts is set here, from the origin the prompt first
-// had, and put back if the prompt does not enter. A hook beneath the plugin that refuses the prompt makes submit resolve with
-// { drop } instead of rejecting.
-// SAFETY: a person prompt that lands in the one engine round trip a submit takes, with no handoff holding, sets the flag itself,
-// and a refused submit then puts back the value from before it. That needs a failed restore of a scheduled prompt, a person
-// typing in that window, and the turn before it unattended. The cost is one turn judged by the wrong origin, so a band is
-// missing or shown once. No guard: while the handoff delivers, person prompts are held and cannot reach the flag.
+// prompt.submit hook above does not classify, and submit resolves once the prompt is queued, not once its turn starts. So the
+// origin goes into a queue here and the turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes
+// submit resolve with { drop } instead of rejecting.
 const submitEntered = async (
   $: EngineInterface,
   state: SessionState,
   prompt: HeldPrompt,
   failureLabel: string,
 ): Promise<boolean> => {
-  const unattendedBefore = state.isTurnUnattended
-  state.isTurnUnattended = prompt.isUnattended
+  queueResubmittedTurn(state, prompt)
   try {
     const result = await $.prompt.submit({ text: prompt.text })
     if (result.drop === undefined) return true
@@ -295,7 +299,7 @@ const submitEntered = async (
   } catch (error) {
     debug($, `${failureLabel}: ${String(error)}`)
   }
-  state.isTurnUnattended = unattendedBefore
+  dropResubmittedTurn(state, prompt)
   return false
 }
 
@@ -412,9 +416,14 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const sendOrKeepInBox = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+const sendOrKeepInBox = async (
+  $: EngineInterface,
+  state: SessionState,
+  prompt: HeldPrompt,
+  placement: BoxPlacement = 'before_draft',
+): Promise<Carried> => {
   if (await submitEntered($, state, prompt, 'could not send the prompt')) return 'submitted'
-  if (!prompt.isUnattended && (await refillBox($, prompt.text))) return 'in_box'
+  if (!prompt.isUnattended && (await refillBox($, prompt.text, placement))) return 'in_box'
   keepInTranscript($, prompt.text)
   return 'not_carried'
 }
@@ -451,8 +460,9 @@ const sendLateArrivals = async ($: EngineInterface, state: SessionState) => {
   const deliveries: Carried[] = []
   for (let arrived = takeLateArrivals(state); arrived.length > 0; arrived = takeLateArrivals(state)) {
     for (const prompt of arrived) {
+      // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
       await inspectPrompt($, state, prompt.text)
-      deliveries.push(await sendOrKeepInBox($, state, prompt))
+      deliveries.push(await sendOrKeepInBox($, state, prompt, 'after_draft'))
     }
     prompts.push(...arrived)
   }

@@ -15,6 +15,12 @@ const endStrongTurnInFreshSession = async ($: Engine, world: World) => {
   await world.clock.settle()
 }
 
+// A resubmitted prompt's turn starts and ends before the next one is judged, as it does in a session.
+const runTurnWithoutContext = async ($: Engine) => {
+  await startTurn($)
+  await completeTurn($)
+}
+
 const handoffsStarted = (world: World) => world.forkPrompts.length
 
 describe('the origin of a prompt the handoff resubmits', () => {
@@ -38,6 +44,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
+    await runTurnWithoutContext($)
     await submitPerson($, 'after')
     await endStrongTurnInFreshSession($, world)
     expect(handoffsStarted(world)).toBe(1)
@@ -52,6 +59,7 @@ describe('the origin of a prompt the handoff resubmits', () => {
       },
     ]
     await finishNote()
+    await runTurnWithoutContext($)
     await endStrongTurnInFreshSession($, world)
     expect(handoffsStarted(world)).toBe(2)
   })

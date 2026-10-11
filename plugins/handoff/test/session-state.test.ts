@@ -3,6 +3,8 @@ import { expect, test } from 'claude-code/testing'
 import {
   addHeldPrompt,
   beginSending,
+  dropResubmittedTurn,
+  queueResubmittedTurn,
   preClearOutcome,
   beginHandoffHold,
   beginBeforeClear,
@@ -43,6 +45,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     backgroundTasks: new Set(),
     hasFinishedTask: false,
     isTurnUnattended: false,
+    resubmittedTurns: [],
     backoffFrom: null,
     pending: null,
     heldPrompt: null,
@@ -498,4 +501,34 @@ test('It stops watching the carried prompt after releaseCarried while sending, a
   const state = sendingState()
   releaseCarried(state)
   expect([isCarriedByHandoff(state, person.text), isHoldingForHandoff(state)]).toEqual([false, true])
+})
+
+test('It judges the next turn start by the oldest queued resubmitted prompt', () => {
+  const state = createState(settings)
+  queueResubmittedTurn(state, nightly)
+  queueResubmittedTurn(state, person)
+  startMainTurn(state)
+  expect([state.isTurnUnattended, state.resubmittedTurns]).toEqual([true, [person]])
+})
+
+test('It leaves the turn origin alone at a turn start when no resubmitted prompt is queued', () => {
+  const state = createState(settings)
+  state.isTurnUnattended = true
+  startMainTurn(state)
+  expect(state.isTurnUnattended).toBe(true)
+})
+
+test('It removes a prompt that did not enter from the queue in dropResubmittedTurn', () => {
+  const state = createState(settings)
+  queueResubmittedTurn(state, nightly)
+  queueResubmittedTurn(state, person)
+  dropResubmittedTurn(state, nightly)
+  expect(state.resubmittedTurns).toEqual([person])
+})
+
+test('It ignores a prompt that is not queued in dropResubmittedTurn', () => {
+  const state = createState(settings)
+  queueResubmittedTurn(state, person)
+  dropResubmittedTurn(state, nightly)
+  expect(state.resubmittedTurns).toEqual([person])
 })
