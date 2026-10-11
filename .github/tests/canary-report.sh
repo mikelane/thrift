@@ -834,6 +834,24 @@ test_invalid_version_run_says_how_many_failing_logs_it_left_unopened() {
   assert_out_has 'Opening nothing for 2 failing logs because the version is invalid.'
 }
 
+test_cap_count_after_a_failed_creation_counts_only_the_issues_that_opened() {
+  local plugin
+  for plugin in a b c d; do add_log "$plugin" x; done
+  echo 'Claude Code 2.1.300 breaks a' > "$GH_FAIL_CREATE_TITLES"
+  run_report false MAX_ISSUES=2
+  assert_out_has 'Opened 2 issues, the cap; 1 more failing plugins were left unopened: d'
+}
+test_failed_issue_creation_does_not_use_up_the_cap() {
+  local plugin
+  for plugin in a b c; do add_log "$plugin" x; done
+  echo 'Claude Code 2.1.300 breaks a' > "$GH_FAIL_CREATE_TITLES"
+  run_report false MAX_ISSUES=2
+  assert_rc 1
+  assert_gh_calls 'issue create --title Claude Code 2.1.300 breaks b' 1
+  assert_gh_calls 'issue create --title Claude Code 2.1.300 breaks c' 1
+  assert_out_lacks 'left unopened'
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue

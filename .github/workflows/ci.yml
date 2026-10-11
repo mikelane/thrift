@@ -226,7 +226,6 @@ jobs:
               left_unopened+=("$plugin")
               continue
             fi
-            opened=$((opened + 1))
             # Passing-test lines are most of a long log and would push the failing test out of the
             # tail. grep exiting 1 on an all-pass log is harmless: the pipeline status is tr's.
             grep -av '^(pass) ' "$log" | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
@@ -251,12 +250,14 @@ jobs:
               echo "dry run: would open an issue titled: ${title}"
               print_untrusted "$RUNNER_TEMP/issue-body.md"
             else
+              # A failed create does not count toward the cap, so a later plugin still gets its turn.
               gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md" || {
                 echo "Failed to create an issue for ${title}"
                 problems=1
                 continue
               }
             fi
+            opened=$((opened + 1))
           done
           if [ "${#left_unopened[@]}" != 0 ]; then
             verb=Opened
