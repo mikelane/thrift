@@ -78,6 +78,7 @@ export type SessionState = Settings & {
   sessionEndBeforeClear: SessionEndBeforeClear | null
 }
 
+// A hot reload calls this again: see the SAFETY note at the call in register.tsx for what it does to a handoff in flight.
 export const createState = (settings: Settings): SessionState => ({
   ...settings,
   mode: 'off',

@@ -965,6 +965,12 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
 
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
+  // SAFETY: a hot reload (a code change under --plugin-dir watch, or a setting changed in /config) runs register again, and
+  // the new state starts with pending null and nothing held. A handoff already running keeps the old state and its old
+  // closures. Its prompts are no longer held, so they pass through and /clear can land inside their turn. The old hooks are
+  // gone too, so nothing releases a wait for a turn to end, and that handoff waits forever and never clears. Both need a
+  // reload in the middle of a handoff, which only someone editing the plugin can cause. No guard: carrying the state across
+  // a reload would need it in an atom, and a handoff takes a few seconds. After a reload, run /handoff again.
   const state = createState({
     setting,
     threshold: asThreshold(options.handoffContextTokens),
