@@ -380,9 +380,9 @@ branch in `hooks/` has a test whose name says which.
 | File | What it holds |
 |---|---|
 | `hooks/register.tsx` | Engine wiring. Every function that takes `$` lives here, because the engine follows `$` only through functions declared at the top of this file. |
-| `hooks/signals.ts` | Pure signal logic: classification, responses, the mode table |
-| `hooks/command-parse.ts` | The shell lexer: command segments, heredocs, and `finishesTask` |
-| `hooks/work-refs.ts` | Work-reference parsing: ticket and pull request references, branch and URL prefixes |
+| `hooks/signals.ts` | Pure signal logic: setting parsers (`asMode`, `asThreshold`), context size (`contextFromStep`, `formatTokens`), classification (`classify`), the band's buttons (`bandButtons`), the mode table (`respond`), and the busy-refusal trigger (`busyRefusalTrigger`) |
+| `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), and `finishesTask` |
+| `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefix`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
 | `hooks/handoff-note.ts` | `HANDOFF_PROMPT` and the handoff message |

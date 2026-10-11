@@ -34,7 +34,7 @@ const parseLogRecord = (line: string): LogRecord => {
   return parsed
 }
 
-export type Box = { text: string; cursor: number }
+type Box = { text: string; cursor: number }
 
 export type World = {
   clock: MockClock
@@ -102,7 +102,7 @@ const noUsage = { startedAt: 0, rateLimits: [] }
 
 type Environment = { home?: string | null; thriftHome?: string; hasClock?: boolean }
 
-export const defaultWorld = (clock: MockClock): World => ({
+const defaultWorld = (clock: MockClock): World => ({
   clock,
   effects: [],
   records: [],
@@ -263,12 +263,18 @@ const installTurnMocks = (on: On, world: World) => {
       usage: world.step.usage,
     }
   })
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+}
+
+const installStateMocks = (on: On, world: World) => {
   on('state.set', (_$, e, next) => {
     if (world.stateSetThrows) return { deny: 'cannot write' }
     return next(e)
   })
-  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
-  on('turn.complete', (_$, e) => ({ text: e.answer }))
+}
+
+const installToolMocks = (on: On, world: World) => {
   on('tool.call', (_$, e) => {
     if (world.toolMode === 'deny') return { deny: 'blocked' }
     if (world.toolMode === 'error') return { isError: true as const, result: 'failed', text: 'failed' }
@@ -290,6 +296,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   installUiMocks(on, world)
   installProcessMocks(on, world)
   installTurnMocks(on, world)
+  installStateMocks(on, world)
+  installToolMocks(on, world)
   return world
 }
 

@@ -43,6 +43,10 @@ const segmentCases = [
   ['cat <<', ['cat <<']],
   ['cat << ;ls', ['cat <<', 'ls']],
   ['echo "a\\\nb"; ls', ['echo "ab"', 'ls']],
+  ['# git push\nls', ['ls']],
+  ['ls;# git push', ['ls']],
+  ["echo 'a\\'; ls", ["echo 'a\\'", 'ls']],
+  ['cat << EOF\ngit commit\nEOF\nls', ['cat << EOF', 'ls']],
 ] as const
 
 for (const [command, expected] of segmentCases) {
@@ -123,6 +127,7 @@ const finishesTaskCases = [
   ["cat <<'EOF'\ngit push\nEOF", false],
   ['git commit-tree HEAD', false],
   ['git stash push', false],
+  ['"" git push', false],
 ] as const
 
 for (const [command, expected] of finishesTaskCases) {
