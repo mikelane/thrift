@@ -301,6 +301,8 @@ the log, and nothing from it is written into the session.
 {"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","cleared_by":"handoff","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
 ```
 
+A check rebuilds this line through the code that writes the log and fails if the two differ in key order, names, or values. It builds from the fields the line already has, so it cannot tell that an optional field was left out of the sample.
+
 | Field | Values |
 |---|---|
 | `ts` | ISO 8601 UTC |
