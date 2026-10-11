@@ -506,6 +506,60 @@ const CLEARED_BY = {
   deliver_to_person_clear: 'person',
 } as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy'>, ClearedBy>
 
+type ClearWindow = {
+  outcome: PreClearOutcome
+  hasCompactedBeforeClear: boolean
+  isBusy: boolean
+  // Set only when the outcome is 'clear': the handoff's own /clear, already started.
+  clearing: Promise<boolean> | null
+}
+
+// Waits out running turns, compacts if asked, and checks for background work, then starts the clear.
+// SAFETY: on the clear path, no await sits between the last isTurnRunning read and the $.command.run inside
+// clearSession. Every awaited step before the clear (the waiting status, the compaction, the busy check) is followed by
+// another pass through the wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the
+// gap. That is why the clear starts here, in the same synchronous run as the last read, and the caller only awaits the
+// promise it gets back: returning the outcome first and clearing in the caller would put an await in the gap.
+// clearSession's first step is the synchronous command call. Do not add an await after the loop, or move the clear
+// behind a helper that awaits first. The person-cleared branch may await in the caller: no clear runs there.
+const waitForClearWindow = async (
+  $: EngineInterface,
+  state: SessionState,
+  request: HandoffRequest,
+  oldId: string,
+): Promise<ClearWindow> => {
+  const mustRefuseWhenBusy = request.trigger.point !== 'command'
+  let isCompacted = !state.compactBeforeClear
+  let isBusy = false
+  let hasShownWaiting = false
+  let hasCompactedBeforeClear = false
+  for (;;) {
+    while (state.isTurnRunning) {
+      if (!hasShownWaiting) {
+        hasShownWaiting = true
+        debug($, waitStartedLine(state))
+        await showWaitingStatus($, state)
+        continue
+      }
+      await waitForTurnEnd(state)
+      debug($, 'resumed after the wait for a running turn')
+    }
+    if (state.sessionEndBeforeClear !== null) break
+    if (!isCompacted) {
+      isCompacted = true
+      hasCompactedBeforeClear = await compactBeforeClearing($, state, request.trigger, oldId)
+      continue
+    }
+    if (!mustRefuseWhenBusy) break
+    isBusy = await isBackgroundBusy($, state)
+    if (!state.isTurnRunning) break
+  }
+  const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
+  if (outcome !== 'clear') return { outcome, hasCompactedBeforeClear, isBusy, clearing: null }
+  beginOwnClear(state)
+  return { outcome, hasCompactedBeforeClear, isBusy, clearing: clearSession($) }
+}
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -518,39 +572,8 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    // SAFETY: on the clear path, no await sits between the last isTurnRunning read and the $.command.run inside
-    // clearSession. Every awaited step before the clear (the waiting status, the compaction, the busy check) is followed by
-    // another pass through the wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the
-    // gap. clearSession's first step is the synchronous command call. Do not add an await on the clear path after the loop,
-    // or move the clear behind a helper that awaits first. The person-cleared branch may await: no clear runs there.
-    const mustRefuseWhenBusy = request.trigger.point !== 'command'
-    let isCompacted = !state.compactBeforeClear
-    let isBusy = false
-    let hasShownWaiting = false
-    let hasCompactedBeforeClear = false
-    for (;;) {
-      while (state.isTurnRunning) {
-        if (!hasShownWaiting) {
-          hasShownWaiting = true
-          debug($, waitStartedLine(state))
-          await showWaitingStatus($, state)
-          continue
-        }
-        await waitForTurnEnd(state)
-        debug($, 'resumed after the wait for a running turn')
-      }
-      if (state.sessionEndBeforeClear !== null) break
-      if (!isCompacted) {
-        isCompacted = true
-        hasCompactedBeforeClear = await compactBeforeClearing($, state, request.trigger, prepared.oldId)
-        continue
-      }
-      if (!mustRefuseWhenBusy) break
-      isBusy = await isBackgroundBusy($, state)
-      if (!state.isTurnRunning) break
-    }
+    const { outcome, hasCompactedBeforeClear, isBusy, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
-    const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
     if (outcome === 'abandon_session_ended') {
       return await abandonHandoff($, state, settleAfterWait(), 'session_ended', SESSION_ENDED, prepared.oldId)
     }
@@ -561,9 +584,8 @@ const runHandoff = async (
     const hasTurnAfterNote = state.hasTurnAfterNote
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
-    if (outcome === 'clear') {
-      beginOwnClear(state)
-      isCleared = await clearSession($)
+    if (clearing !== null) {
+      isCleared = await clearing
     } else {
       // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
       // SAFETY: a resume that lands during this await gets the note in the resumed session, as one landing during
