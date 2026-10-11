@@ -11,5 +11,7 @@ export const readmeReasons = (readme: string): string[] => {
     throw new Error(`The README has no table row whose first cell is ${REASON_ROW_KEY}.`)
   }
   const valueCell = row.split('|')[2] ?? ''
-  return [...withoutParentheses(valueCell).matchAll(/`([^`]+)`/g)].map(match => match[1] as string)
+  const listed = withoutParentheses(valueCell)
+  const afterLeadIn = listed.slice(listed.indexOf(':') + 1)
+  return [...afterLeadIn.matchAll(/`([^`]+)`/g)].map(match => match[1] as string)
 }

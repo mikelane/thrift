@@ -17,6 +17,11 @@ const cases: { name: string; readme: string; expected: string[] }[] = [
     expected: ['session_ended', 'backoff'],
   },
   {
+    name: 'only the values after the colon, not a backticked word in the lead-in',
+    readme: reasonRow('Present when it explains a `none`: `backoff`, `not_now`'),
+    expected: ['backoff', 'not_now'],
+  },
+  {
     name: 'nested parentheses',
     readme: reasonRow('`a` (outer (inner `x`) `y`) and `b`'),
     expected: ['a', 'b'],
