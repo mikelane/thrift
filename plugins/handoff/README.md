@@ -380,7 +380,9 @@ branch in `hooks/` has a test whose name says which.
 | File | What it holds |
 |---|---|
 | `hooks/register.tsx` | Engine wiring. Every function that takes `$` lives here, because the engine follows `$` only through functions declared at the top of this file. |
-| `hooks/signals.ts` | Pure signal logic: command parsing, work references, classification, the mode table |
+| `hooks/signals.ts` | Pure signal logic: classification, responses, the mode table |
+| `hooks/command-parse.ts` | The shell lexer: command segments, heredocs, and `finishesTask` |
+| `hooks/work-refs.ts` | Work-reference parsing: ticket and pull request references, branch and URL prefixes |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
 | `hooks/handoff-note.ts` | `HANDOFF_PROMPT` and the handoff message |
