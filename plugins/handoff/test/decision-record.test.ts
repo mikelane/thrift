@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { recordFromEvaluation, snapshot, type Evaluation, type RecordState } from '../hooks/decision-record'
+import { recordFromEvaluation, snapshotTrigger, type Evaluation, type RecordSessionFields } from '../hooks/decision-record'
 
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0)
 
-const state: RecordState = {
+const state: RecordSessionFields = {
   mode: 'act',
   setting: 'ask',
   threshold: 150000,
@@ -128,9 +128,9 @@ describe('recordFromEvaluation', () => {
   })
 })
 
-describe('snapshot', () => {
+describe('snapshotTrigger', () => {
   test('It copies the point, signal and busy flag and reads the sizes from the state', () => {
-    expect(snapshot(state, 'prompt', 'weak', true)).toEqual({
+    expect(snapshotTrigger(state, 'prompt', 'weak', true)).toEqual({
       point: 'prompt',
       signal: 'weak',
       isBusy: true,

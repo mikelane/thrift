@@ -6,7 +6,7 @@ import {
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
-  claim,
+  claimPending,
   noteCacheReads,
   recordSessionEnd,
   createState,
@@ -412,16 +412,16 @@ test('It clears when no session ended and nothing is busy in preClearOutcome', (
   expect(preClearOutcome(null, false)).toBe('clear')
 })
 
-test('It takes a free pending slot and returns true from claim', () => {
+test('It takes a free pending slot and returns true from claimPending', () => {
   const state = createState(settings)
-  expect(claim(state, 'compact')).toBe(true)
+  expect(claimPending(state, 'compact')).toBe(true)
   expect(state.pending).toBe('compact')
 })
 
-test('It refuses a taken pending slot and keeps the first claim from claim', () => {
+test('It refuses a taken pending slot and keeps the first claim from claimPending', () => {
   const state = createState(settings)
-  claim(state, 'compact')
-  expect(claim(state, 'handoff')).toBe(false)
+  claimPending(state, 'compact')
+  expect(claimPending(state, 'handoff')).toBe(false)
   expect(state.pending).toBe('compact')
 })
 

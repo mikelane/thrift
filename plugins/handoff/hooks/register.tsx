@@ -28,7 +28,7 @@ import {
   LOG_WRITER,
   logLocation,
   recordFromEvaluation,
-  snapshot,
+  snapshotTrigger,
   type ClearedBy,
   type DecisionReason,
   type Evaluation,
@@ -67,7 +67,7 @@ import {
   beginBeforeClear,
   beginOwnClear,
   beginNoteWindow,
-  claim,
+  claimPending,
   createState,
   preClearOutcome,
   type PreClearOutcome,
@@ -192,7 +192,7 @@ const runCompaction = async ($: EngineInterface, state: SessionState, trigger: T
 }
 
 const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger): boolean => {
-  if (!claim(state, 'compact')) return false
+  if (!claimPending(state, 'compact')) return false
   $.clock.after(0, () => {
     void logFailure($, runCompaction($, state, trigger))
   })
@@ -617,7 +617,7 @@ const scheduleHandoff = (
   request: HandoffRequest,
   beforeRun?: () => Promise<void>,
 ): boolean => {
-  if (!claim(state, 'handoff')) return false
+  if (!claimPending(state, 'handoff')) return false
   state.heldPrompt = null
   beginBeforeClear(state)
   beginHandoffHold(
@@ -648,7 +648,7 @@ const evaluateTurnEnd = async (
     isUnattended: state.isTurnUnattended,
     backoffFrom: state.backoffFrom,
   })
-  const trigger = snapshot(state, 'turn-end', signal, isBusy)
+  const trigger = snapshotTrigger(state, 'turn-end', signal, isBusy)
   if (outcome.kind === 'back-off') {
     await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
@@ -773,7 +773,7 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
     mode: state.mode,
     isUnattended,
   })
-  const trigger = snapshot(state, 'prompt', signal, isBusy)
+  const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {
     const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
@@ -832,7 +832,7 @@ const runPress = async ($: EngineInterface, state: SessionState, { offer, button
     debug($, `dropped a ${button} press: a ${state.pending} is already pending`)
     return $.ui.toast(ALREADY_PENDING)
   }
-  const trigger = snapshot(state, 'button', offer.signal, isBusy)
+  const trigger = snapshotTrigger(state, 'button', offer.signal, isBusy)
   if (isBusy && clearsSession(button)) return refuseToClear($, state, offer, trigger)
   if (button === 'handoff-send' || button === 'send-here') return pressHeldPromptButton($, state, trigger, button)
   if (button === 'not-now') state.backoffFrom = state.contextTokens
@@ -911,7 +911,7 @@ const drawBand = ($: EngineInterface, state: SessionState, e: RenderInput<'Above
 }
 
 const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
-  const trigger = snapshot(state, 'command', 'none', await isBackgroundBusy($, state))
+  const trigger = snapshotTrigger(state, 'command', 'none', await isBackgroundBusy($, state))
   const heldPrompt = state.heldPrompt
   const emptyBox = heldPrompt === null ? undefined : () => emptyBoxIfHolding($, heldPrompt)
   const isClaimed = scheduleHandoff(
@@ -941,7 +941,7 @@ export const register: Register = (on, options) => {
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
       if (setting !== 'off') $.ui.toast(`Untested on Claude Code ${engineVersion}, so it only logs this session. /handoff still works.`)
-      await writeRecord($, state, { ...snapshot(state, 'session-start', 'none', false), action: 'untested_engine' })
+      await writeRecord($, state, { ...snapshotTrigger(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started
   }).catch(($, e, next) => next(e))

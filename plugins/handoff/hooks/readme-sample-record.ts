@@ -1,8 +1,8 @@
-import type { DecisionRecord, Evaluation, RecordState } from './decision-record'
+import type { DecisionRecord, Evaluation, RecordSessionFields } from './decision-record'
 
 // Takes the builder as an argument so this module has no runtime imports: the check that runs it under
 // --experimental-strip-types follows only explicit `.ts` imports, which `tsc -p` over hooks/ does not allow.
-type RecordBuilder = (state: RecordState, evaluation: Evaluation, now: number, sessionId: string) => unknown
+type RecordBuilder = (state: RecordSessionFields, evaluation: Evaluation, now: number, sessionId: string) => unknown
 
 const SAMPLE_LINE = /^\{"ts":/
 
@@ -81,7 +81,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
         }
       : undefined,
   }
-  const state: RecordState = {
+  const state: RecordSessionFields = {
     mode: values.effective_mode,
     setting: values.setting,
     threshold: values.threshold,

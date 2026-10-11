@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { recordFromEvaluation, type Evaluation, type RecordState } from '../hooks/decision-record'
+import { recordFromEvaluation, type Evaluation, type RecordSessionFields } from '../hooks/decision-record'
 import { findSampleDrift, extractReadmeSampleLine, rebuildSampleLine } from '../hooks/readme-sample-record'
 
-const state: RecordState = {
+const state: RecordSessionFields = {
   mode: 'act',
   setting: 'act',
   threshold: 150000,

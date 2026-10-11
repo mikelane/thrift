@@ -81,12 +81,12 @@ export type SettledHandoff = {
   hasCompactedBeforeClear?: boolean
 }
 
-export type RecordState = Pick<
+export type RecordSessionFields = Pick<
   SessionState,
   'mode' | 'setting' | 'threshold' | 'engineVersion' | 'contextTokens' | 'cacheReadTokens'
 >
 
-export const snapshot = (state: RecordState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
+export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
   point,
   signal,
   isBusy,
@@ -109,7 +109,7 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
 export type DecisionRecord = ReturnType<typeof decisionRecord>
 
 export const recordFromEvaluation = (
-  state: RecordState,
+  state: RecordSessionFields,
   evaluation: Evaluation,
   now: number,
   sessionId: string,
