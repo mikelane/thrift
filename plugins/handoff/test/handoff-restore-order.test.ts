@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts } from '../hooks/handoff-note'
-import { dropOf, lastRecord, submitPerson, writingTheNote, type World } from './helpers'
+import { bash, completeTurn, dropOf, growTo200k, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 
@@ -159,5 +159,22 @@ describe('the transcript wording for a note that could be neither sent nor put i
     refuseEverything(world)
     await finishNote()
     expect(world.effects.filter(effect => effect.startsWith('log:Your prompt'))).toHaveLength(1)
+  })
+})
+
+describe('the transcript wording for a scheduled turn handoff note that could not be delivered', () => {
+  const ACT = { options: { handoffMode: 'act' } } as const
+
+  test('It does not say a scheduled note was put in the prompt box', ACT, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    world.appendDenied = true
+    world.submitDropped = true
+    await growTo200k($, world)
+    await bash($, world, 'git commit -m x')
+    await completeTurn($)
+    await world.clock.settle()
+    expect(world.effects.filter(effect => effect.startsWith('log:The handoff note could not be sent or put in the prompt box'))).toEqual([])
   })
 })

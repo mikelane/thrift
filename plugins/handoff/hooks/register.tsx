@@ -127,6 +127,7 @@ const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to s
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
+const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
 
 // /handoff is registered only when a person is at the prompt, so only then is it there to mention.
@@ -483,12 +484,15 @@ const announce = ($: EngineInterface, message: string) => {
 }
 
 // The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
+// A scheduled handoff's note is never offered to the box, so its notice must not say it was.
+const unsentNoteNotice = (isUnattended: boolean): string => (isUnattended ? UNSENT_UNATTENDED_NOTE : UNSENT_NOTE)
+
 const deliverNote = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? (settledHandoff.isUnattended ? 'scheduled-trigger' : 'composer')
   const note = { text: joinPrompts(message, sameOriginGroup?.text), isUnattended: settledHandoff.isUnattended, origin }
-  return sendOrKeepInBox($, state, note, { notice: sameOriginGroup === undefined ? UNSENT_NOTE : undefined })
+  return sendOrKeepInBox($, state, note, { notice: sameOriginGroup === undefined ? unsentNoteNotice(settledHandoff.isUnattended) : undefined })
 }
 
 const sendHeldGroups = async (
