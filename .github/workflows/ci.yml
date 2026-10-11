@@ -135,7 +135,11 @@ jobs:
     if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # A schedule run and a manual run must not race to open the same issue.
+    # A schedule run and a manual run must not race to open the same issue. GitHub keeps one running
+    # and one pending run per group, and a newer pending run replaces the older pending one even with
+    # cancel-in-progress false. A manual dry run queued behind a running report can therefore drop a
+    # scheduled live run that was also waiting. The window is the few seconds the job runs, and the
+    # next scheduled run opens the issue, so the group is left as it is.
     concurrency:
       group: canary-report-${{ github.repository }}
       cancel-in-progress: false
@@ -192,6 +196,9 @@ jobs:
           can_open=true
           version=$(cat "$failures/claude-version") || version=''
           if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            # %q does not escape ':'. A version such as "::error::x" cannot become a workflow command
+            # only because this text comes first on the line, so keep a prefix on every line that
+            # prints the version.
             printf 'Unexpected Claude Code version: %q\n' "$version"
             problems=1
             can_open=false
