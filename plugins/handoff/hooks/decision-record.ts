@@ -33,7 +33,7 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
   mode: action === 'none' && effectiveMode === 'off' && triggerValues.point !== 'command' ? 'shadow' : 'active',
   action,
   engine_version: engineVersion,
-  trigger_values: triggerValues,
+  trigger_values: { ...triggerValues, effective_mode: effectiveMode },
 })
 
 export const logLocation = (

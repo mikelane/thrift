@@ -46,9 +46,23 @@ test('It returns every field of the decision log from decisionRecord', () => {
     mode: 'active',
     action: 'advised',
     engine_version: '2.1.295',
-    trigger_values: triggerValues,
+    trigger_values: { ...triggerValues, effective_mode: 'ask' },
   })
 })
+
+const effectiveModeCases = [
+  ['off', 'off'],
+  ['ask', 'ask'],
+  ['act', 'act'],
+  ['act', 'off'],
+] as const
+
+for (const [setting, effectiveMode] of effectiveModeCases) {
+  test(`It records effective_mode ${effectiveMode} next to setting ${setting} from decisionRecord`, () => {
+    const record = decisionRecord({ ...baseRecord, effectiveMode, triggerValues: { ...triggerValues, setting } })
+    expect(record.trigger_values).toMatchObject({ setting, effective_mode: effectiveMode })
+  })
+}
 
 const modeCases = [
   ['none', 'off', 'off', 'turn-end', 'shadow'],
