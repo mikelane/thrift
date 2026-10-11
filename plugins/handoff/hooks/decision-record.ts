@@ -55,6 +55,7 @@ export type Trigger = {
   isBusy: boolean
   contextTokens: number
   cacheReadTokens: number
+  effectiveMode: Mode
 }
 
 export type Evaluation = Trigger & {
@@ -86,12 +87,16 @@ export type RecordSessionFields = Pick<
   'mode' | 'setting' | 'threshold' | 'engineVersion' | 'contextTokens' | 'cacheReadTokens'
 >
 
+// What a record reads from the session when it is written. The mode and sizes come from the evaluation's snapshot.
+export type RecordStateFields = Pick<SessionState, 'setting' | 'threshold' | 'engineVersion'>
+
 export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
   point,
   signal,
   isBusy,
   contextTokens: state.contextTokens,
   cacheReadTokens: state.cacheReadTokens,
+  effectiveMode: state.mode,
 })
 
 export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p "$1" && cat >> "$2"', 'sh'] as const
@@ -109,19 +114,19 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
 export type DecisionRecord = ReturnType<typeof decisionRecord>
 
 export const recordFromEvaluation = (
-  state: RecordSessionFields,
+  state: RecordStateFields,
   evaluation: Evaluation,
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   return decisionRecord({
     now,
     sessionId,
     action,
     engineVersion: state.engineVersion,
-    effectiveMode: state.mode,
+    effectiveMode,
     triggerValues: {
       point,
       signal,

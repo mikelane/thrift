@@ -19,6 +19,7 @@ const evaluation: Evaluation = {
   isBusy: false,
   contextTokens: 200000,
   cacheReadTokens: 180000,
+  effectiveMode: 'act',
   action: 'advised',
 }
 
@@ -117,14 +118,26 @@ describe('recordFromEvaluation', () => {
     })
   }
 
-  test('It reads the threshold, setting and mode from the state, not the evaluation', () => {
-    const { trigger_values } = recordFromEvaluation({ ...state, threshold: 99000, setting: 'off', mode: 'off' }, evaluation, NOW, 'abc')
-    expect(trigger_values).toMatchObject({ threshold: 99000, setting: 'off', effective_mode: 'off' })
+  test('It reads the threshold and setting from the state', () => {
+    const { trigger_values } = recordFromEvaluation({ ...state, threshold: 99000, setting: 'off' }, evaluation, NOW, 'abc')
+    expect(trigger_values).toMatchObject({ threshold: 99000, setting: 'off' })
+  })
+
+  test('It reads the effective mode from the evaluation, not the state', () => {
+    const offState: RecordSessionFields = { ...state, mode: 'off' }
+    const { trigger_values } = recordFromEvaluation(offState, evaluation, NOW, 'abc')
+    expect(trigger_values.effective_mode).toBe('act')
   })
 
   test('It marks a none action in off mode as shadow', () => {
-    const record = recordFromEvaluation({ ...state, mode: 'off' }, { ...evaluation, action: 'none' }, NOW, 'abc')
+    const record = recordFromEvaluation(state, { ...evaluation, action: 'none', effectiveMode: 'off' }, NOW, 'abc')
     expect(record.mode).toBe('shadow')
+  })
+
+  test('It marks a none action decided in act as active when the state has since fallen to off', () => {
+    const offState: RecordSessionFields = { ...state, mode: 'off' }
+    const record = recordFromEvaluation(offState, { ...evaluation, action: 'none', effectiveMode: 'act' }, NOW, 'abc')
+    expect(record.mode).toBe('active')
   })
 })
 
@@ -136,6 +149,11 @@ describe('snapshotTrigger', () => {
       isBusy: true,
       contextTokens: 200000,
       cacheReadTokens: 180000,
+      effectiveMode: 'act',
     })
+  })
+
+  test('It reads the effective mode from the state at the time of the snapshot', () => {
+    expect(snapshotTrigger({ ...state, mode: 'off' }, 'prompt', 'weak', false).effectiveMode).toBe('off')
   })
 })

@@ -147,6 +147,21 @@ describe('held-prompt fields on an abandoned record', () => {
     })
   }
 
+  test('It records held_groups 1 on the none record when the abandoned handoff carries a held prompt', ASK, async ($, on) => {
+    const world = install($, on)
+    const pending = holdFork(world)
+    world.branch = 'alice/eng-1-start'
+    await startSession($)
+    await growTo200k($, world)
+    await submitPerson($, 'start on ENG-1')
+    await submitPerson($, 'now ENG-2')
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    pending.release({ isAnswered: false, reason: 'nothing-to-fork' })
+    await world.clock.settle()
+    expect(lastRecordOf(world, 'none').trigger_values).toMatchObject({ reason: 'no_handoff_written', held_groups: 1, held_unattended: false })
+  })
+
   test('It keeps the held prompt text out of the serialized none record', async ($, on) => {
     const { abandonsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     const world = await abandonsWith()
