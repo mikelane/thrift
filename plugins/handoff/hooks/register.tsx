@@ -269,28 +269,38 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
 
 const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
 
-// A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of rejecting.
-const submitEntered = async ($: EngineInterface, text: string, failureLabel: string): Promise<boolean> => {
+// The engine has no way to submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', and the
+// test kit does not show it to the plugin's own prompt.submit hook. So the turn it starts takes the origin the prompt first
+// came from here, at the call. A hook beneath the plugin that refuses the prompt makes
+// submit resolve with { drop } instead of rejecting.
+const submitEntered = async (
+  $: EngineInterface,
+  state: SessionState,
+  prompt: HeldPrompt,
+  failureLabel: string,
+): Promise<boolean> => {
+  const unattendedBefore = state.isTurnUnattended
+  state.isTurnUnattended = prompt.isUnattended
   try {
-    const result = await $.prompt.submit({ text })
+    const result = await $.prompt.submit({ text: prompt.text })
     if (result.drop === undefined) return true
     debug($, `${failureLabel}: ${result.drop}`)
-    return false
   } catch (error) {
     debug($, `${failureLabel}: ${String(error)}`)
-    return false
   }
+  state.isTurnUnattended = unattendedBefore
+  return false
 }
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string): Promise<Carried> => {
-  if (await submitEntered($, text, 'could not restore the held prompt')) return 'submitted'
-  keepInTranscript($, text)
+const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+  if (await submitEntered($, state, prompt, 'could not restore the held prompt')) return 'submitted'
+  keepInTranscript($, prompt.text)
   return 'not_carried'
 }
 
-const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
-  if (!isUnattended && (await refillBox($, text))) return 'in_box'
-  return submitOrKeepInTranscript($, text)
+const restorePrompt = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+  if (!prompt.isUnattended && (await refillBox($, prompt.text))) return 'in_box'
+  return submitOrKeepInTranscript($, state, prompt)
 }
 
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
@@ -307,7 +317,7 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
 const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
-    restores.push(await restorePrompt($, group.text, group.isUnattended))
+    restores.push(await restorePrompt($, state, group))
     releaseCarriedGroup(state, group, settledHandoff.isUnattended)
   }
   return restores
@@ -395,10 +405,10 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
-  if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
-  if (!isUnattended && (await refillBox($, text))) return 'in_box'
-  keepInTranscript($, text)
+const sendOrKeepInBox = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+  if (await submitEntered($, state, prompt, 'could not send the prompt')) return 'submitted'
+  if (!prompt.isUnattended && (await refillBox($, prompt.text))) return 'in_box'
+  keepInTranscript($, prompt.text)
   return 'not_carried'
 }
 
@@ -408,10 +418,10 @@ const announce = ($: EngineInterface, message: string) => {
 }
 
 // The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
-const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
+const deliverNote = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
-  return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
+  return sendOrKeepInBox($, state, { text: joinPrompts(message, sameOriginGroup?.text), isUnattended: settledHandoff.isUnattended })
 }
 
 const sendHeldGroups = async (
@@ -422,7 +432,7 @@ const sendHeldGroups = async (
 ): Promise<Carried[]> => {
   const deliveries: Carried[] = []
   for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, group.text, group.isUnattended))
+    deliveries.push(await sendOrKeepInBox($, state, group))
     releaseCarriedGroup(state, group, handoffIsUnattended)
   }
   return deliveries
@@ -435,7 +445,7 @@ const sendLateArrivals = async ($: EngineInterface, state: SessionState) => {
   for (let arrived = takeLateArrivals(state); arrived.length > 0; arrived = takeLateArrivals(state)) {
     for (const prompt of arrived) {
       await inspectPrompt($, state, prompt.text)
-      deliveries.push(await sendOrKeepInBox($, prompt.text, prompt.isUnattended))
+      deliveries.push(await sendOrKeepInBox($, state, prompt))
     }
     prompts.push(...arrived)
   }
@@ -454,7 +464,7 @@ const continueInFreshSession = async (
   // Before the first await: from here a prompt that arrives is held until the note and the held prompts have gone in.
   beginSending(state)
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
+  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
@@ -714,7 +724,7 @@ const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: s
   if (state.heldPrompt !== text) return
   state.heldPrompt = null
   await takeDownBand($, state)
-  await submitOrKeepInTranscript($, text)
+  await submitOrKeepInTranscript($, state, { text, isUnattended: false })
 }
 
 const holdPrompt = async ($: EngineInterface, state: SessionState, text: string, trigger: Trigger) => {
@@ -816,7 +826,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void logFailure($, sendOrKeepInBox($, heldPrompt, false))
+    void logFailure($, sendOrKeepInBox($, state, { text: heldPrompt, isUnattended: false }))
   })
 }
 

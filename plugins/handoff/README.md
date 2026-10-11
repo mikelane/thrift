@@ -167,6 +167,8 @@ Special cases:
 - **Unattended prompts.** A prompt from a scheduled task, routine, or `/loop` acts on a strong
   signal in every mode except `off`, and ignores a weak signal. That covers the prompt itself and
   the end of the turn it started.
+  A scheduled prompt a handoff held and sends again, in the fresh session or back in this one, is
+  still treated this way: `prompt.submit` takes no origin, so the plugin marks the turn itself.
 - **Non-interactive runs.** Under `claude -p` or the SDK the plugin only logs. The process can exit
   before a handoff ends, and a held prompt would be lost.
 - **Prompts never held.** A prompt that carries context or attachments (only its text can be
