@@ -4,13 +4,16 @@
 #
 # Usage: scripts/check.sh [plugin...]   (no arguments checks every plugins/*/)
 #
-# A plugin is named by its directory, `handoff` or `plugins/handoff/`. Anything else with a '/' or
-# '..' in it, or a lone '.', is refused.
+# Name a plugin by its directory: `handoff` or `plugins/handoff/`. Any other name with a '/' or '..'
+# in it, or a lone '.', is refused.
 #
 # CHECK_LOG_DIR: when set, each plugin's output goes to $CHECK_LOG_DIR/<plugin>.txt, which is
 # removed when the plugin passes and printed when it fails, and a `checked` file is created once
 # every plugin has been tried. CI sets it for the canary report job, which reads both.
 set -euo pipefail
+# A relative `cd` searches CDPATH and prints where it lands, so an exported CDPATH could move the
+# repo root elsewhere and put a second line in it.
+unset CDPATH
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -86,7 +89,7 @@ run_checks_for_plugin() {
   local name="$1"
   local plugin_dir="plugins/$name"
   if [[ "$name" == */* || "$name" == *..* || "$name" == . ]]; then
-    echo "Invalid plugin name: $name. Pass the bare name of a directory under plugins/, with no '/', '..' or lone '.'." >&2
+    echo "Invalid plugin name: $name. Pass a directory name under plugins/, such as 'handoff'." >&2
     return 1
   fi
   if [[ -z "$name" || ! -d "$plugin_dir" ]]; then

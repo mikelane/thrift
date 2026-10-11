@@ -15,10 +15,10 @@ name: CI
 # access can start a manual run, so `issues: write` there does not reintroduce the exposure pull
 # requests had.
 #
-# Job `canary-harness` runs .github/tests/canary-report.sh, which pulls the `report` script out of
-# this file and runs it against a stub `gh`. It holds `contents: read`, installs no Claude Code, and
-# needs no network. It has no path filter because the workflow has none: it takes seconds, and any
-# change to this file, to that harness or to scripts/check.sh runs it.
+# Job `canary-harness` runs .github/tests/canary-report.sh, which pulls the canary step scripts out
+# of this file and runs them, with scripts/check.sh, against stub `gh`, `claude` and `tsc`. It holds
+# `contents: read`, installs no Claude Code, and the harness makes no network calls. Like every job
+# here it has no path filter. It takes seconds, so every pull request runs it.
 #
 # A manual run defaults to a dry run: `report` prints the issues it would open instead of opening
 # them, which exercises the canary path without waiting for Monday.
@@ -136,10 +136,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # A schedule run and a manual run must not race to open the same issue. GitHub keeps one running
-    # and one pending run per group, and a newer pending run replaces the older pending one even with
-    # cancel-in-progress false. A manual dry run queued behind a running report can therefore drop a
-    # scheduled live run that was also waiting. The window is the few seconds the job runs, and the
-    # next scheduled run opens the issue, so the group is left as it is.
+    # and one pending run per group, and a newer pending run replaces the older one even with
+    # cancel-in-progress false. So a manual dry run queued behind a running report can drop a waiting
+    # scheduled live run. That window is the few seconds the job runs, and the next scheduled run
+    # opens the issue, so the group stays as it is.
     concurrency:
       group: canary-report-${{ github.repository }}
       cancel-in-progress: false
@@ -172,9 +172,8 @@ jobs:
           # length or more is withheld from the body, so the fence cannot push the body past the
           # limit.
           MAX_FENCE: 64
-        # Without a shell key Actions runs `bash -e`. This pins `bash -eo pipefail` so the script runs
-        # under the same options in the harness, which is stricter, and so no pipeline below depends on
-        # an unstated default.
+        # With no shell key, Actions runs `bash -e`. `shell: bash` adds pipefail, so a failed stage of
+        # any pipeline below fails the step, and the harness runs the script with the same options.
         shell: bash
         run: |
           problems=0
@@ -200,16 +199,16 @@ jobs:
           can_open=true
           version=$(cat "$failures/claude-version") || version=''
           if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-            # %q does not escape ':'. A version such as "::error::x" cannot become a workflow command
-            # only because this text comes first on the line, so keep a prefix on every line that
-            # prints the version.
-            printf 'Unexpected Claude Code version: %q\n' "$version"
+            # %q does not escape ':'. A version like "::error::x" is not read as a workflow command
+            # only because text comes before it on the line. Keep a prefix on every line that prints
+            # the version.
+            printf 'Unexpected Claude Code version: %q. Check the version step in check (latest).\n' "$version"
             problems=1
             can_open=false
           fi
 
           plugins=$(gh api "repos/${GH_REPO}/contents/plugins?ref=${GITHUB_SHA}" --jq '.[] | select(.type=="dir") | .name') || {
-            echo 'Failed to list the plugins in the repository.'
+            echo 'Failed to list the plugins in the repository, so no issue can be opened. Rerun the job.'
             problems=1
             plugins=''
           }
@@ -223,7 +222,7 @@ jobs:
             echo 'dry run: no failure logs, nothing to open'
           fi
           if [ "$can_open" != true ] && [ "${#logs[@]}" != 0 ]; then
-            echo "Opening nothing for ${#logs[@]} failing logs because the version is invalid."
+            echo "Opening no issues for ${#logs[@]} failing logs because the version is invalid. Read the failures in the check (latest) log."
             logs=()
           fi
 
@@ -240,12 +239,12 @@ jobs:
               continue
             fi
             title="Claude Code ${version} breaks ${plugin}"
-            # --search reads an index that lags behind new issues, so list the open issues instead
-            # and compare the whole title here. --limit lifts gh's default of 30 results.
-            # SAFETY: this repo keeps far fewer than 1000 issues open. Past that, a duplicate could
-            # slip through, and MAX_ISSUES still bounds how many a run opens.
+            # --search reads an index that lags behind new issues, so list the open issues and compare
+            # whole titles here. --limit raises gh's default of 30 results.
+            # SAFETY: this repo has far fewer than 1000 open issues. Past that, a run could open a
+            # duplicate, but MAX_ISSUES still caps how many it opens.
             open=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
-              echo "Failed to list issues for ${title}"
+              echo "Failed to list issues for ${title}. Rerun the job to open it."
               problems=1
               continue
             }
@@ -262,10 +261,15 @@ jobs:
               continue
             fi
             # Passing-test lines are most of a long log and would push the failing test out of the
-            # tail. grep exits 1 when nothing is left to print, which pipefail would turn into a failed
-            # job, so each grep is allowed to find nothing.
-            { grep -av '^(pass) ' "$log" || true; } | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
-            longest=$({ grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" || true; } | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
+            # tail. grep exits 1 when it prints nothing, so each grep may find nothing. Any other
+            # status is a read error: an unscanned log could escape a 3-backtick fence, so that plugin
+            # is reported and skipped, and the other plugins still run.
+            if ! { grep -av '^(pass) ' "$log" || [ $? = 1 ]; } | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt" \
+              || ! longest=$({ grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" || [ $? = 1 ]; } | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }'); then
+              echo "Failed to read the log for ${plugin}; not opening an issue."
+              problems=1
+              continue
+            fi
             {
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
               echo "Full log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -287,11 +291,11 @@ jobs:
               print_untrusted "$RUNNER_TEMP/issue-body.md"
             else
               # A failed create does not count toward the cap, so a later plugin still gets its turn.
-              # SAFETY: a create that fails after GitHub stored the issue is not counted either. The
-              # number of plugin directories in the repository still bounds how many issues one run
-              # can open, because each plugin is tried once and its title is deduped on the next run.
+              # SAFETY: a create that fails after GitHub stored the issue is not counted either. A run
+              # still opens at most one issue per plugin directory, because each plugin is tried once,
+              # and the next run's dedupe finds the stored issue.
               gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md" || {
-                echo "Failed to create an issue for ${title}"
+                echo "Failed to create an issue for ${title}. Rerun the job to open it."
                 problems=1
                 continue
               }
