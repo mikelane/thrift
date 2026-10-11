@@ -125,6 +125,7 @@ const keptRefusedPrompt = (kind: string, text: string): string =>
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
+const UNSENT_SCHEDULED_PROMPT = 'A prompt could not be sent, so here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
@@ -281,7 +282,9 @@ const refillBox = async ($: EngineInterface, text: string, placement: BoxPlaceme
   }
 }
 
-const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
+// A scheduled prompt is never offered to the box and is not the person's own, so it gets a notice that claims neither.
+const keepInTranscript = ($: EngineInterface, text: string, isUnattended = false) =>
+  $.ui.log(`${isUnattended ? UNSENT_SCHEDULED_PROMPT : UNSENT_PROMPT}\n${text}`)
 
 // The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
 // plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
@@ -308,7 +311,7 @@ const submitEntered = async (
 
 const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
   if (await submitEntered($, state, prompt, 'could not restore the held prompt')) return 'submitted'
-  keepInTranscript($, prompt.text)
+  keepInTranscript($, prompt.text, prompt.isUnattended)
   return 'not_carried'
 }
 
@@ -427,7 +430,7 @@ const sendOrKeepInBox = async (
 ): Promise<Carried> => {
   if (await submitEntered($, state, prompt, 'could not send the prompt')) return 'submitted'
   if (!prompt.isUnattended && (await refillBox($, prompt.text, placement))) return 'in_box'
-  keepInTranscript($, prompt.text)
+  keepInTranscript($, prompt.text, prompt.isUnattended)
   return 'not_carried'
 }
 

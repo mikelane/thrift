@@ -331,9 +331,9 @@ describe('abandoning a handoff and restoring held prompts', () => {
     await submitPerson($, 'person says')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
-    expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:Your prompt'))]).toEqual([
+    expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:A prompt could not'))]).toEqual([
       'person says',
-      ['log:Your prompt could not be sent or put in the prompt box. Here it is:\nnightly job'],
+      ['log:A prompt could not be sent, so here it is:\nnightly job'],
     ])
   })
 
