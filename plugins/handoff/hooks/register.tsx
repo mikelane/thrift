@@ -276,6 +276,10 @@ const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSEN
 // test kit does not show it to the plugin's own prompt.submit hook. So the turn it starts takes the origin the prompt first
 // came from here, at the call. A hook beneath the plugin that refuses the prompt makes
 // submit resolve with { drop } instead of rejecting.
+// SAFETY: a person prompt that lands in the one engine round trip a submit takes, with no handoff holding, sets the flag itself,
+// and a refused submit then puts back the value from before it. That needs a failed restore of a scheduled prompt, a person
+// typing in that window, and the turn before it unattended. The cost is one turn judged by the wrong origin, so a band is
+// missing or shown once. No guard: while the handoff delivers, person prompts are held and cannot reach the flag.
 const submitEntered = async (
   $: EngineInterface,
   state: SessionState,
