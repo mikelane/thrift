@@ -1049,6 +1049,7 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
+// The length is the registration list: the engine requires every handler that takes $ to be declared at the top level.
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   // SAFETY: a hot reload (a code change under --plugin-dir watch, or a setting changed in /config) runs register again, and
