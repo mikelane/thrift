@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { bash, completeTurn, growTo200k, startTurn, submitPerson, writingTheNote, type World } from './helpers'
+import { bash, completeTurn, growTo200k, runCommand, startTurn, submitPerson, writingTheNote, type World } from './helpers'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 
@@ -116,5 +116,17 @@ describe('a turn that starts between resubmitted prompts', () => {
     await finishNote()
     await endStrongTurnInFreshSession($, world, 'The handoff plugin sent a message: nightly job')
     expect(handoffsStarted(world)).toBe(2)
+  })
+})
+
+describe('a resubmitted prompt whose turn never started', () => {
+  test('It judges a person turn with the same text as attended after the person clears the session', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await finishNote()
+    await runCommand($, 'clear')
+    await submitPerson($, 'nightly job')
+    await endStrongTurnInFreshSession($, world, 'nightly job')
+    expect(handoffsStarted(world)).toBe(1)
   })
 })

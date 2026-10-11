@@ -115,6 +115,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.backgroundTasks.clear()
   state.hasFinishedTask = false
   state.isTurnUnattended = false
+  state.resubmittedPrompts = []
   state.backoffFrom = null
   state.heldPrompt = null
   state.isTurnRunning = false

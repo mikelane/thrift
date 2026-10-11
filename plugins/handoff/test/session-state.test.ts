@@ -552,3 +552,10 @@ test('It judges a turn start by a queued resubmitted prompt that the turn text f
   startMainTurn(state, 'The handoff plugin sent a message: nightly job')
   expect([state.isTurnUnattended, state.resubmittedPrompts]).toEqual([true, []])
 })
+
+test('It empties the queue of resubmitted prompts in resetForNewSession', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, nightly)
+  resetForNewSession(state)
+  expect(state.resubmittedPrompts).toEqual([])
+})
