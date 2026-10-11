@@ -66,6 +66,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
     isBusy: values.is_background_busy,
     contextTokens: values.context_tokens,
     cacheReadTokens: values.cache_read_tokens,
+    effectiveMode: values.effective_mode,
     action: sample.action,
     reason: values.reason,
     note: values.note,

@@ -18,6 +18,7 @@ const cleared: Evaluation = {
   isBusy: false,
   contextTokens: 200000,
   cacheReadTokens: 180000,
+  effectiveMode: 'act',
   action: 'cleared',
   note: 'appended',
   clearedBy: 'handoff',

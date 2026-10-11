@@ -55,6 +55,7 @@ export type Trigger = {
   isBusy: boolean
   contextTokens: number
   cacheReadTokens: number
+  effectiveMode: Mode
 }
 
 export type Evaluation = Trigger & {
@@ -92,6 +93,7 @@ export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['poin
   isBusy,
   contextTokens: state.contextTokens,
   cacheReadTokens: state.cacheReadTokens,
+  effectiveMode: state.mode,
 })
 
 export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p "$1" && cat >> "$2"', 'sh'] as const
@@ -114,14 +116,14 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   return decisionRecord({
     now,
     sessionId,
     action,
     engineVersion: state.engineVersion,
-    effectiveMode: state.mode,
+    effectiveMode,
     triggerValues: {
       point,
       signal,
