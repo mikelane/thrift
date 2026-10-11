@@ -249,15 +249,18 @@ jobs:
               continue
             fi
             opened=$((opened + 1))
-            tail -c 60000 "$log" | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
+            # Passing-test lines are most of a long log and would push the failing test out of the
+            # tail. grep exiting 1 on an all-pass log is harmless: the pipeline status is tr's.
+            grep -av '^(pass) ' "$log" | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
             longest=$(grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
             {
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
+              echo "Full log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
               echo
               echo 'The fix moves the pinned build in this workflow and TESTED_THROUGH in the plugin forward.'
               echo
               if [ "$longest" -ge "$MAX_FENCE" ]; then
-                echo "The log is withheld because it contains an unusually long backtick run. See ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} for it."
+                echo "The log is withheld because it contains an unusually long backtick run. Read it in the full log linked above."
               else
                 fence=$(printf '`%.0s' $(seq 1 $(( longest > 2 ? longest + 1 : 3 ))))
                 echo "$fence"
