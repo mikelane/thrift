@@ -86,8 +86,9 @@ in `plugins/<name>/checks/*.ts`. `scripts/check.sh` runs each one with
 the run. Such a file imports its siblings with explicit `.ts` extensions, so those modules import
 nothing and use only erasable TypeScript. It needs Node 22.6 or newer (older Node exits with
 "bad option", which fails the step). `tsc` does not cover `checks/`: they need `@types/node` for
-`node:fs` and `allowImportingTsExtensions`, and the logic they call lives in `hooks/`, which `tsc`
-and `plugin test` already cover.
+`node:fs` and `allowImportingTsExtensions`, so a check only reads
+the file, calls pure functions in `hooks/`, prints, and sets the exit code. Everything else lives
+in `hooks/`, which `tsc` and `plugin test` cover.
 
 Tests use `claude-code/testing`. The kit mocks the clock, store, env, and `session.append`
 directly (`mock.*`). Every other engine call (`model.fork`, `process.run`, `agent.list`,
