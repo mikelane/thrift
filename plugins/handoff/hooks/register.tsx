@@ -59,11 +59,15 @@ import {
   carriesExtras,
   planPromptDuringHandoff,
   isPersonOrigin,
+  isComposerOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
+  senderLabel,
 } from './prompt-plan'
 import {
   addHeldPrompt,
+  beginSending,
+  removeResubmittedPrompt,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -79,13 +83,16 @@ import {
   noteCacheReads,
   recordSessionEnd,
   releaseCarried,
+  queueResubmittedPrompt,
   releaseCarriedGroup,
   releaseTurnEndWaiter,
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
+  takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type ButtonPress,
+  type HeldPrompt,
   type HeldPromptGroup,
   type SessionState,
 } from './session-state'
@@ -108,14 +115,17 @@ const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
-const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
+const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
-  'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
 const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
+const keptRefusedPrompt = (kind: string, text: string): string =>
+  `A prompt from ${senderLabel(kind)} had attachments or context, so it could not be held during the handoff and did not run. Its attachments and context were not kept. Its text, to send again after the handoff:\n${text}`
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
-const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
+const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
+const UNSENT_SCHEDULED_PROMPT = 'A prompt could not be sent, so here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
@@ -252,11 +262,19 @@ const registerHandoffCommand = async ($: EngineInterface) => {
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
-const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => {
+// before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box
+// one after another keep their order.
+type BoxPlacement = 'before_draft' | 'after_draft'
+
+// A prompt the box already holds as whole lines is not added again, so an identical prompt sent twice shows once; the box
+// is for the person to review and send, and a second copy of a line they can see would only be noise to delete.
+const refillBox = async ($: EngineInterface, text: string, placement: BoxPlacement = 'before_draft'): Promise<boolean> => {
   try {
     const draft = (await $.prompt.read()).text
     if (holdsPrompt(draft, text)) return true
-    const filled = await $.prompt.fill({ text: draft === '' ? text : `${text}\n${draft}`, mode: 'replace' })
+    const withDraft = placement === 'before_draft' ? `${text}\n${draft}` : `${draft}\n${text}`
+    const filled = await $.prompt.fill({ text: draft === '' ? text : withDraft, mode: 'replace' })
+    if (!filled.isFilled) debug($, `the prompt box refused the prompt: ${filled.refusal ?? 'refused by a hook'}`)
     return filled.isFilled
   } catch (error) {
     debug($, `could not refill the prompt box: ${String(error)}`)
@@ -264,30 +282,42 @@ const refillBox = async ($: EngineInterface, text: string): Promise<boolean> => 
   }
 }
 
-const keepInTranscript = ($: EngineInterface, text: string) => $.ui.log(`${UNSENT_PROMPT}\n${text}`)
+// A scheduled prompt is never offered to the box and is not the person's own, so it gets a notice that claims neither.
+const keepInTranscript = ($: EngineInterface, text: string, isUnattended = false) =>
+  $.ui.log(`${isUnattended ? UNSENT_SCHEDULED_PROMPT : UNSENT_PROMPT}\n${text}`)
 
-// A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of rejecting.
-const submitEntered = async ($: EngineInterface, text: string, failureLabel: string): Promise<boolean> => {
+// The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
+// plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
+// the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
+// turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of
+// rejecting.
+const submitEntered = async (
+  $: EngineInterface,
+  state: SessionState,
+  prompt: HeldPrompt,
+  failureLabel: string,
+): Promise<boolean> => {
+  queueResubmittedPrompt(state, prompt)
   try {
-    const result = await $.prompt.submit({ text })
+    const result = await $.prompt.submit({ text: prompt.text })
     if (result.drop === undefined) return true
     debug($, `${failureLabel}: ${result.drop}`)
-    return false
   } catch (error) {
     debug($, `${failureLabel}: ${String(error)}`)
-    return false
   }
+  removeResubmittedPrompt(state, prompt)
+  return false
 }
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string): Promise<Carried> => {
-  if (await submitEntered($, text, 'could not restore the held prompt')) return 'submitted'
-  keepInTranscript($, text)
+const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+  if (await submitEntered($, state, prompt, 'could not restore the held prompt')) return 'submitted'
+  keepInTranscript($, prompt.text, prompt.isUnattended)
   return 'not_carried'
 }
 
-const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
-  if (!isUnattended && (await refillBox($, text))) return 'in_box'
-  return submitOrKeepInTranscript($, text)
+const restorePrompt = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
+  if (!prompt.isUnattended && (await refillBox($, prompt.text))) return 'in_box'
+  return submitOrKeepInTranscript($, state, prompt)
 }
 
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
@@ -304,7 +334,7 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
 const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
-    restores.push(await restorePrompt($, group.text, group.isUnattended))
+    restores.push(await restorePrompt($, state, group))
     releaseCarriedGroup(state, group, settledHandoff.isUnattended)
   }
   return restores
@@ -392,10 +422,15 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
-  if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
-  if (!isUnattended && (await refillBox($, text))) return 'in_box'
-  keepInTranscript($, text)
+const sendOrKeepInBox = async (
+  $: EngineInterface,
+  state: SessionState,
+  prompt: HeldPrompt,
+  placement: BoxPlacement = 'before_draft',
+): Promise<Carried> => {
+  if (await submitEntered($, state, prompt, 'could not send the prompt')) return 'submitted'
+  if (!prompt.isUnattended && (await refillBox($, prompt.text, placement))) return 'in_box'
+  keepInTranscript($, prompt.text, prompt.isUnattended)
   return 'not_carried'
 }
 
@@ -405,10 +440,10 @@ const announce = ($: EngineInterface, message: string) => {
 }
 
 // The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
-const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
+const deliverNote = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
-  return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
+  return sendOrKeepInBox($, state, { text: joinPrompts(message, sameOriginGroup?.text), isUnattended: settledHandoff.isUnattended })
 }
 
 const sendHeldGroups = async (
@@ -419,10 +454,27 @@ const sendHeldGroups = async (
 ): Promise<Carried[]> => {
   const deliveries: Carried[] = []
   for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, group.text, group.isUnattended))
+    deliveries.push(await sendOrKeepInBox($, state, group))
     releaseCarriedGroup(state, group, handoffIsUnattended)
   }
   return deliveries
+}
+
+type LateArrivals = { prompts: HeldPrompt[]; deliveries: Carried[] }
+
+// Prompts that arrived during the delivery go in one by one in arrival order, and more may arrive while they do.
+const sendLateArrivals = async ($: EngineInterface, state: SessionState): Promise<LateArrivals> => {
+  const prompts: HeldPrompt[] = []
+  const deliveries: Carried[] = []
+  for (let arrived = takeLateArrivalsOrEndSending(state); arrived.length > 0; arrived = takeLateArrivalsOrEndSending(state)) {
+    for (const prompt of arrived) {
+      // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
+      await inspectPrompt($, state, prompt.text)
+      deliveries.push(await sendOrKeepInBox($, state, prompt, 'after_draft'))
+    }
+    prompts.push(...arrived)
+  }
+  return { prompts, deliveries }
 }
 
 const continueInFreshSession = async (
@@ -434,8 +486,11 @@ const continueInFreshSession = async (
   hasTurnAfterNote: boolean,
   clearedBy: ClearedBy,
 ) => {
+  // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
+  // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
+  beginSending(state)
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
+  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
@@ -445,6 +500,7 @@ const continueInFreshSession = async (
   // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
   // can make the loop throw. Any call added to the loop must not throw either.
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
+  const late = await sendLateArrivals($, state)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
@@ -453,9 +509,9 @@ const continueInFreshSession = async (
     clearedBy,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
-      ...heldGroupFields(settledHandoff.heldGroups),
+      ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
-      held_other_delivery: worstDelivery(deliveries),
+      held_other_delivery: worstDelivery([...deliveries, ...late.deliveries]),
     },
   })
 }
@@ -694,7 +750,7 @@ const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: s
   if (state.heldPrompt !== text) return
   state.heldPrompt = null
   await takeDownBand($, state)
-  await submitOrKeepInTranscript($, text)
+  await submitOrKeepInTranscript($, state, { text, isUnattended: false })
 }
 
 const holdPrompt = async ($: EngineInterface, state: SessionState, text: string, trigger: Trigger) => {
@@ -712,12 +768,19 @@ const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
   if (!(await refillBox($, text))) keepInTranscript($, text)
 }
 
-// An attachment or context can't be resent, so the prompt waits in the box for the person to send it again.
-const refuseDuringHandoff = ($: EngineInterface, text: string): { drop: string } => {
+// An attachment or context can't be resent, so the prompt is handed back instead. A person at this terminal gets it in the
+// box to send again. For any other sender the box is not where they are, and filling it could displace the draft of the
+// person who is: the engine has no channel back to the sender beyond the drop reason, so the text goes in the transcript.
+const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput): Promise<void> => {
+  if (isComposerOrigin(e.origin.kind)) return returnToBox($, e.text)
+  $.ui.log(keptRefusedPrompt(e.origin.kind, e.text))
+}
+
+const refuseDuringHandoff = ($: EngineInterface, e: PromptSubmitInput): { drop: string } => {
   debug($, 'refused a prompt with attachments or context during the handoff')
   $.ui.toast(REFUSED_TOAST)
   $.clock.after(0, () => {
-    void logFailure($, returnToBox($, text))
+    void logFailure($, handBackRefused($, e))
   })
   return { drop: REFUSED_DURING_HANDOFF }
 }
@@ -746,7 +809,7 @@ const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
     debug($, 'dropped a repeat of the prompt the handoff carries')
     return { drop: REPEAT_NOT_ADDED }
   }
-  if (action === 'refuse') return refuseDuringHandoff($, e.text)
+  if (action === 'refuse') return refuseDuringHandoff($, e)
   if (action === 'hold') return holdForHandoff($, state, e)
   return undefined
 }
@@ -796,7 +859,7 @@ const pressHeldPromptButton = async ($: EngineInterface, state: SessionState, tr
   if (button === 'handoff-send' && scheduleHandoff($, state, { trigger, heldPrompt, isUnattended: false })) return
   await writeRecord($, state, { ...trigger, action: 'none', reason: 'send_here' })
   $.clock.after(0, () => {
-    void logFailure($, sendOrKeepInBox($, heldPrompt, false))
+    void logFailure($, sendOrKeepInBox($, state, { text: heldPrompt, isUnattended: false }))
   })
 }
 
@@ -925,6 +988,12 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
 
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
+  // SAFETY: a hot reload (a code change under --plugin-dir watch, or a setting changed in /config) runs register again, and
+  // the new state starts with pending null and nothing held. A handoff already running keeps the old state and its old
+  // closures. Its prompts are no longer held, so they pass through and /clear can land inside their turn. The old hooks are
+  // gone too, so nothing releases a wait for a turn to end, and that handoff waits forever and never clears. Both need a
+  // reload while a handoff runs, from the note being written until its prompts are delivered. No guard: carrying the state
+  // across a reload would need it in an atom. After a reload, run /handoff again.
   const state = createState({
     setting,
     threshold: asThreshold(options.handoffContextTokens),
@@ -979,7 +1048,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    startMainTurn(state)
+    startMainTurn(state, e.text)
     return next(e)
   }).catch(($, e, next) => next(e))
 

@@ -1,8 +1,10 @@
 import type { Engine } from 'claude-code/testing'
-import type { ModelForkResult, On, SessionCompactResult } from 'claude-code'
+import type { On, SessionCompactResult } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
-import { answered, bash, compacted, completeTurn, growTo200k, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
+import { answered, bash, compacted, completeTurn, growTo200k, holdFork, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson, writingTheNote, type World } from './helpers'
+
+export { holdFork, writingTheNote } from './helpers'
 
 export const ACT = { options: { handoffMode: 'act' } } as const
 
@@ -29,28 +31,6 @@ export const BASE_MESSAGE = 'Handoff from the previous session (old-session), wr
 export const SECOND_MESSAGE = 'Handoff from the previous session (new-session), written by Claude just before a /clear:\n\nSecond note.'
 
 export const LATE_TURN_MESSAGE = `${BASE_MESSAGE}\n\n${turnAfterNoteLine('old-session')}`
-
-export const holdFork = (world: World) => {
-  const pendingFork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pendingFork.release = resolve
-    })
-  return pendingFork
-}
-
-export const writingTheNote = async ($: Engine, on: On) => {
-  const world = install($, on)
-  const fork = holdFork(world)
-  await startSession($)
-  await runCommand($, 'handoff')
-  await world.clock.settle()
-  const finishNote = async () => {
-    fork.release(answered('The handoff note.'))
-    await world.clock.settle()
-  }
-  return { world, finishNote }
-}
 
 export const turnRunningWhenTheNoteIsWritten = async ($: Engine, on: On) => {
   const world = install($, on)

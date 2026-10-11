@@ -255,7 +255,7 @@ test('It holds a second prompt and sends it once with the first while a handoff 
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
   const second = await submitPerson($, 'also ENG-3')
-  expect(dropOf(second)).toBe('A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.')
+  expect(dropOf(second)).toBe("A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript.")
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso ENG-3'])
@@ -385,7 +385,7 @@ test('It heads the transcript copy of an unsent prompt without a doubled plugin 
   world.submitThrows = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(world.effects).toContain('log:Your prompt could not be sent or put back in the box. Here it is:\nnow ENG-2')
+  expect(world.effects).toContain('log:Your prompt could not be sent or put in the prompt box. Here it is:\nnow ENG-2')
 })
 
 test('It writes an unattended prompt to the transcript when it cannot be sent after the clear', ACT, async ($, on) => {

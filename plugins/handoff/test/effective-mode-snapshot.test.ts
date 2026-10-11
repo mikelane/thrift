@@ -1,21 +1,12 @@
 import { expect, test } from 'claude-code/testing'
-import type { ModelForkResult, SessionCompactResult } from 'claude-code'
+import type { SessionCompactResult } from 'claude-code'
 
-import { answered, compacted, completeTurn, growTo200k, install, lastRecord, runCommand, startSession, type World } from './helpers'
+import { answered, compacted, completeTurn, growTo200k, holdFork, install, lastRecord, runCommand, startSession, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const ASK = { options: { handoffMode: 'ask' } } as const
 
 const UNTESTED_ENGINE = { version: '9.9.9', base: '9.9.9' }
-
-const holdFork = (world: World) => {
-  const pending: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pending.release = resolve
-    })
-  return pending
-}
 
 const holdCompact = (world: World) => {
   const pending: { release: (result: SessionCompactResult) => void; fail: (error: Error) => void } = {

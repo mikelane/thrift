@@ -314,7 +314,7 @@ export const runStep = async ($: Engine, world: World, { usage, advisorCalls = 0
   return item.value
 }
 
-export const startTurn = ($: Engine) => $.turn.start({ text: 'work', turnId: 't1' })
+export const startTurn = ($: Engine, text = 'work') => $.turn.start({ text, turnId: 't1' })
 
 type Completion = { usage?: TurnUsage; reason?: 'answer' | 'aborted' | 'error'; agentId?: string }
 
@@ -414,3 +414,26 @@ export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnI
 
 export const dropOf = (result: unknown): string | undefined =>
   typeof result === 'object' && result !== null && 'drop' in result && typeof result.drop === 'string' ? result.drop : undefined
+
+export const holdFork = (world: World) => {
+  const pendingFork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
+  world.fork = () =>
+    new Promise<ModelForkResult>(resolve => {
+      pendingFork.release = resolve
+    })
+  return pendingFork
+}
+
+// A /handoff whose note is still being written; the returned callbacks finish or fail the write.
+export const writingTheNote = async ($: Engine, on: On) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  const finishWith = async (result: ModelForkResult) => {
+    fork.release(result)
+    await world.clock.settle()
+  }
+  return { world, finishNote: () => finishWith(answered('The handoff note.')), failNote: () => finishWith({ isAnswered: false, reason: 'nothing-to-fork' }) }
+}

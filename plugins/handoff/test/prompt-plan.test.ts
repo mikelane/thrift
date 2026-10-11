@@ -5,9 +5,28 @@ import {
   carriesExtras,
   planPromptDuringHandoff,
   isPersonOrigin,
+  isComposerOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
+  senderLabel,
 } from '../hooks/prompt-plan'
+
+const senderLabelCases = [
+  ['composer', 'this terminal'],
+  ['bridge', 'the bridge'],
+  ['sdk', 'an SDK client'],
+  ['scheduled-trigger', 'a scheduled task'],
+  ['plugin', 'a sender outside this terminal'],
+] as const
+
+const composerCases = [
+  ['composer', true],
+  ['bridge', false],
+  ['sdk', false],
+  ['scheduled-trigger', false],
+  ['plugin', false],
+  ['', false],
+] as const
 
 const originCases = [
   ['composer', true, false],
@@ -109,5 +128,17 @@ const newWorkCases = [
 for (const [name, overrides, signal, action] of newWorkCases) {
   test(`It plans ${action} with a ${signal} signal for new work in ${name}`, () => {
     expect(planNewWorkPrompt(newWork(overrides))).toEqual({ signal, action })
+  })
+}
+
+for (const [kind, isComposer] of composerCases) {
+  test(`It returns ${isComposer} from isComposerOrigin for ${JSON.stringify(kind)}`, () => {
+    expect(isComposerOrigin(kind)).toBe(isComposer)
+  })
+}
+
+for (const [kind, label] of senderLabelCases) {
+  test(`It returns ${JSON.stringify(label)} from senderLabel for ${JSON.stringify(kind)}`, () => {
+    expect(senderLabel(kind)).toBe(label)
   })
 }
