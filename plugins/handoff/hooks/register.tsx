@@ -80,18 +80,16 @@ import {
   asThreshold,
   bandButtons,
   busyRefusalTrigger,
-  classify,
   contextFromStep,
-  respond,
   type Button,
   type Signal,
 } from './signals'
 import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
+import { canHoldPrompt, carriesExtras, duringHandoffAction, isPersonOrigin, isUnattendedOrigin, planNewWorkPrompt } from './prompt-plan'
+import { planTurnEnd } from './turn-end-plan'
 import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
-const BACKOFF_TOKENS = 50_000
 const BRANCH_READ_TIMEOUT_MS = 5000
-const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
@@ -233,9 +231,6 @@ const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult
     if (stopped !== null) state.backgroundTasks.delete(stopped)
   }
 }
-
-const isBackedOff = (state: SessionState) =>
-  state.backoffFrom !== null && state.contextTokens < state.backoffFrom + BACKOFF_TOKENS
 
 const runCompaction = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
   const sizeBefore = state.contextTokens
@@ -623,28 +618,24 @@ const evaluateTurnEnd = async (
   if (state.pending !== null) return
   noteCacheReads(state, e)
   const isBusy = await isBackgroundBusy($, state)
-  const signal = classify({
+  const { signal, outcome } = planTurnEnd({
     contextTokens: state.contextTokens,
     threshold: state.threshold,
-    isStoppingPoint: hasFinishedTask,
+    hasFinishedTask,
     isBackgroundBusy: isBusy,
+    mode: state.mode,
+    isUnattended: state.isTurnUnattended,
+    backoffFrom: state.backoffFrom,
   })
   const trigger = snapshot(state, 'turn-end', signal, isBusy)
-  const response = respond({
-    mode: state.mode,
-    signal,
-    stoppingPoint: hasFinishedTask ? 'finished-task' : null,
-    isBackgroundBusy: isBusy,
-    isUnattended: state.isTurnUnattended,
-  })
-  if (signal === 'weak' && isBackedOff(state)) {
+  if (outcome.kind === 'back-off') {
     await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
   }
-  if (response.kind === 'advise') return offerBand($, state, trigger, response.holdsPrompt)
+  if (outcome.kind === 'advise') return offerBand($, state, trigger, outcome.holdsPrompt)
   await takeDownBand($, state)
-  if (response.kind === 'compact') return scheduleCompaction($, state, trigger)
-  if (response.kind === 'handoff') return scheduleHandoff($, state, { trigger, isUnattended: state.isTurnUnattended })
+  if (outcome.kind === 'compact') return scheduleCompaction($, state, trigger)
+  if (outcome.kind === 'handoff') return scheduleHandoff($, state, { trigger, isUnattended: state.isTurnUnattended })
   return writeRecord($, state, { ...trigger, action: 'none' })
 }
 
@@ -696,8 +687,6 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
 
 // -- Prompts held while a handoff is pending. Kept together so the whole rule can move out of this file as one piece.
 
-const isUnattendedOrigin = (e: PromptSubmitInput): boolean => e.origin.kind === 'scheduled-trigger'
-
 const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
   if (!(await refillBox($, text))) keepInTranscript($, text)
 }
@@ -713,8 +702,7 @@ const refuseDuringHandoff = ($: EngineInterface, text: string): { drop: string }
 }
 
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
-  if ((e.attachments?.length ?? 0) > 0 || (e.context?.length ?? 0) > 0) return refuseDuringHandoff($, e.text)
-  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e) })
+  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind) })
   debug($, `held a prompt for the handoff (${heldCount} held)`)
   return { drop: HELD_FOR_HANDOFF }
 }
@@ -727,43 +715,49 @@ const settleHandoff = (state: SessionState, request: HandoffRequest): SettledHan
 })
 
 const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } | undefined => {
+  const action = duringHandoffAction({
+    isCarried: isCarriedByHandoff(state, e.text),
+    isHolding: isHoldingForHandoff(state),
+    hasExtras: carriesExtras(e),
+  })
   // The handoff already carries this text and sends or restores it itself, so a repeat of it would run twice.
-  if (isCarriedByHandoff(state, e.text)) {
+  if (action === 'drop-repeat') {
     debug($, 'dropped a repeat of the prompt the handoff carries')
     return { drop: REPEAT_NOT_ADDED }
   }
-  if (isHoldingForHandoff(state)) return holdForHandoff($, state, e)
+  if (action === 'refuse') return refuseDuringHandoff($, e.text)
+  if (action === 'hold') return holdForHandoff($, state, e)
   return undefined
 }
 
 const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSubmitInput) => {
   const duringHandoff = decideDuringHandoff($, state, e)
   if (duringHandoff !== undefined) return duringHandoff
-  const isUnattended = isUnattendedOrigin(e)
+  const isUnattended = isUnattendedOrigin(e.origin.kind)
   state.heldPrompt = null
   state.isTurnUnattended = isUnattended
   const isNewWork = await inspectPrompt($, state, e.text)
-  const canHold =
-    isNewWork &&
-    state.pending === null &&
-    e.turnId === undefined &&
-    (e.attachments?.length ?? 0) === 0 &&
-    (e.context?.length ?? 0) === 0
+  const canHold = canHoldPrompt({
+    isNewWork,
+    hasPending: state.pending !== null,
+    hasTurnId: e.turnId !== undefined,
+    hasExtras: carriesExtras(e),
+  })
   if (!canHold) return null
   const isBusy = await isBackgroundBusy($, state)
-  const signal = classify({
+  const { signal, action } = planNewWorkPrompt({
     contextTokens: state.contextTokens,
     threshold: state.threshold,
-    isStoppingPoint: true,
     isBackgroundBusy: isBusy,
+    mode: state.mode,
+    isUnattended,
   })
   const trigger = snapshot(state, 'prompt', signal, isBusy)
-  const response = respond({ mode: state.mode, signal, stoppingPoint: 'new-work', isBackgroundBusy: isBusy, isUnattended })
-  if (response.kind === 'handoff') {
+  if (action === 'handoff') {
     const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, isUnattended })
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
   }
-  if (response.kind === 'advise' && response.holdsPrompt) return holdPrompt($, state, e.text, trigger)
+  if (action === 'hold') return holdPrompt($, state, e.text, trigger)
   await writeRecord($, state, { ...trigger, action: 'none' })
   return null
 }
@@ -955,10 +949,10 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
-    if (state.heldPrompt !== null && PERSON_ORIGINS.has(e.origin.kind)) await takeDownBand($, state)
+    if (state.heldPrompt !== null && isPersonOrigin(e.origin.kind)) await takeDownBand($, state)
     const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
     if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
-    const dropped = PERSON_ORIGINS.has(e.origin.kind) ? await decidePrompt($, state, e) : null
+    const dropped = isPersonOrigin(e.origin.kind) ? await decidePrompt($, state, e) : null
     return dropped ?? next(e)
   }).catch(($, e, next) => next(e))
 
