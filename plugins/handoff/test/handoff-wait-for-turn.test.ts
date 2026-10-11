@@ -14,7 +14,7 @@ const SESSION_ENDED_TOAST = `toast:${SESSION_ENDED_MESSAGE}`
 const SESSION_ENDED_LOG = `log:${SESSION_ENDED_MESSAGE}`
 const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
-const WAITING = 'Handoff note written. It clears when the current turn ends. Your prompts stay held.'
+const WAITING = 'Handoff note written. It continues when the current turn ends. Your prompts stay held.'
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
 const SECOND_MESSAGE = 'Handoff from the previous session (new-session), written by Claude just before a /clear:\n\nSecond note.'
