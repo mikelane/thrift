@@ -51,7 +51,7 @@ import {
 import {
   canHoldPrompt,
   carriesExtras,
-  duringHandoffAction,
+  planPromptDuringHandoff,
   isPersonOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
@@ -704,7 +704,7 @@ const settleHandoff = (state: SessionState, request: HandoffRequest): SettledHan
 })
 
 const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } | undefined => {
-  const action = duringHandoffAction({
+  const action = planPromptDuringHandoff({
     isCarried: isCarriedByHandoff(state, e.text),
     isHolding: isHoldingForHandoff(state),
     hasExtras: carriesExtras(e),
@@ -728,7 +728,7 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   const isNewWork = await inspectPrompt($, state, e.text)
   const canHold = canHoldPrompt({
     isNewWork,
-    hasPending: state.pending !== null,
+    hasPendingAction: state.pending !== null,
     hasTurnId: e.turnId !== undefined,
     hasExtras: carriesExtras(e),
   })
@@ -931,7 +931,7 @@ export const register: Register = (on, options) => {
     return yield* next(e)
   })
 
-  // next<string> stops TypeScript inferring the tool name across every MCP tool type, which slows tsc as servers connect.
+  // next<string> skips inferring the tool name from every MCP tool in the types file, which made tsc time grow with the connected servers.
   on('tool.call', async ($, e, next) => {
     const ran = await next<string>(e)
     if (e.agentId === undefined) noteToolCall(state, e, ran)

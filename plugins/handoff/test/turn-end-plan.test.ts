@@ -37,6 +37,7 @@ const planCases = [
   ['act mode mid-task', { mode: 'act', hasFinishedTask: false }, 'weak', { kind: 'compact' }],
   ['an unattended turn at a finished task', { mode: 'act', isUnattended: true }, 'strong', { kind: 'handoff', holdsPrompt: false }],
   ['an unattended turn mid-task', { mode: 'act', isUnattended: true, hasFinishedTask: false }, 'weak', { kind: 'none' }],
+  ['no signal inside the back-off window', { contextTokens: 100_000, backoffFrom: 90_000 }, 'none', { kind: 'none' }],
   ['a weak signal inside the back-off window', { hasFinishedTask: false, backoffFrom: 170_000 }, 'weak', { kind: 'back-off' }],
   [
     'a weak signal past the back-off window',

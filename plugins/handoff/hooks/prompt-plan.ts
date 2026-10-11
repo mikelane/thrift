@@ -16,20 +16,20 @@ export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind
 
 export const isUnattendedOrigin = (kind: string): boolean => kind === 'scheduled-trigger'
 
-// An attachment or context can't be resent, so a prompt that carries either can't wait for a handoff.
+// A held prompt comes back as text alone, so one that carries an attachment or context can't be held.
 export const carriesExtras = (prompt: { attachments?: readonly unknown[]; context?: readonly unknown[] }): boolean =>
   (prompt.attachments?.length ?? 0) > 0 || (prompt.context?.length ?? 0) > 0
 
-export const duringHandoffAction = ({ isCarried, isHolding, hasExtras }: DuringHandoffInput): 'drop-repeat' | 'refuse' | 'hold' | 'proceed' => {
+export const planPromptDuringHandoff = ({ isCarried, isHolding, hasExtras }: DuringHandoffInput): 'drop-repeat' | 'refuse' | 'hold' | 'proceed' => {
   if (isCarried) return 'drop-repeat'
   if (!isHolding) return 'proceed'
   return hasExtras ? 'refuse' : 'hold'
 }
 
-export const canHoldPrompt = (input: { isNewWork: boolean; hasPending: boolean; hasTurnId: boolean; hasExtras: boolean }): boolean =>
-  input.isNewWork && !input.hasPending && !input.hasTurnId && !input.hasExtras
+export const canHoldPrompt = (input: { isNewWork: boolean; hasPendingAction: boolean; hasTurnId: boolean; hasExtras: boolean }): boolean =>
+  input.isNewWork && !input.hasPendingAction && !input.hasTurnId && !input.hasExtras
 
-export const planNewWorkPrompt = (input: NewWorkInput): { signal: Signal; action: 'handoff' | 'hold' | 'record' } => {
+export const planNewWorkPrompt = (input: NewWorkInput): { signal: Signal; action: 'handoff' | 'hold' | 'none' } => {
   const signal = classify({
     contextTokens: input.contextTokens,
     threshold: input.threshold,
@@ -45,5 +45,5 @@ export const planNewWorkPrompt = (input: NewWorkInput): { signal: Signal; action
   })
   if (response.kind === 'handoff') return { signal, action: 'handoff' }
   if (response.kind === 'advise' && response.holdsPrompt) return { signal, action: 'hold' }
-  return { signal, action: 'record' }
+  return { signal, action: 'none' }
 }

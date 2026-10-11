@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import {
   canHoldPrompt,
   carriesExtras,
-  duringHandoffAction,
+  planPromptDuringHandoff,
   isPersonOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
@@ -15,6 +15,17 @@ const originCases = [
   ['sdk', true, false],
   ['scheduled-trigger', true, true],
   ['task-notification', false, false],
+  ['peer', false, false],
+  ['peer-send-message', false, false],
+  ['projects-relay', false, false],
+  ['channel', false, false],
+  ['coordinator', false, false],
+  ['observer', false, false],
+  ['observer-activity', false, false],
+  ['auto-continuation', false, false],
+  ['unclassified', false, false],
+  ['slack-ping', false, false],
+  ['plugin', false, false],
   ['', false, false],
 ] as const
 
@@ -44,7 +55,9 @@ for (const [prompt, expected] of extrasCases) {
 
 const duringHandoffCases = [
   [{ isCarried: true, isHolding: true, hasExtras: false }, 'drop-repeat'],
+  [{ isCarried: true, isHolding: true, hasExtras: true }, 'drop-repeat'],
   [{ isCarried: true, isHolding: false, hasExtras: true }, 'drop-repeat'],
+  [{ isCarried: true, isHolding: false, hasExtras: false }, 'drop-repeat'],
   [{ isCarried: false, isHolding: true, hasExtras: false }, 'hold'],
   [{ isCarried: false, isHolding: true, hasExtras: true }, 'refuse'],
   [{ isCarried: false, isHolding: false, hasExtras: false }, 'proceed'],
@@ -52,17 +65,17 @@ const duringHandoffCases = [
 ] as const
 
 for (const [input, expected] of duringHandoffCases) {
-  test(`It returns ${expected} from duringHandoffAction for ${JSON.stringify(input)}`, () => {
-    expect(duringHandoffAction(input)).toBe(expected)
+  test(`It returns ${expected} from planPromptDuringHandoff for ${JSON.stringify(input)}`, () => {
+    expect(planPromptDuringHandoff(input)).toBe(expected)
   })
 }
 
 const canHoldCases = [
-  [{ isNewWork: true, hasPending: false, hasTurnId: false, hasExtras: false }, true],
-  [{ isNewWork: false, hasPending: false, hasTurnId: false, hasExtras: false }, false],
-  [{ isNewWork: true, hasPending: true, hasTurnId: false, hasExtras: false }, false],
-  [{ isNewWork: true, hasPending: false, hasTurnId: true, hasExtras: false }, false],
-  [{ isNewWork: true, hasPending: false, hasTurnId: false, hasExtras: true }, false],
+  [{ isNewWork: true, hasPendingAction: false, hasTurnId: false, hasExtras: false }, true],
+  [{ isNewWork: false, hasPendingAction: false, hasTurnId: false, hasExtras: false }, false],
+  [{ isNewWork: true, hasPendingAction: true, hasTurnId: false, hasExtras: false }, false],
+  [{ isNewWork: true, hasPendingAction: false, hasTurnId: true, hasExtras: false }, false],
+  [{ isNewWork: true, hasPendingAction: false, hasTurnId: false, hasExtras: true }, false],
 ] as const
 
 for (const [input, expected] of canHoldCases) {
@@ -83,14 +96,14 @@ const newWork = (overrides: Partial<NewWorkInput>): NewWorkInput => ({
 })
 
 const newWorkCases = [
-  ['below the threshold', { contextTokens: 100_000 }, 'none', 'record'],
-  ['off mode past the threshold', { mode: 'off' }, 'strong', 'record'],
+  ['below the threshold', { contextTokens: 100_000 }, 'none', 'none'],
+  ['off mode past the threshold', { mode: 'off' }, 'strong', 'none'],
   ['ask mode past the threshold', {}, 'strong', 'hold'],
   ['act mode past the threshold', { mode: 'act' }, 'strong', 'handoff'],
-  ['ask mode with background work busy', { isBackgroundBusy: true }, 'weak', 'record'],
-  ['act mode with background work busy', { mode: 'act', isBackgroundBusy: true }, 'weak', 'record'],
+  ['ask mode with background work busy', { isBackgroundBusy: true }, 'weak', 'none'],
+  ['act mode with background work busy', { mode: 'act', isBackgroundBusy: true }, 'weak', 'none'],
   ['an unattended prompt past the threshold', { isUnattended: true }, 'strong', 'handoff'],
-  ['an unattended prompt with background work busy', { isUnattended: true, isBackgroundBusy: true }, 'weak', 'record'],
+  ['an unattended prompt with background work busy', { isUnattended: true, isBackgroundBusy: true }, 'weak', 'none'],
 ] as const
 
 for (const [name, overrides, signal, action] of newWorkCases) {

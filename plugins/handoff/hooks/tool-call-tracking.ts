@@ -1,21 +1,22 @@
-import type { ToolCallInput, ToolCallResult } from 'claude-code'
-
 import { finishesTask } from './command-parse'
 import type { SessionState } from './session-state'
 import { fieldOf, validTaskId } from './tasks'
 
-export const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult) => {
+// Only the keys this reads, so a call's input and result need no cast to reach it (KillShell is in no tool union).
+export type TrackedCall = Readonly<Record<string, unknown>>
+export type TrackedResult = { readonly deny?: string; readonly isError?: boolean; readonly result?: unknown }
+
+export const noteToolCall = (state: SessionState, call: TrackedCall, ran: TrackedResult): void => {
   const didSucceed = ran.deny === undefined && ran.isError !== true
-  if (e.tool === 'Bash') {
+  if (call.tool === 'Bash') {
     const started = validTaskId(fieldOf(ran.result, 'backgroundTaskId'))
     if (started !== null) state.backgroundTasks.add(started)
-    else if (didSucceed && finishesTask(e.command)) state.hasFinishedTask = true
-  } else if (e.tool === 'Monitor') {
+    else if (didSucceed && typeof call.command === 'string' && finishesTask(call.command)) state.hasFinishedTask = true
+  } else if (call.tool === 'Monitor') {
     const started = validTaskId(fieldOf(ran.result, 'taskId'))
     if (started !== null) state.backgroundTasks.add(started)
-  } else if (ran.deny === undefined && (e.tool === 'TaskStop' || String(e.tool) === 'KillShell')) {
-    const input: Readonly<Record<string, unknown>> = e
-    const stopped = validTaskId(input.task_id ?? input.shell_id)
+  } else if (ran.deny === undefined && (call.tool === 'TaskStop' || call.tool === 'KillShell')) {
+    const stopped = validTaskId(call.task_id ?? call.shell_id)
     if (stopped !== null) state.backgroundTasks.delete(stopped)
   }
 }
