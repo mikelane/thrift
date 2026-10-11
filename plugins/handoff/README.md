@@ -287,7 +287,7 @@ that decide nothing are logged too, so you can compute a trigger rate. Prompt te
 the log, and nothing from it is written into the session.
 
 ```json
-{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","effective_mode":"act"}}
+{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","held_groups":0,"held_unattended":false,"effective_mode":"act"}}
 ```
 
 | Field | Values |
@@ -308,8 +308,8 @@ the log, and nothing from it is written into the session.
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
-| `trigger_values.held_groups` | Present only on a `cleared` or `none` record written by a handoff: how many groups of prompts held while the note was written (`0`, `1`, or `2`: one for person prompts, one for scheduled ones). A count, never prompt text |
-| `trigger_values.held_unattended` | Present with `held_groups`, on the same records only: `true` when a scheduled (unattended) group was held, `false` otherwise |
+| `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, from when it was scheduled until the clear, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). A count, never prompt text |
+| `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
 
 A prompt is evaluated, and so logged, only when it names new work.
 
