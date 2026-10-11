@@ -469,6 +469,9 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   try {
     await redrawBand($, state, WRITING)
     $.ui.toast(WRITING_STATUS)
+    // SAFETY: a session end between scheduleHandoff and this read would make oldId the new session's id. That needs a
+    // /clear in the same clock.after(0) tick as /handoff, which a person typing cannot produce; SDK or bridge commands
+    // sent back to back could. No guard: the note would still be delivered, only the resume line would name the wrong id.
     oldId = await $.session.id()
     beginNoteWindow(state)
     const note = await writeNote($)
@@ -560,6 +563,8 @@ const runHandoff = async (
       isCleared = await clearSession($)
     } else {
       // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
+      // SAFETY: a resume that lands during this await is still delivered to, as one landing during registerHandoffCommand
+      // already is. Both windows are one engine round trip wide and the result is a note in the resumed session. No guard.
       await takeDownBand($, state)
     }
     const settledHandoff = settleAfterWait()
