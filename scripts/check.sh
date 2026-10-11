@@ -5,7 +5,7 @@
 # Usage: scripts/check.sh [plugin...]   (no arguments checks every plugins/*/)
 #
 # A plugin is named by its directory, `handoff` or `plugins/handoff/`. Anything else with a '/' or
-# '..' in it is refused.
+# '..' in it, or a lone '.', is refused.
 #
 # CHECK_LOG_DIR: when set, each plugin's output goes to $CHECK_LOG_DIR/<plugin>.txt, which is
 # removed when the plugin passes and printed when it fails, and a `checked` file is created once
@@ -85,8 +85,8 @@ run_checks_in_dir() {
 run_checks_for_plugin() {
   local name="$1"
   local plugin_dir="plugins/$name"
-  if [[ "$name" == */* || "$name" == *..* ]]; then
-    echo "Invalid plugin name: $name. Pass the bare name of a directory under plugins/, with no '/' or '..'." >&2
+  if [[ "$name" == */* || "$name" == *..* || "$name" == . ]]; then
+    echo "Invalid plugin name: $name. Pass the bare name of a directory under plugins/, with no '/', '..' or lone '.'." >&2
     return 1
   fi
   if [[ -z "$name" || ! -d "$plugin_dir" ]]; then

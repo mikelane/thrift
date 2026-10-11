@@ -951,6 +951,13 @@ test_rejected_name_in_log_mode_writes_a_log_inside_the_log_directory() {
   assert_file_exists "$FAILURES/checked"
 }
 
+test_dot_name_is_rejected_instead_of_checking_the_plugins_directory() {
+  make_repo a
+  run_check_script -- .
+  assert_rc 1
+  assert_file_lacks "$STUB_LOG" 'plugin validate plugins/.'
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue
