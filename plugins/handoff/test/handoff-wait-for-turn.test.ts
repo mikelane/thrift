@@ -1027,3 +1027,19 @@ test('It records compacted_before_clear on the session_ended abandon that follow
   await world.clock.settle()
   expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_ended', compacted_before_clear: true } })
 })
+
+test('It records cleared_by person and compacted_before_clear when the person clears during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({
+    action: 'cleared',
+    trigger_values: { cleared_by: 'person', compacted_before_clear: true },
+  })
+  expect(world.effects).not.toContain('clear')
+})
