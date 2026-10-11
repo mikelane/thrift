@@ -22,7 +22,7 @@ const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written b
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
-  'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
 const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
 

@@ -59,6 +59,7 @@ import {
   carriesExtras,
   planPromptDuringHandoff,
   isPersonOrigin,
+  isTerminalOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
 } from './prompt-plan'
@@ -114,8 +115,10 @@ const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will ru
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
 const REFUSED_DURING_HANDOFF =
-  'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
 const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
+const keptRefusedPrompt = (kind: string, text: string) =>
+  `A prompt from ${kind}, which is not this terminal, was refused during the handoff, so it was not sent. Here it is:\n${text}`
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
 const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
@@ -742,12 +745,19 @@ const returnToBox = async ($: EngineInterface, text: string): Promise<void> => {
   if (!(await refillBox($, text))) keepInTranscript($, text)
 }
 
-// An attachment or context can't be resent, so the prompt waits in the box for the person to send it again.
-const refuseDuringHandoff = ($: EngineInterface, text: string): { drop: string } => {
+// An attachment or context can't be resent, so the prompt is handed back instead. A person at this terminal gets it in the
+// box to send again. For any other sender the box is not where they are, and filling it could displace the draft of the
+// person who is: the engine has no channel back to the sender beyond the drop reason, so the text goes in the transcript.
+const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput): Promise<void> => {
+  if (isTerminalOrigin(e.origin.kind)) return returnToBox($, e.text)
+  $.ui.log(keptRefusedPrompt(e.origin.kind, e.text))
+}
+
+const refuseDuringHandoff = ($: EngineInterface, e: PromptSubmitInput): { drop: string } => {
   debug($, 'refused a prompt with attachments or context during the handoff')
   $.ui.toast(REFUSED_TOAST)
   $.clock.after(0, () => {
-    void logFailure($, returnToBox($, text))
+    void logFailure($, handBackRefused($, e))
   })
   return { drop: REFUSED_DURING_HANDOFF }
 }
@@ -776,7 +786,7 @@ const decideDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
     debug($, 'dropped a repeat of the prompt the handoff carries')
     return { drop: REPEAT_NOT_ADDED }
   }
-  if (action === 'refuse') return refuseDuringHandoff($, e.text)
+  if (action === 'refuse') return refuseDuringHandoff($, e)
   if (action === 'hold') return holdForHandoff($, state, e)
   return undefined
 }

@@ -197,9 +197,12 @@ Special cases:
   - On failure: if the handoff fails, a person prompt goes back in the box and a scheduled one is
     submitted here, whichever kind of sender started the handoff.
   - Refused: a prompt with attachments or context can't be held, because it can't be sent again. It
-    is dropped with a short toast and is not sent in the fresh session. Its text is put back in the
-    prompt box, or shown in the transcript if the box can't take it. After the handoff, send it
-    again and add the attachments or context again.
+    is dropped with a short toast and is not sent in the fresh session. A prompt typed at this
+    terminal is put back in the prompt box, or shown in the transcript if the box can't take it. A
+    prompt from the bridge, the SDK, or a scheduled trigger is shown in the transcript only: its
+    sender is not at the terminal, and the engine offers no way to answer them except the drop
+    reason, so the box is left to the person typing in it. After the handoff, send it again and add
+    the attachments or context again.
 - **The session ends before the handoff clears.** This covers the note being written, the wait for a
   turn, and the compaction. The handoff's own `/clear` ends the session too, and that is not counted.
   - You typed `/clear`: the handoff runs no second clear. The note (with the turn-after-note line, if

@@ -5,9 +5,19 @@ import {
   carriesExtras,
   planPromptDuringHandoff,
   isPersonOrigin,
+  isTerminalOrigin,
   isUnattendedOrigin,
   planNewWorkPrompt,
 } from '../hooks/prompt-plan'
+
+const terminalCases = [
+  ['composer', true],
+  ['bridge', false],
+  ['sdk', false],
+  ['scheduled-trigger', false],
+  ['plugin', false],
+  ['', false],
+] as const
 
 const originCases = [
   ['composer', true, false],
@@ -109,5 +119,11 @@ const newWorkCases = [
 for (const [name, overrides, signal, action] of newWorkCases) {
   test(`It plans ${action} with a ${signal} signal for new work in ${name}`, () => {
     expect(planNewWorkPrompt(newWork(overrides))).toEqual({ signal, action })
+  })
+}
+
+for (const [kind, isTerminal] of terminalCases) {
+  test(`It returns ${isTerminal} from isTerminalOrigin for ${JSON.stringify(kind)}`, () => {
+    expect(isTerminalOrigin(kind)).toBe(isTerminal)
   })
 }

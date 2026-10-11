@@ -14,6 +14,9 @@ type NewWorkInput = {
 
 export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind)
 
+// Only the composer is typed at this terminal; the other person origins have a sender who is somewhere else.
+export const isTerminalOrigin = (kind: string): boolean => kind === 'composer'
+
 export const isUnattendedOrigin = (kind: string): boolean => kind === 'scheduled-trigger'
 
 // A held prompt comes back as text alone, so one that carries an attachment or context can't be held.
