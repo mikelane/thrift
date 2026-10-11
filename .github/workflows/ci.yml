@@ -6,6 +6,11 @@ name: CI
 #
 # Branch protection requires only "check (pinned)". "check (latest)" never blocks a change.
 # None of the three commands needs an API key, so fork pull requests run the full matrix.
+#
+# Job `check` runs pull-request code and installs the floating `latest` build with install scripts
+# on, so it holds `contents: read` and nothing else. On the weekly schedule it hands its failure
+# logs and the Claude Code version to job `report` as an artifact. `report` is the only job with
+# `issues: write`; it checks out nothing and runs no repository code.
 
 on:
   pull_request:
@@ -34,7 +39,6 @@ jobs:
     continue-on-error: ${{ matrix.channel == 'latest' }}
     permissions:
       contents: read
-      issues: write
     strategy:
       fail-fast: false
       matrix:
@@ -92,12 +96,48 @@ jobs:
           done
           exit "$status"
 
-      - name: Open an issue for each plugin the new build breaks
+      - name: Record the Claude Code version for the canary issue job
         if: always() && github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(claude --version | cut -d' ' -f1)
+          mkdir -p "$RUNNER_TEMP/failures"
+          claude --version | cut -d' ' -f1 > "$RUNNER_TEMP/failures/claude-version"
+
+      - name: Upload the canary failure logs
+        if: always() && github.event_name == 'schedule'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-failures
+          path: ${{ runner.temp }}/failures
+          retention-days: 1
+          if-no-files-found: error
+
+  report:
+    name: open canary issues
+    needs: check
+    # `check (latest)` is continue-on-error, so `needs` succeeds even when the new build broke a
+    # plugin. `!cancelled()` still runs this job if `check` itself fails; `always()` would also
+    # run it after a cancel.
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # A missing artifact means `check` died before it could record the version. Failing here
+      # (download-artifact errors when the artifact is absent) keeps that from passing as "no
+      # plugin broke".
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: canary-failures
+          path: ${{ runner.temp }}/failures
+
+      - name: Open an issue for each plugin the new build breaks
+        run: |
+          version=$(cat "$RUNNER_TEMP/failures/claude-version")
+          [[ "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "Unexpected Claude Code version: ${version}"; exit 1; }
           for log in "$RUNNER_TEMP"/failures/*.txt; do
             [ -e "$log" ] || continue
             plugin=$(basename "$log" .txt)
