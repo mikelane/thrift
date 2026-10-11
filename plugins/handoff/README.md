@@ -391,7 +391,7 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefix`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
-| `hooks/handoff-note.ts` | `HANDOFF_PROMPT` and the handoff message |
+| `hooks/handoff-note.ts` | `HANDOFF_PROMPT`, the handoff message, `NoteDelivery` (`appended`, `submitted`, `in_box`, `not_carried`) with the message the person sees for each, and the grouping of held prompts |
 | `hooks/held-delivery.ts` | `summarizeDelivery`: the worst outcome across the groups sent or restored, as one scalar |
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |

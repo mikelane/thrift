@@ -405,7 +405,7 @@ test('It announces the note was not carried and not handed off when an unattende
   await world.clock.settle()
   const logged = world.effects.filter(effect => effect.startsWith('log:') && effect.includes('claude --resume'))
   expect(logged).toEqual([
-    'log:The handoff note could not be added to this session. The previous conversation is unchanged: claude --resume old-session',
+    'log:The handoff note could not be added to this session. The previous conversation is still available: claude --resume old-session',
   ])
 })
 
