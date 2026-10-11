@@ -32,12 +32,21 @@ if [ "${#names[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# The engine writes the declarations on every --plugin-dir load, so they are regenerated on every
+# run and `tsc` checks against the installed engine's types. The load runs with an empty config
+# directory and a bare environment: it is never logged in, so it makes no model call, and it reads
+# none of the user's settings or hooks. It prints "Not logged in", which is expected.
+config_dir=$(mktemp -d)
+trap 'rm -rf "$config_dir"' EXIT
+
 write_type_declarations() {
   local plugin_dir=$1
   local declarations="$plugin_dir/.claude-plugin/types/claude-code/index.d.ts"
-  [ ! -f "$declarations" ] || return 0
+  rm -f "$declarations"
   local output
-  output=$(CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$plugin_dir" 2>&1) || true
+  output=$(env -i PATH="$PATH" HOME="$HOME" TMPDIR="${TMPDIR:-/tmp}" CLAUDE_CONFIG_DIR="$config_dir" \
+    CLAUDE_CODE_PLUGIN_DIR_WATCH=1 DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    claude -p x --plugin-dir "$plugin_dir" 2>&1) || true
   if [ ! -f "$declarations" ]; then
     echo "The engine wrote no type declarations for $plugin_dir:" >&2
     printf '%s\n' "$output" | tail -n 50 >&2
@@ -57,20 +66,25 @@ run_checks() {
     claude plugin test "$plugin_dir"
 }
 
-check_plugin() {
+run_plugin_checks() {
   local name=$1
   local plugin_dir="plugins/$name"
-  if [ ! -d "$plugin_dir" ]; then
+  if [ -z "$name" ] || [ ! -d "$plugin_dir" ]; then
     echo "No such plugin: $plugin_dir" >&2
-    exit 1
+    return 1
   fi
+  run_checks "$plugin_dir"
+}
+
+check_plugin() {
+  local name=${1%/}
   if [ -z "${CHECK_LOG_DIR:-}" ]; then
-    run_checks "$plugin_dir"
+    run_plugin_checks "$name"
     return
   fi
   mkdir -p "$CHECK_LOG_DIR"
-  local log="$CHECK_LOG_DIR/$name.txt"
-  if run_checks "$plugin_dir" > "$log" 2>&1; then
+  local log="$CHECK_LOG_DIR/${name//\//_}.txt"
+  if run_plugin_checks "$name" > "$log" 2>&1; then
     rm "$log"
   else
     cat "$log"
