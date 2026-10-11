@@ -48,6 +48,11 @@ test('It returns the values in README order, whatever the order', () => {
   expect(readmeReasons(reasonRow('`z`, `a`, `m`'))).toEqual(['z', 'a', 'm'])
 })
 
+test('It throws when the README has more than one reason row', () => {
+  const readme = [reasonRow('`backoff`'), reasonRow('`not_now`')].join('\n')
+  expect(() => readmeReasons(readme)).toThrow('more than one')
+})
+
 test('It throws when the README has no reason row', () => {
   expect(() => readmeReasons('| `trigger_values.point` | `turn-end` |')).toThrow('trigger_values.reason')
 })
