@@ -162,7 +162,7 @@ test('It hands off when Hand off and clear is pressed', ASK, async ($, on) => {
   await band.press({ key: 'handoff' })
   await world.clock.settle()
   expect(world.effects).toContain('clear')
-  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'button', signal: 'strong' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'cleared', trigger_values: { point: 'button', signal: 'strong' } })
 })
 
 test('It does not hand off inside the press', ASK, async ($, on) => {
@@ -183,7 +183,7 @@ test('It compacts when Compact is pressed', ASK, async ($, on) => {
   await band.press({ key: 'compact' })
   await world.clock.settle()
   expect(world.effects).toContain('compact')
-  expect(lastRecord(world)).toMatchObject({ action: 'compacted', trigger_values: { point: 'button', signal: 'weak' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'compacted', trigger_values: { point: 'button', signal: 'weak' } })
 })
 
 test('It ignores a second Compact press while one is pending', ASK, async ($, on) => {
@@ -204,7 +204,7 @@ test('It logs none and takes the band down when Not now is pressed', ASK, async 
   await completeTurn($)
   const band = await mountBand($)
   await band.press({ key: 'not-now' })
-  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { point: 'button', reason: 'not_now' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { point: 'button', reason: 'not_now' } })
   expect(await band.find({ text: 'engine band' })).toBeDefined()
 })
 

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, PromptOrigin } from 'claude-code'
 
 import {
   bash,
@@ -32,8 +32,57 @@ const entered = (world: Awaited<ReturnType<typeof ready>>) => world.effects.filt
 test('It drops a prompt that names new work and holds it in ask mode', ASK, async ($, on) => {
   const world = await ready($, on)
   const result = await submitPerson($, 'now ENG-2')
-  expect(dropOf(result)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
-  expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
+  await world.clock.settle()
+  expect([dropOf(result), entered(world), world.box.text]).toEqual([
+    'Held your prompt. Choose below, or press Enter again to send it here.',
+    ['entered:composer:start on ENG-1'],
+    'now ENG-2',
+  ])
+})
+
+const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
+
+const submitFrom = ($: Engine, origin: PromptOrigin, text: string) => $.prompt.submit({ text, wait: false, origin })
+
+const STARTED = 'entered:composer:start on ENG-1'
+
+// Every origin but the composer: none is held for the band. A scheduled prompt hands off first, as an unattended prompt does.
+const notHeldCases: ReadonlyArray<{ origin: PromptOrigin; outcome: string; drop: string | undefined; entered: string[] }> = [
+  { origin: { kind: 'bridge' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:bridge:now ENG-2'] },
+  { origin: { kind: 'sdk' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:sdk:now ENG-2'] },
+  { origin: { kind: 'task-notification' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:task-notification:now ENG-2'] },
+  { origin: { kind: 'peer' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:peer:now ENG-2'] },
+  { origin: { kind: 'peer-send-message' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:peer-send-message:now ENG-2'] },
+  { origin: { kind: 'projects-relay' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:projects-relay:now ENG-2'] },
+  { origin: { kind: 'coordinator' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:coordinator:now ENG-2'] },
+  { origin: { kind: 'observer' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:observer:now ENG-2'] },
+  { origin: { kind: 'observer-activity' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:observer-activity:now ENG-2'] },
+  { origin: { kind: 'auto-continuation' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:auto-continuation:now ENG-2'] },
+  { origin: { kind: 'unclassified' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:unclassified:now ENG-2'] },
+  { origin: { kind: 'slack-ping' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:slack-ping:now ENG-2'] },
+  { origin: { kind: 'channel', server: 'chat' }, outcome: 'runs it', drop: undefined, entered: [STARTED, 'entered:channel:now ENG-2'] },
+  { origin: { kind: 'scheduled-trigger' }, outcome: 'hands off first', drop: HANDING_OFF_FIRST, entered: [STARTED] },
+]
+
+for (const c of notHeldCases) {
+  test(`It holds nothing for the band and ${c.outcome} for a ${c.origin.kind} prompt that names new work in ask mode`, ASK, async ($, on) => {
+    const world = await ready($, on)
+    const result = await submitFrom($, c.origin, 'now ENG-2')
+    expect([dropOf(result), entered(world), world.box.text, world.effects.includes('fill:now ENG-2')]).toEqual([c.drop, c.entered, '', false])
+  })
+}
+
+test('It logs a none record at the prompt point for a bridge prompt that names new work in ask mode', ASK, async ($, on) => {
+  const world = await ready($, on)
+  await submitPerson($, 'now ENG-2', { kind: 'bridge' })
+  expect(lastRecord(world)).toMatchObject({ action: 'none', mode: 'active', trigger_values: { point: 'prompt', signal: 'strong' } })
+})
+
+test('It still hands a bridge prompt that names new work off first in act mode', ACT, async ($, on) => {
+  const world = await ready($, on)
+  const result = await submitPerson($, 'now ENG-2', { kind: 'bridge' })
+  expect([dropOf(result), entered(world)]).toEqual([HANDING_OFF_FIRST, ['entered:composer:start on ENG-1']])
+  await world.clock.settle()
 })
 
 test('It refills the box with the held prompt once the clock fires', ASK, async ($, on) => {
@@ -107,7 +156,7 @@ test('It logs none for Send here', ASK, async ($, on) => {
   const band = await mountBand($)
   await band.press({ key: 'send-here' })
   await world.clock.settle()
-  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { point: 'button', reason: 'send_here' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { point: 'button', reason: 'send_here' } })
 })
 
 test('It leaves a box the person has changed alone when Send here is pressed', ASK, async ($, on) => {
@@ -131,7 +180,7 @@ test('It hands off and sends the held prompt in the fresh session when Hand off 
   const steps = world.effects.filter(effect => ['fork', 'clear', 'append', 'entered:plugin:now ENG-2'].includes(effect))
   expect(steps).toEqual(['fork', 'clear', 'append', 'entered:plugin:now ENG-2'])
   expect(world.box.text).toBe('')
-  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'button' } })
+  expect(lastRecord(world)).toMatchObject({ mode: 'active', action: 'cleared', trigger_values: { point: 'button' } })
 })
 
 test('It refills the box with a draft the person typed after the prompt was held', ASK, async ($, on) => {

@@ -1,3 +1,4 @@
+import type { PromptOrigin } from 'claude-code'
 import type { Offer } from '../types'
 import type { Button, Mode } from './signals'
 
@@ -9,7 +10,8 @@ type Settings = {
 
 export type ButtonPress = { offer: Offer; button: Button }
 
-export type HeldPrompt = { text: string; isUnattended: boolean }
+// origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind'] }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt
@@ -154,7 +156,14 @@ export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number =
   return 0
 }
 
-export const isCarriedByHandoff = (state: SessionState, text: string): boolean =>
+// before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box
+// one after another keep their order.
+export type BoxPlacement = 'before_draft' | 'after_draft'
+
+// A prompt refused while the held ones are being put back comes after them in the box, as a held late arrival does.
+export const refusedPromptPlacement = (hold: HandoffHold): BoxPlacement => (hold.phase === 'sending' ? 'after_draft' : 'before_draft')
+
+export const isCarriedByHandoff =(state: SessionState, text: string): boolean =>
   state.handoffHold.phase !== 'idle' && state.handoffHold.promptCarriedByHandoff === text
 
 // Once taken, a prompt that arrives is no longer held, until beginSending holds again: a handoff that goes on to the fresh
@@ -250,7 +259,9 @@ export const endMainTurn = (state: SessionState): void => {
 // waits for such a turn. Either needs a turn quoting a resubmitted prompt, which is not a case worth a guard. The cost,
 // outside off, is one turn end judged as the wrong kind of sender: a person asked where a scheduled turn would act, or a scheduled turn's
 // rule applied to a person's turn, so a strong signal hands off without asking and a weak one shows no band.
+// An empty text is not queued: every turn's text contains it, so it would take the first turn that starts.
 export const queueResubmittedPrompt = (state: SessionState, prompt: HeldPrompt): void => {
+  if (prompt.text === '') return
   state.resubmittedPrompts.push(prompt)
 }
 

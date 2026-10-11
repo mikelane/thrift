@@ -1,7 +1,7 @@
 import type { DecisionReason } from './decision-reasons'
 import type { NoteDelivery } from './handoff-note'
 import type { GroupDelivery } from './held-delivery'
-import type { HeldPromptGroup, SessionState } from './session-state'
+import type { HeldPrompt, HeldPromptGroup, SessionState } from './session-state'
 import type { Mode, Signal } from './signals'
 
 export type { DecisionReason }
@@ -71,6 +71,8 @@ export type Evaluation = Trigger & {
 export type HandoffRequest = {
   trigger: Trigger
   heldPrompt?: string
+  // The origin kind of heldPrompt; the composer when absent, as for a prompt held in the box.
+  heldPromptOrigin?: HeldPrompt['origin']
   isUnattended: boolean
 }
 
@@ -99,13 +101,19 @@ export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['poin
   effectiveMode: state.mode,
 })
 
-export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p "$1" && cat >> "$2"', 'sh'] as const
+// umask only applies when the file is created, so a log that already exists is made owner-only by the chmod. `mkdir -p --`
+// works on BSD and GNU alike. chmod takes no `--`: BSD chmod (macOS) reads it as a file operand, sets the mode, then fails on it
+// and exits 1, while GNU chmod accepts it. The file is always absolute (see isUsableThriftHome), so it cannot read as an option.
+export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh'] as const
+
+// A person asked for these, so the plugin acted on their request whatever mode it ran in.
+const isPersonAction = (point: TriggerValues['point']): boolean => point === 'command' || point === 'button'
 
 export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiveMode, triggerValues }: RecordInput) => ({
   ts: new Date(now).toISOString(),
   session_id: sessionId,
   component: 'handoff',
-  mode: action === 'none' && effectiveMode === 'off' && triggerValues.point !== 'command' ? 'shadow' : 'active',
+  mode: action === 'none' && effectiveMode === 'off' && !isPersonAction(triggerValues.point) ? 'shadow' : 'active',
   action,
   engine_version: engineVersion,
   trigger_values: { ...triggerValues, effective_mode: effectiveMode },
@@ -144,10 +152,15 @@ export const recordFromEvaluation = (
   })
 }
 
+// A relative THRIFT_HOME, or one that starts with ~, would resolve against the session's working directory, not the home.
+export const isUsableThriftHome = (thriftHome: string | undefined): thriftHome is string => thriftHome?.startsWith('/') === true
+
 export const logLocation = (
   thriftHome: string | undefined,
   home: string | undefined,
 ): { dir: string; file: string } | null => {
-  const dir = thriftHome ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
+  const dir = isUsableThriftHome(thriftHome) ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
+  // THRIFT_HOME=/ strips to nothing: the log then goes in the root directory itself, as asked.
+  if (dir === '') return { dir: '/', file: '/decisions.jsonl' }
   return dir === null ? null : { dir, file: `${dir}/decisions.jsonl` }
 }

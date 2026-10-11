@@ -1,3 +1,4 @@
+import type { PromptOrigin } from 'claude-code'
 import { classify, respond, type Mode, type Signal } from './signals'
 
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
@@ -10,6 +11,7 @@ type NewWorkInput = {
   isBackgroundBusy: boolean
   mode: Mode
   isUnattended: boolean
+  isFromComposer: boolean
 }
 
 export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind)
@@ -18,6 +20,9 @@ export const isPersonOrigin = (kind: string): boolean => PERSON_ORIGINS.has(kind
 export const isComposerOrigin = (kind: string): boolean => kind === 'composer'
 
 export const isUnattendedOrigin = (kind: string): boolean => kind === 'scheduled-trigger'
+
+// The origin a handoff note goes out under when no held prompt rides with it: the handoff's own sender.
+export const noteOrigin = (isUnattended: boolean): PromptOrigin['kind'] => (isUnattended ? 'scheduled-trigger' : 'composer')
 
 const SENDER_LABELS = new Map([
   ['composer', 'this terminal'],
@@ -57,6 +62,8 @@ export const planNewWorkPrompt = (input: NewWorkInput): { signal: Signal; action
     isUnattended: input.isUnattended,
   })
   if (response.kind === 'handoff') return { signal, action: 'handoff' }
-  if (response.kind === 'advise' && response.holdsPrompt) return { signal, action: 'hold' }
+  // Only a prompt typed at this terminal is held for the band: the sender of any other is somewhere else, and a refill
+  // would put their prompt in the box of the person who is here. The turn it starts can still raise the band.
+  if (response.kind === 'advise' && response.holdsPrompt && input.isFromComposer) return { signal, action: 'hold' }
   return { signal, action: 'none' }
 }

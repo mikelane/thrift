@@ -64,18 +64,47 @@ test('It writes the log under THRIFT_HOME when it is set', async ($, on) => {
   expect(world.logTargets).toEqual([['/data/thrift', '/data/thrift/decisions.jsonl']])
 })
 
+const WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh']
+const DEFAULT_ARGV = [[...WRITER, '/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl']]
+const DEFAULT_USED = 'handoff: THRIFT_HOME is not an absolute path, so the default log location is used'
+const HOME_NEEDED = 'handoff: THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'
+const NO_LOCATION = 'handoff: no log location: neither THRIFT_HOME nor HOME is set'
+
+// The debug lines are the ones about the log location; each names THRIFT_HOME.
+const thriftHomeCases = [
+  { name: 'absolute', thriftHome: '/data/thrift', home: '/home/u', argv: [[...WRITER, '/data/thrift', '/data/thrift/decisions.jsonl']], debug: [] },
+  { name: 'relative', thriftHome: 'relative/dir', home: '/home/u', argv: DEFAULT_ARGV, debug: [DEFAULT_USED] },
+  { name: 'dot-relative', thriftHome: './thrift', home: '/home/u', argv: DEFAULT_ARGV, debug: [DEFAULT_USED] },
+  { name: 'under ~', thriftHome: '~/thrift', home: '/home/u', argv: DEFAULT_ARGV, debug: [DEFAULT_USED] },
+  { name: 'empty', thriftHome: '', home: '/home/u', argv: DEFAULT_ARGV, debug: [] },
+  { name: 'the root', thriftHome: '/', home: '/home/u', argv: [[...WRITER, '/', '/decisions.jsonl']], debug: [] },
+  { name: 'relative with HOME unset', thriftHome: 'relative/dir', home: null, argv: [], debug: [HOME_NEEDED] },
+  { name: 'under ~ with HOME unset', thriftHome: '~/thrift', home: null, argv: [], debug: [HOME_NEEDED] },
+  { name: 'empty with HOME unset', thriftHome: '', home: null, argv: [], debug: [NO_LOCATION] },
+  { name: 'absolute with HOME unset', thriftHome: '/data/thrift', home: null, argv: [[...WRITER, '/data/thrift', '/data/thrift/decisions.jsonl']], debug: [] },
+] as const
+
+for (const c of thriftHomeCases) {
+  test(`It returns the exact writer argv and log-location debug lines when THRIFT_HOME is ${c.name}`, async ($, on) => {
+    const world = install($, on, { home: c.home, thriftHome: c.thriftHome })
+    await startSession($)
+    await completeTurn($)
+    expect([world.logArgv, world.debugLines.filter(line => line.includes('THRIFT_HOME'))]).toEqual([c.argv, c.debug])
+  })
+}
+
 test('It writes the log under the home directory when THRIFT_HOME is unset', async ($, on) => {
   const world = install($, on)
   await startSession($)
   await completeTurn($)
-  expect(world.logTargets).toEqual([['/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl']])
+  expect([world.logArgv, world.debugLines.filter(line => line.includes('THRIFT_HOME'))]).toEqual([DEFAULT_ARGV, []])
 })
 
 test('It skips the log and finishes the turn when neither THRIFT_HOME nor HOME is set', async ($, on) => {
   const world = install($, on, { home: null })
   await startSession($)
   expect(await completeTurn($)).toEqual({ text: 'done' })
-  expect(world.records).toHaveLength(0)
+  expect([world.records, world.logArgv, world.debugLines.filter(line => line.includes('THRIFT_HOME'))]).toEqual([[], [], [NO_LOCATION]])
 })
 
 test('It sends a failed log write to the debug log and finishes the turn', async ($, on) => {
@@ -209,11 +238,32 @@ for (const [name, version] of untestedBuilds) {
   })
 }
 
+test('It does not say /handoff works in the untested toast of a session with no prompt', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($, false)
+  expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual(['toast:Untested on Claude Code 2.1.296, so this session only logs decisions.'])
+})
+
+test('It writes the untested notice to the transcript as well as the toast', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($)
+  expect(world.effects).toContain('log:Untested on Claude Code 2.1.296, so this session only logs decisions. /handoff still works.')
+})
+
+test('It registers no /handoff command in a session with no prompt', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($, false)
+  expect(world.effects).not.toContain('register:handoff')
+})
+
 test('It names the base version in the untested toast', ACT, async ($, on) => {
   const world = install($, on)
   world.version = { version: '2.1.296', base: '2.1.296' }
   await startSession($)
-  expect(world.effects).toContain('toast:Untested on Claude Code 2.1.296, so it only logs this session. /handoff still works.')
+  expect(world.effects).toContain('toast:Untested on Claude Code 2.1.296, so this session only logs decisions. /handoff still works.')
 })
 
 test('It records the version string when the base is missing', ACT, async ($, on) => {

@@ -103,7 +103,7 @@ test('It records a held press as a button handoff once the turn ends', ASK, asyn
   await completeTurn($)
   await world.clock.settle()
   expect(world.records.map(record => record.action)).toEqual(['advised', 'cleared'])
-  expect(world.records.at(-1)).toMatchObject({ trigger_values: { point: 'button', signal: 'strong' } })
+  expect(world.records.at(-1)).toMatchObject({ mode: 'active', trigger_values: { point: 'button', signal: 'strong' } })
 })
 
 test('It runs a press made twice during a turn only once', ASK, async ($, on) => {
@@ -153,7 +153,7 @@ test('It logs Not now at once when it is pressed during a turn', ASK, async ($, 
   const band = await mountBand($)
   await startTurn($)
   await band.press({ key: 'not-now' })
-  expect(world.records.at(-1)).toMatchObject({ action: 'none', trigger_values: { point: 'button', reason: 'not_now' } })
+  expect(world.records.at(-1)).toMatchObject({ mode: 'active', action: 'none', trigger_values: { point: 'button', reason: 'not_now' } })
 })
 
 test('It takes the band down at once when Not now is pressed during a turn', ASK, async ($, on) => {
@@ -389,6 +389,7 @@ test('It writes a background_busy record when it refuses to clear', ASK, async (
   await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
   await band.press({ key: 'handoff' })
   expect(world.records.at(-1)).toMatchObject({
+    mode: 'active',
     action: 'none',
     trigger_values: { point: 'button', signal: 'weak', is_background_busy: true, reason: 'background_busy' },
   })

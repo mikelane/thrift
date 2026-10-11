@@ -1,11 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  type BoxPlacement,
+  type HandoffHold,
+  type HeldPrompt,
   addHeldPrompt,
   beginSending,
   removeResubmittedPrompt,
   queueResubmittedPrompt,
   preClearOutcome,
+  refusedPromptPlacement,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -82,7 +86,7 @@ const usedState = () => {
   state.backoffFrom = 180_000
   state.pending = 'handoff'
   state.heldPrompt = 'now ENG-2'
-  beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false })
+  beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false, origin: 'composer' })
   state.hasBand = true
   state.isTurnRunning = true
   state.isPressRunning = true
@@ -128,13 +132,13 @@ test('It leaves the prompts a handoff holds and carries alone in resetForNewSess
   resetForNewSession(state)
   expect(state.handoffHold).toEqual({
     phase: 'holding',
-    heldPrompts: [{ text: 'now ENG-2', isUnattended: false }],
+    heldPrompts: [{ text: 'now ENG-2', isUnattended: false, origin: 'composer' }],
     promptCarriedByHandoff: 'now ENG-2',
   })
 })
 
-const person = { text: 'person says', isUnattended: false }
-const nightly = { text: 'nightly job', isUnattended: true }
+const person = { text: 'person says', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
+const nightly = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
 
 test('It reports a state that holds nothing as not holding from isHoldingForHandoff', () => {
   expect(isHoldingForHandoff(createState(settings))).toBe(false)
@@ -559,3 +563,36 @@ test('It empties the queue of resubmitted prompts in resetForNewSession', () => 
   resetForNewSession(state)
   expect(state.resubmittedPrompts).toEqual([])
 })
+
+test('It does not queue an empty text in queueResubmittedPrompt', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, { text: '', isUnattended: true, origin: 'scheduled-trigger' })
+  expect(state.resubmittedPrompts).toEqual([])
+})
+
+test('It leaves a turn attended in startMainTurn when only an empty text was offered to the queue', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, { text: '', isUnattended: true, origin: 'scheduled-trigger' })
+  startMainTurn(state, 'any turn at all')
+  expect(state.isTurnUnattended).toBe(false)
+})
+
+test('It still queues a non-empty text in queueResubmittedPrompt', () => {
+  const state = createState(settings)
+  const prompt = { text: 'x', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
+  queueResubmittedPrompt(state, prompt)
+  expect(state.resubmittedPrompts).toEqual([prompt])
+})
+
+const refusedPlacementCases: ReadonlyArray<readonly [HandoffHold, BoxPlacement]> = [
+  [{ phase: 'idle' }, 'before_draft'],
+  [{ phase: 'holding', heldPrompts: [], promptCarriedByHandoff: null }, 'before_draft'],
+  [{ phase: 'delivering', promptCarriedByHandoff: 'go' }, 'before_draft'],
+  [{ phase: 'sending', promptCarriedByHandoff: null, lateArrivals: [] }, 'after_draft'],
+]
+
+for (const [hold, placement] of refusedPlacementCases) {
+  test(`It returns ${placement} from refusedPromptPlacement in the ${hold.phase} phase`, () => {
+    expect(refusedPromptPlacement(hold)).toBe(placement)
+  })
+}
