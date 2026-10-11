@@ -375,7 +375,8 @@ plugin without any error. Four layers guard against that:
    A weekly run of `latest` opens an issue titled `Claude Code <version> breaks handoff`.
 2. **Engine assumptions.** Behavior the types do not state is pinned in
    `test/engine-assumptions.test.ts`, one test per assumption, with the build it was last confirmed
-   on. The mocks come from `test/helpers.ts`, so a broken assumption is fixed in one place.
+   on. The world and drivers come from `test/helpers.ts` and the mock installers from
+   `test/mocks.ts`, so a broken assumption is fixed in one place.
 3. **A runtime fallback.** `TESTED_THROUGH` in `hooks/engine-version.ts` names the newest release
    the plugin was tested through. At session start, if `$.session.version()` reports a `base` that
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
