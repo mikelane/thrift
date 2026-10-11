@@ -3,8 +3,6 @@ import type {
   EngineInterface,
   Register,
   RenderInput,
-  ToolCallInput,
-  ToolCallResult,
   PromptSubmitInput,
   TurnCompleteInput,
 } from 'claude-code'
@@ -25,7 +23,6 @@ import {
   offerWithBusyState,
   statusText,
 } from './band-text'
-import { finishesTask } from './command-parse'
 import {
   decisionRecord,
   heldGroupFields,
@@ -84,7 +81,8 @@ import {
   type Button,
   type Signal,
 } from './signals'
-import { fieldOf, notifiedTaskId, validTaskId } from './tasks'
+import { notifiedTaskId } from './tasks'
+import { noteToolCall } from './tool-call-tracking'
 import { canHoldPrompt, carriesExtras, duringHandoffAction, isPersonOrigin, isUnattendedOrigin, planNewWorkPrompt } from './prompt-plan'
 import { planTurnEnd } from './turn-end-plan'
 import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
@@ -213,22 +211,6 @@ const reportedContext = async ($: EngineInterface): Promise<number | undefined> 
   } catch (error) {
     debug($, `could not read session usage: ${String(error)}`)
     return undefined
-  }
-}
-
-const noteToolCall = (state: SessionState, e: ToolCallInput, ran: ToolCallResult) => {
-  const didSucceed = ran.deny === undefined && ran.isError !== true
-  if (e.tool === 'Bash') {
-    const started = validTaskId(fieldOf(ran.result, 'backgroundTaskId'))
-    if (started !== null) state.backgroundTasks.add(started)
-    else if (didSucceed && finishesTask(e.command)) state.hasFinishedTask = true
-  } else if (e.tool === 'Monitor') {
-    const started = validTaskId(fieldOf(ran.result, 'taskId'))
-    if (started !== null) state.backgroundTasks.add(started)
-  } else if (ran.deny === undefined && (e.tool === 'TaskStop' || String(e.tool) === 'KillShell')) {
-    const input: Readonly<Record<string, unknown>> = e
-    const stopped = validTaskId(input.task_id ?? input.shell_id)
-    if (stopped !== null) state.backgroundTasks.delete(stopped)
   }
 }
 
