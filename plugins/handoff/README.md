@@ -311,7 +311,10 @@ Set these in `/config`.
 ## Decision log
 
 One JSON object per line, one per evaluation, in `$THRIFT_HOME/decisions.jsonl` (default
-`~/.claude/thrift/decisions.jsonl`). The file is created readable by its owner only. Evaluations
+`~/.claude/thrift/decisions.jsonl`). `THRIFT_HOME` must be an absolute path: a relative one, or one
+that starts with `~`, would resolve against the session's working directory, so the plugin ignores it,
+writes a debug line, and uses the default. The file is readable by its owner only, whether the plugin
+created it or it already existed (each write sets the mode). Evaluations
 that decide nothing are logged too, so you can compute a trigger rate. Prompt text never goes in
 the log, and nothing from it is written into the session.
 

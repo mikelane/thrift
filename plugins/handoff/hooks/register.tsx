@@ -25,6 +25,7 @@ import {
 } from './band-text'
 import {
   heldGroupFields,
+  isUsableThriftHome,
   LOG_WRITER,
   logLocation,
   recordFromEvaluation,
@@ -140,6 +141,7 @@ const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: 
       $.env.get('THRIFT_HOME'),
       $.env.get('HOME'),
     ])
+    if (thriftHome && !isUsableThriftHome(thriftHome)) debug($, 'THRIFT_HOME is not an absolute path, so the default log location is used')
     const location = logLocation(thriftHome, home)
     if (location === null) return debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
     const record = recordFromEvaluation(state, evaluation, now, id)

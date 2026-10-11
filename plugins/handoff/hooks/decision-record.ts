@@ -101,7 +101,9 @@ export const snapshotTrigger = (state: RecordSessionFields, point: Trigger['poin
   effectiveMode: state.mode,
 })
 
-export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p "$1" && cat >> "$2"', 'sh'] as const
+// umask only applies when the file is created, so a log that already exists is made owner-only by the chmod. `--` ends the
+// options, so a directory name can never be read as one.
+export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 -- "$2"', 'sh'] as const
 
 export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiveMode, triggerValues }: RecordInput) => ({
   ts: new Date(now).toISOString(),
@@ -146,10 +148,13 @@ export const recordFromEvaluation = (
   })
 }
 
+// A relative THRIFT_HOME, or one that starts with ~, would resolve against the session's working directory, not the home.
+export const isUsableThriftHome = (thriftHome: string | undefined): thriftHome is string => thriftHome?.startsWith('/') === true
+
 export const logLocation = (
   thriftHome: string | undefined,
   home: string | undefined,
 ): { dir: string; file: string } | null => {
-  const dir = thriftHome ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
+  const dir = isUsableThriftHome(thriftHome) ? thriftHome.replace(/\/+$/, '') : home ? `${home.replace(/\/+$/, '')}/.claude/thrift` : null
   return dir === null ? null : { dir, file: `${dir}/decisions.jsonl` }
 }

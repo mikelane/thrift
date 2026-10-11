@@ -41,6 +41,7 @@ export type World = {
   effects: string[]
   records: LogRecord[]
   logTargets: string[][]
+  logArgv: string[][]
   debugLines: string[]
   sessionId: string
   nextSessionId: string
@@ -107,6 +108,7 @@ const defaultWorld = (clock: MockClock): World => ({
   effects: [],
   records: [],
   logTargets: [],
+  logArgv: [],
   debugLines: [],
   sessionId: 'old-session',
   nextSessionId: 'new-session',
@@ -239,6 +241,7 @@ const installProcessMocks = (on: On, world: World) => {
     if (program === 'git') return ok({ ...finished, exitCode: world.branch === null || world.gitFailure ? 128 : 0, stdout: `${world.branch ?? ''}\n` })
     if (world.logWrite === 'throw') throw new Error('spawn failed')
     world.logTargets.push(args.slice(3))
+    world.logArgv.push([...e.argv])
     if (world.logWrite === 'exit') return ok({ ...finished, exitCode: 1, stderr: 'disk full' })
     world.records.push(parseLogRecord(e.init?.stdin ?? '{}'))
     return ok(finished)

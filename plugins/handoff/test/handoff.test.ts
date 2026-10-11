@@ -64,6 +64,38 @@ test('It writes the log under THRIFT_HOME when it is set', async ($, on) => {
   expect(world.logTargets).toEqual([['/data/thrift', '/data/thrift/decisions.jsonl']])
 })
 
+test('It runs the log writer with the directory and file as separate arguments', async ($, on) => {
+  const world = install($, on, { thriftHome: '/data/thrift' })
+  await startSession($)
+  await completeTurn($)
+  expect(world.logArgv).toEqual([
+    ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 -- "$2"', 'sh', '/data/thrift', '/data/thrift/decisions.jsonl'],
+  ])
+})
+
+for (const thriftHome of ['relative/dir', '~/thrift', './thrift']) {
+  test(`It writes the log under the home directory when THRIFT_HOME is ${thriftHome}, which is not absolute`, async ($, on) => {
+    const world = install($, on, { thriftHome })
+    await startSession($)
+    await completeTurn($)
+    expect(world.logTargets).toEqual([['/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl']])
+  })
+
+  test(`It writes a debug line without the path when THRIFT_HOME is ${thriftHome}`, async ($, on) => {
+    const world = install($, on, { thriftHome })
+    await startSession($)
+    await completeTurn($)
+    expect(world.debugLines).toContain('handoff: THRIFT_HOME is not an absolute path, so the default log location is used')
+  })
+}
+
+test('It writes no THRIFT_HOME debug line when THRIFT_HOME is absolute', async ($, on) => {
+  const world = install($, on, { thriftHome: '/data/thrift' })
+  await startSession($)
+  await completeTurn($)
+  expect(world.debugLines.filter(line => line.includes('THRIFT_HOME'))).toEqual([])
+})
+
 test('It writes the log under the home directory when THRIFT_HOME is unset', async ($, on) => {
   const world = install($, on)
   await startSession($)
