@@ -969,3 +969,22 @@ test('It shows the waiting status again on a second handoff after the first ende
   await world.clock.settle()
   expect(await bandText($)).toEqual([WAITING])
 })
+
+test('It logs to debug that the wait is for delivering the note once the person has cleared', async ($, on) => {
+  const world = await personClearedThenTurnInFreshSession($, on)
+  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before delivering the note')
+  expect(world.debugLines).not.toContain('handoff: waiting for a running turn to end before the clear')
+})
+
+test('It logs to debug that the wait is for stopping the handoff once the session ended another way', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+  await startTurn($)
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before stopping the handoff')
+})

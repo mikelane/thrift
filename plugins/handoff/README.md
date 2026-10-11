@@ -53,7 +53,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       seconds…", with no buttons and no hotkeys, and show the same text as a toast. The status line shows
       whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
       first. Presses and hotkeys do nothing while it is up.
-      It comes down when the clear runs, when the handoff is abandoned, or when a step throws.
+      It comes down when the clear runs, when the handoff is abandoned, or when a step throws. If the
+      person's `/clear` lands before the note starts, the status still shows in the fresh session
+      until the note is delivered.
       While a turn is running (step 3) it reads "Handoff note written. It clears when the current turn
       ends. Your prompts stay held.", and that text is a toast too.
    2. Fork the session with a fixed prompt. The fork reads the warm cache. It asks for the task and
@@ -65,7 +67,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       the wait begins, the status line changes to the waiting text and a toast shows it once, unless
       the person has already cleared, in which case nothing shows. Person
       prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
-      the debug log when it begins and when it ends.
+      the debug log when it begins and when it ends. The waiting text promises a clear, but the
+      handoff can still stop after the wait: with `compactBeforeClear` on it compacts first, and
+      work that started during the wait can end it in the busy refusal below (step 5).
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. If a
       turn started during the compaction, go back to step 3.

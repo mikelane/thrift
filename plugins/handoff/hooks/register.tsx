@@ -479,6 +479,15 @@ const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
   $.ui.toast(WAITING_STATUS)
 }
 
+// Once a session end decided the outcome, no clear will run: the wait is for delivering the note or for stopping.
+const WAIT_STARTED_LINES = {
+  none: 'waiting for a running turn to end before the clear',
+  cleared_by_person: 'waiting for a running turn to end before delivering the note',
+  other: 'waiting for a running turn to end before stopping the handoff',
+} as const satisfies Record<'none' | NonNullable<SessionState['sessionEndBeforeClear']>, string>
+
+const waitStartedLine = (state: SessionState): string => WAIT_STARTED_LINES[state.sessionEndBeforeClear ?? 'none']
+
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -491,11 +500,11 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    // SAFETY: no await sits between the last isTurnRunning read and the $.command.run inside clearSession. Every awaited
-    // step before the clear (the waiting status, the compaction, the busy check) is followed by another pass through the
-    // wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the gap. clearSession's
-    // first step is the synchronous command call. Do not add an await after the loop, or move the clear behind a helper
-    // that awaits first.
+    // SAFETY: on the clear path, no await sits between the last isTurnRunning read and the $.command.run inside
+    // clearSession. Every awaited step before the clear (the waiting status, the compaction, the busy check) is followed by
+    // another pass through the wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the
+    // gap. clearSession's first step is the synchronous command call. Do not add an await on the clear path after the loop,
+    // or move the clear behind a helper that awaits first. The person-cleared branch may await: no clear runs there.
     const mustRefuseWhenBusy = request.trigger.point !== 'command'
     let isCompacted = !state.compactBeforeClear
     let isBusy = false
@@ -504,7 +513,7 @@ const runHandoff = async (
       while (state.isTurnRunning) {
         if (!hasShownWaiting) {
           hasShownWaiting = true
-          debug($, 'waiting for a running turn to end before the clear')
+          debug($, waitStartedLine(state))
           await showWaitingStatus($, state)
           continue
         }
