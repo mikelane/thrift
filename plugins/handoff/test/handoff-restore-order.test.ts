@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts } from '../hooks/handoff-note'
+import type { HeldPrompt } from '../hooks/session-state'
 import { bash, runCommand, completeTurn, dropOf, growTo200k, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
@@ -24,7 +25,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveDuringSubmits($, world, [{ text: 'late job', kind: 'scheduled-trigger' }])
     await failNote()
-    expect(entered(world)).toEqual(['entered:plugin:nightly job', 'entered:plugin:late job'])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job', 'entered:plugin:late job'], ''])
   })
 
   test('It holds a prompt that arrives mid-restore instead of running it', async ($, on) => {
@@ -32,7 +33,11 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     const results = arriveDuringSubmits($, world, [{ text: 'late job', kind: 'scheduled-trigger' }])
     await failNote()
-    expect(dropOf(await results[0])).toBe(HELD_FOR_HANDOFF)
+    expect([dropOf(await results[0]), entered(world), world.box.text]).toEqual([
+      HELD_FOR_HANDOFF,
+      ['entered:plugin:nightly job', 'entered:plugin:late job'],
+      '',
+    ])
   })
 
   test('It submits prompts that arrive mid-restore one by one in arrival order', async ($, on) => {
@@ -44,11 +49,9 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
       { text: 'late three', kind: 'scheduled-trigger' },
     ])
     await failNote()
-    expect(entered(world)).toEqual([
-      'entered:plugin:nightly job',
-      'entered:plugin:late one',
-      'entered:plugin:late two',
-      'entered:plugin:late three',
+    expect([entered(world), world.box.text]).toEqual([
+      ['entered:plugin:nightly job', 'entered:plugin:late one', 'entered:plugin:late two', 'entered:plugin:late three'],
+      '',
     ])
   })
 
@@ -65,8 +68,8 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await failNote()
-    expect(dropOf(await submitPerson($, 'after'))).toBeUndefined()
-    expect(entered(world)).toEqual(['entered:plugin:nightly job', 'entered:composer:after'])
+    const after = await submitPerson($, 'after')
+    expect([dropOf(after), entered(world), world.box.text]).toEqual([undefined, ['entered:plugin:nightly job', 'entered:composer:after'], ''])
   })
 
   test('It counts a prompt that arrived mid-restore in the record of the abandoned handoff', async ($, on) => {
@@ -78,24 +81,30 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
   })
 })
 
+const logs = (world: World) => world.effects.filter(effect => effect.startsWith('log:'))
+
+const remoteCases = ['bridge', 'sdk', 'scheduled-trigger'] as const
+
+const HANDED_OFF = 'log:Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session'
+const NOTE_NOT_ADDED = 'log:The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-session'
+
 describe('a held remote prompt that cannot be resubmitted', () => {
-  for (const kind of ['bridge', 'sdk'] as const) {
-    test(`It keeps a ${kind} prompt out of the box when its resubmit fails`, async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'from far away', { kind })
-    world.submitDropped = true
-    await finishNote()
-    expect(world.box.text).toBe('')
-    expect(world.effects).toContain('log:A prompt could not be sent, so here it is:\nfrom far away')
+  for (const c of remoteCases) {
+    test(`It keeps a ${c} prompt out of the box and in the transcript when its resubmit fails`, async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'from far away', { kind: c })
+      world.submitDropped = true
+      await finishNote()
+      expect([entered(world), world.box.text, logs(world)]).toEqual([[], '', [HANDED_OFF, 'log:A prompt could not be sent, so here it is:\nfrom far away']])
     })
   }
 
-  test('It still puts a composer prompt in the box when its resubmit fails', async ($, on) => {
+  test('It puts a composer prompt in the box, not the transcript, when its resubmit fails', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'typed here')
     world.submitDropped = true
     await finishNote()
-    expect(world.box.text).toBe('typed here')
+    expect([entered(world), world.box.text, logs(world)]).toEqual([[], 'typed here', [HANDED_OFF]])
   })
 
   test('It keeps a mixed group of composer and bridge prompts out of the box when its resubmit fails', async ($, on) => {
@@ -104,20 +113,26 @@ describe('a held remote prompt that cannot be resubmitted', () => {
     await submitPerson($, 'from far away', { kind: 'bridge' })
     world.submitDropped = true
     await finishNote()
-    expect(world.box.text).toBe('')
+    expect([entered(world), world.box.text, logs(world)]).toEqual([
+      [],
+      '',
+      [HANDED_OFF, 'log:A prompt could not be sent, so here it is:\ntyped here\n\nfrom far away'],
+    ])
   })
 
-  test('It keeps a bridge prompt out of the box when the handoff is abandoned', async ($, on) => {
-    const { world, failNote } = await writingTheNote($, on)
-    await submitPerson($, 'from far away', { kind: 'bridge' })
-    await failNote()
-    expect([world.box.text, entered(world)]).toEqual(['', ['entered:plugin:from far away']])
-  })
+  for (const c of remoteCases) {
+    test(`It submits a ${c} prompt, and keeps it out of the box, when the handoff is abandoned`, async ($, on) => {
+      const { world, failNote } = await writingTheNote($, on)
+      await submitPerson($, 'from far away', { kind: c })
+      await failNote()
+      expect([entered(world), world.box.text]).toEqual([['entered:plugin:from far away'], ''])
+    })
+  }
 })
 
 describe('groupHeldPrompts origin', () => {
-  const typed = { text: 'a', isUnattended: false, origin: 'composer' }
-  const remote = { text: 'b', isUnattended: false, origin: 'bridge' }
+  const typed = { text: 'a', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
+  const remote = { text: 'b', isUnattended: false, origin: 'bridge' } satisfies HeldPrompt
 
   test('It keeps the composer as the origin of a group of composer prompts', () => {
     expect(groupHeldPrompts([typed, typed]).map(group => group.origin)).toEqual(['composer'])
@@ -132,6 +147,8 @@ describe('groupHeldPrompts origin', () => {
   })
 })
 
+const NOTE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
+
 describe('the transcript wording for a note that could be neither sent nor put in the box', () => {
   const refuseEverything = (world: World) => {
     world.appendDenied = true
@@ -139,33 +156,34 @@ describe('the transcript wording for a note that could be neither sent nor put i
     world.fillRefusal = 'dialog'
   }
 
-  test('It calls a note that went alone the handoff note', async ($, on) => {
+  test('It calls a note that went alone the handoff note, not the prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     refuseEverything(world)
     await finishNote()
-    expect(world.effects.filter(effect => effect.startsWith('log:The handoff note could not be sent or put in the prompt box. Here it is:'))).toHaveLength(1)
+    expect(logs(world)).toEqual([`log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`, NOTE_NOT_ADDED])
   })
 
-  test('It does not call a note that went alone the prompt', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    refuseEverything(world)
-    await finishNote()
-    expect(world.effects.filter(effect => effect.startsWith('log:Your prompt'))).toEqual([])
-  })
-
-  test('It still calls a note that went with a held prompt the prompt', async ($, on) => {
+  test('It names both the note and the prompt when the note went with a held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'held one')
     refuseEverything(world)
     await finishNote()
-    expect(world.effects.filter(effect => effect.startsWith('log:Your prompt'))).toHaveLength(1)
+    expect(logs(world)).toEqual([`log:The handoff note and your prompt could not be sent or put in the prompt box. Here they are:\n${NOTE}\n\nheld one`, NOTE_NOT_ADDED])
+  })
+
+  test('It does not say the box was tried when the note went with a bridge prompt', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one', { kind: 'bridge' })
+    refuseEverything(world)
+    await finishNote()
+    expect(logs(world)).toEqual([`log:The handoff note and a prompt could not be sent, so here they are:\n${NOTE}\n\nheld one`, NOTE_NOT_ADDED])
   })
 })
 
 describe('the transcript wording for a scheduled turn handoff note that could not be delivered', () => {
   const ACT = { options: { handoffMode: 'act' } } as const
 
-  test('It does not say a scheduled note was put in the prompt box', ACT, async ($, on) => {
+  test('It says only that a scheduled note could not be sent, not that it went to the prompt box', ACT, async ($, on) => {
     const world = install($, on)
     await startSession($)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
@@ -175,24 +193,27 @@ describe('the transcript wording for a scheduled turn handoff note that could no
     await bash($, world, 'git commit -m x')
     await completeTurn($)
     await world.clock.settle()
-    expect(world.effects.filter(effect => effect.startsWith('log:The handoff note could not be sent or put in the prompt box'))).toEqual([])
+    expect([logs(world), world.box.text]).toEqual([[`log:The handoff note could not be sent, so here it is:\n${NOTE}`, NOTE_NOT_ADDED], ''])
   })
 })
 
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
 
-type TogetherArrival = Arrival & { attachments?: typeof IMAGE }
+const REFUSED_DURING_HANDOFF =
+  'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
+
+type TogetherArrival = { text: string; options?: Parameters<typeof submitPerson>[2] }
 
 // Every arrival lands during the first submit of the restore, in the order given.
 const arriveTogether = ($: Parameters<typeof submitPerson>[0], world: World, arrivals: TogetherArrival[]) => {
   world.submitHooks = [
     () => {
-      for (const { text, kind = 'composer', attachments } of arrivals) void submitPerson($, text, { kind, ...(attachments ? { attachments } : {}) })
+      arrivals.forEach(({ text, options }) => void submitPerson($, text, options))
     },
   ]
 }
 
-const LATE = [{ text: 'late typed' }, { text: 'late bridge', kind: 'bridge' }] as const satisfies TogetherArrival[]
+const LATE: TogetherArrival[] = [{ text: 'late typed' }, { text: 'late bridge', options: { kind: 'bridge' } }]
 const RESTORED_IN_ORDER = [['entered:plugin:nightly job', 'entered:plugin:late bridge'], 'held one\nlate typed']
 
 describe('restore order on every abandon reason', () => {
@@ -201,7 +222,7 @@ describe('restore order on every abandon reason', () => {
     await submitPerson($, 'held one')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     world.clearThrows = true
-    arriveTogether($, world, [...LATE])
+    arriveTogether($, world, LATE)
     await finishNote()
     expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
   })
@@ -211,7 +232,7 @@ describe('restore order on every abandon reason', () => {
     await submitPerson($, 'held one')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
-    arriveTogether($, world, [...LATE])
+    arriveTogether($, world, LATE)
     await finishNote()
     expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
   })
@@ -223,28 +244,37 @@ describe('restore order on every abandon reason', () => {
     await runCommand($, 'handoff')
     await submitPerson($, 'held one')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    arriveTogether($, world, [...LATE])
+    arriveTogether($, world, LATE)
     await world.clock.settle()
     expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
   })
 })
 
-describe('a refused late arrival during a restore', () => {
+describe('the box placement of a prompt refused during a handoff', () => {
   test('It puts a refused person prompt that arrived mid-restore in the box after the held person prompt', async ($, on) => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await submitPerson($, 'held one')
-    arriveTogether($, world, [{ text: 'late with image', attachments: IMAGE }])
+    arriveTogether($, world, [{ text: 'late with image', options: { attachments: IMAGE } }])
     await failNote()
-    expect(world.box.text).toBe('held one\nlate with image')
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job'], 'held one\nlate with image'])
   })
 
-  test('It puts a refused person prompt in front of the draft when no handoff is running', async ($, on) => {
+  test('It puts a person prompt refused while the note is written in front of the draft', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.box = { text: 'draft', cursor: 5 }
+    const refused = await submitPerson($, 'with image', { attachments: IMAGE })
+    await world.clock.settle()
+    await finishNote()
+    expect([dropOf(refused), entered(world), world.box.text]).toEqual([REFUSED_DURING_HANDOFF, [], 'with image\ndraft'])
+  })
+
+  test('It runs a prompt with an attachment and leaves the draft alone once the handoff has finished', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()
     world.box = { text: 'draft', cursor: 5 }
-    await submitPerson($, 'with image', { attachments: IMAGE })
+    const result = await submitPerson($, 'with image', { attachments: IMAGE })
     await world.clock.settle()
-    expect(world.box.text).toBe('draft')
+    expect([dropOf(result), entered(world), world.box.text]).toEqual([undefined, ['entered:composer:with image'], 'draft'])
   })
 })

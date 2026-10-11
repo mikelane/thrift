@@ -7,6 +7,7 @@ import {
   isPersonOrigin,
   isComposerOrigin,
   isUnattendedOrigin,
+  noteOrigin,
   planNewWorkPrompt,
   senderLabel,
 } from '../hooks/prompt-plan'
@@ -111,7 +112,7 @@ const newWork = (overrides: Partial<NewWorkInput>): NewWorkInput => ({
   isBackgroundBusy: false,
   mode: 'ask',
   isUnattended: false,
-  isComposer: true,
+  isFromComposer: true,
   ...overrides,
 })
 
@@ -120,8 +121,8 @@ const newWorkCases = [
   ['off mode past the threshold', { mode: 'off' }, 'strong', 'none'],
   ['ask mode past the threshold', {}, 'strong', 'hold'],
   ['act mode past the threshold', { mode: 'act' }, 'strong', 'handoff'],
-  ['a remote prompt in ask mode past the threshold', { isComposer: false }, 'strong', 'none'],
-  ['a remote prompt in act mode past the threshold', { isComposer: false, mode: 'act' }, 'strong', 'handoff'],
+  ['a remote prompt in ask mode past the threshold', { isFromComposer: false }, 'strong', 'none'],
+  ['a remote prompt in act mode past the threshold', { isFromComposer: false, mode: 'act' }, 'strong', 'handoff'],
   ['ask mode with background work busy', { isBackgroundBusy: true }, 'weak', 'none'],
   ['act mode with background work busy', { mode: 'act', isBackgroundBusy: true }, 'weak', 'none'],
   ['an unattended prompt past the threshold', { isUnattended: true }, 'strong', 'handoff'],
@@ -145,3 +146,11 @@ for (const [kind, label] of senderLabelCases) {
     expect(senderLabel(kind)).toBe(label)
   })
 }
+
+test('It returns scheduled-trigger from noteOrigin for an unattended handoff', () => {
+  expect(noteOrigin(true)).toBe('scheduled-trigger')
+})
+
+test('It returns composer from noteOrigin for a handoff a person is at', () => {
+  expect(noteOrigin(false)).toBe('composer')
+})

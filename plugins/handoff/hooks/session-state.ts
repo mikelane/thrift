@@ -1,3 +1,4 @@
+import type { PromptOrigin } from 'claude-code'
 import type { Offer } from '../types'
 import type { Button, Mode } from './signals'
 
@@ -10,7 +11,7 @@ type Settings = {
 export type ButtonPress = { offer: Offer; button: Button }
 
 // origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
-export type HeldPrompt = { text: string; isUnattended: boolean; origin: string }
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind'] }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt
@@ -155,7 +156,14 @@ export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number =
   return 0
 }
 
-export const isCarriedByHandoff = (state: SessionState, text: string): boolean =>
+// before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box
+// one after another keep their order.
+export type BoxPlacement = 'before_draft' | 'after_draft'
+
+// A prompt refused while the held ones are being put back comes after them in the box, as a held late arrival does.
+export const refusedPromptPlacement = (hold: HandoffHold): BoxPlacement => (hold.phase === 'sending' ? 'after_draft' : 'before_draft')
+
+export const isCarriedByHandoff =(state: SessionState, text: string): boolean =>
   state.handoffHold.phase !== 'idle' && state.handoffHold.promptCarriedByHandoff === text
 
 // Once taken, a prompt that arrives is no longer held, until beginSending holds again: a handoff that goes on to the fresh

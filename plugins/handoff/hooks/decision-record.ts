@@ -1,7 +1,7 @@
 import type { DecisionReason } from './decision-reasons'
 import type { NoteDelivery } from './handoff-note'
 import type { GroupDelivery } from './held-delivery'
-import type { HeldPromptGroup, SessionState } from './session-state'
+import type { HeldPrompt, HeldPromptGroup, SessionState } from './session-state'
 import type { Mode, Signal } from './signals'
 
 export type { DecisionReason }
@@ -72,7 +72,7 @@ export type HandoffRequest = {
   trigger: Trigger
   heldPrompt?: string
   // The origin kind of heldPrompt; the composer when absent, as for a prompt held in the box.
-  heldPromptOrigin?: string
+  heldPromptOrigin?: HeldPrompt['origin']
   isUnattended: boolean
 }
 

@@ -182,8 +182,8 @@ Special cases:
 - **Turns started by something other than a person.** A peer prompt or a finished background
   task is not held, and a finished task is still marked done. This is deliberate and holds through
   the delivery too: they do not come from the person, so they have no place in the order of the
-  person's prompts. A peer prompt or task notification can therefore run ahead of the held prompts. If it starts a turn while the handoff
-  is pending, the handoff waits for that turn to end before it clears (step 3).
+  person's prompts. A peer prompt or task notification can therefore run ahead of the held
+  prompts. If it starts a turn while the handoff is pending, the handoff waits for that turn to end before it clears (step 3).
 - **Prompts sent during a handoff.** A person prompt that arrives while the note is written, while
   the handoff waits for a turn, or while the session is compacted before the clear is held, so
   `/clear` never runs inside its turn.
@@ -203,7 +203,8 @@ Special cases:
   - On failure: if the handoff fails, a prompt typed at this terminal goes back in the box and any
     other is submitted here, whichever kind of sender started the handoff. Prompts are held while
     this happens, as they are during the delivery: one that arrives meanwhile is put back after
-    them, one at a time in the order it arrived, the same way, so it cannot run ahead of the held prompts.
+    them, one at a time in the order it arrived, the same way. It never enters ahead of them, but one
+    of them left in the prompt box waits for Enter, so a later prompt can run first.
   - Refused: a prompt with attachments or context can't be held, because it can't be sent again. It
     is dropped with a short toast and is not sent in the fresh session. A prompt typed at this
     terminal is put back in the prompt box, or shown in the transcript if the box can't take it. A
@@ -294,13 +295,15 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
   the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
   already holds it as a whole line is left alone.
-- **Prompt text in the engine's debug log.** A prompt kept in the transcript, and a refused remote
-  prompt, is written with `$.ui.log`. The engine also copies every `$.ui.log` line, up to 10000
-  characters, into Claude Code's own local debug log, which the decision log never sees. This is
-  accepted: the debug log is local to your machine, and the text is what you typed.
+- **Prompt text in the engine's debug log.** A prompt or note kept in the transcript, and a refused
+  remote prompt, are written with `$.ui.log`. The engine also copies every `$.ui.log` line, up to
+  10000 characters, into Claude Code's own local debug log. The decision log never gets this text.
+  This is accepted: the debug log stays on your machine, and the text already shows in the
+  transcript.
 - **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
-  the decision log), joined to the handoff if the append was refused, so it can be copied back. A
-  note that goes alone, with no held prompt, is labeled "The handoff note", not "Your prompt".
+  the decision log), joined to the handoff if the append was refused, so it can be copied back. The
+  notice names what it holds: the prompt, the handoff note, or both. It says the prompt box was tried only when it was: for text that was typed at this
+  terminal, or a note started there that carries no prompt from elsewhere.
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.
 
@@ -319,7 +322,7 @@ Set these in `/config`.
 One JSON object per line, one per evaluation, in `$THRIFT_HOME/decisions.jsonl` (default
 `~/.claude/thrift/decisions.jsonl`). `THRIFT_HOME` must be an absolute path: a relative one, or one
 that starts with `~`, would resolve against the session's working directory, so the plugin ignores it,
-writes a debug line, and uses the default. The file is readable by its owner only, whether the plugin
+writes a debug line, and uses the default (or writes no log when `HOME` is not set either). The file is readable by its owner only, whether the plugin
 created it or it already existed (each write sets the mode). Evaluations
 that decide nothing are logged too, so you can compute a trigger rate. Prompt text never goes in
 the log, and nothing from it is written into the session.
@@ -335,7 +338,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `ts` | ISO 8601 UTC |
 | `session_id` | The session the decision is about. A `cleared` record, and any record a handoff writes after the wait (an abandon, a failed or vetoed compaction), carries the id of the session the handoff started in, even if the session changed meanwhile. |
 | `component` | Always `handoff` |
-| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press can reach `off` right after a plugin reload, before the next `session.start`: the record still says `active`, and `trigger_values.effective_mode` says `off`. |
+| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press on a band shown before a plugin reload can arrive while the plugin runs in `off`, before the reload's own `session.start`: the record still says `active`, and `trigger_values.effective_mode` says `off`. |
 | `action` | `none`, `advised` (a band was shown), `cleared`, `compacted`, or `untested_engine` |
 | `engine_version` | The Claude Code release (`base`), or the full version when there is no `base`. A change in behavior shows up as a split between versions. |
 | `trigger_values.point` | `turn-end`, `prompt`, `command`, `button`, or `session-start` |
@@ -354,7 +357,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
 | `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note when the note is not appended |
 | `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the held groups the note did not carry, and any prompt that arrived during the delivery, were delivered in the fresh session. An appended note carries no group, so every held group is sent separately; a note that is not appended carries the group of the handoff's origin, so only the other group is. Each group, and each prompt that arrived during the delivery, is submitted first; if that fails, one typed at this terminal is put in the prompt box. `submitted` (entered into the session), `in_box` (left in the prompt box, unsent), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (nothing was sent separately). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. Never prompt text |
-| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group typed at this terminal goes back in the prompt box first; if that fails, or the group came from the bridge, the SDK, or a scheduled trigger (or mixes them with prompts typed here), it is submitted. A prompt that arrived while the groups were put back is put back after them in the same way and counts here and in `held_groups`. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With two groups, the worst outcome: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
+| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group typed at this terminal goes back in the prompt box first; if that fails, or the group came from the bridge, the SDK, or a scheduled trigger (or mixes them with prompts typed here), it is submitted. A prompt that arrived while the groups were put back is put back after them in the same way and counts here and in `held_groups`. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
 
 A prompt is evaluated, and so logged, only when it names new work.
 
@@ -375,10 +378,10 @@ plugin without any error. Four layers guard against that:
 3. **A runtime fallback.** `TESTED_THROUGH` in `hooks/engine-version.ts` names the newest release
    the plugin was tested through. At session start, if `$.session.version()` reports a `base` that
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
-   shows one toast (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
+   shows one notice as a toast and in the transcript (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
    fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
-   an interactive run, so after a hot reload it stays `off` until the reload's own `session.start` has run. The engine's
-   declarations say `session.start` fires once per fresh load of a plugin, a reload included
+   an interactive run, so after a hot reload it stays `off` until the reload's own `session.start`
+   has run. The engine's declarations say `session.start` fires once per fresh load of a plugin, a reload included
    (never for a `/clear`); whether it does for a setting changed in `/config` is not yet verified live.
    In an interactive session `/handoff` still works, because you asked for it at a moment you
    chose, and the toast says so. A session with no prompt (`-p`, the SDK) never registers

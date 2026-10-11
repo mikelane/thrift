@@ -1,11 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  type BoxPlacement,
+  type HandoffHold,
+  type HeldPrompt,
   addHeldPrompt,
   beginSending,
   removeResubmittedPrompt,
   queueResubmittedPrompt,
   preClearOutcome,
+  refusedPromptPlacement,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -133,8 +137,8 @@ test('It leaves the prompts a handoff holds and carries alone in resetForNewSess
   })
 })
 
-const person = { text: 'person says', isUnattended: false, origin: 'composer' }
-const nightly = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' }
+const person = { text: 'person says', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
+const nightly = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
 
 test('It reports a state that holds nothing as not holding from isHoldingForHandoff', () => {
   expect(isHoldingForHandoff(createState(settings))).toBe(false)
@@ -575,7 +579,20 @@ test('It leaves a turn attended in startMainTurn when only an empty text was off
 
 test('It still queues a non-empty text in queueResubmittedPrompt', () => {
   const state = createState(settings)
-  const prompt = { text: 'x', isUnattended: true, origin: 'scheduled-trigger' }
+  const prompt = { text: 'x', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
   queueResubmittedPrompt(state, prompt)
   expect(state.resubmittedPrompts).toEqual([prompt])
 })
+
+const refusedPlacementCases: ReadonlyArray<readonly [HandoffHold, BoxPlacement]> = [
+  [{ phase: 'idle' }, 'before_draft'],
+  [{ phase: 'holding', heldPrompts: [], promptCarriedByHandoff: null }, 'before_draft'],
+  [{ phase: 'delivering', promptCarriedByHandoff: 'go' }, 'before_draft'],
+  [{ phase: 'sending', promptCarriedByHandoff: null, lateArrivals: [] }, 'after_draft'],
+]
+
+for (const [hold, placement] of refusedPlacementCases) {
+  test(`It returns ${placement} from refusedPromptPlacement in the ${hold.phase} phase`, () => {
+    expect(refusedPromptPlacement(hold)).toBe(placement)
+  })
+}

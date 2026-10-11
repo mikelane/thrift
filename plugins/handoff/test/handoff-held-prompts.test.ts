@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
 import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend } from '../hooks/handoff-note'
+import type { HeldPrompt } from '../hooks/session-state'
 import {
   answered,
   compacted,
@@ -95,8 +96,8 @@ const repeatOnSubmitAfter = ($: Engine, world: World, submitsBefore: number) => 
   return outcome
 }
 
-const personGroup = { text: 'person says', isUnattended: false, origin: 'composer' }
-const scheduledGroup = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' }
+const personGroup = { text: 'person says', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
+const scheduledGroup = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
 
 describe('holding prompts while the note is written', () => {
   test('It drops a person prompt sent while the note is written', async ($, on) => {

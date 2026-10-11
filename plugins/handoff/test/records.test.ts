@@ -89,6 +89,8 @@ const modeCases = [
   ['none', 'off', 'off', 'button', 'active'],
   ['none', 'act', 'off', 'button', 'active'],
   ['none', 'ask', 'off', 'button', 'active'],
+  ['cleared', 'ask', 'off', 'button', 'active'],
+  ['compacted', 'ask', 'off', 'button', 'active'],
   ['untested_engine', 'act', 'off', 'turn-end', 'active'],
 ] as const
 
@@ -126,10 +128,6 @@ for (const [thriftHome, home, expected] of locationCases) {
     expect(logLocation(thriftHome, home)).toEqual(expected)
   })
 }
-
-test('It creates the log owner-only in LOG_WRITER', () => {
-  expect(LOG_WRITER[2]).toStartWith('umask 077 && mkdir -p')
-})
 
 test('It runs exactly the append convention plus the end-of-options guard and the owner-only mode in LOG_WRITER', () => {
   expect(LOG_WRITER).toEqual(['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh'])
