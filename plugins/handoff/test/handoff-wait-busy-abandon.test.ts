@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { answered, bash, compacted, completeTurn, growTo200k, install, lastRecord, mountBand, runCommand, startSession, startTurn, submitPerson } from './helpers'
-import { ACT, BUSY_TOAST, BUSY_LOG, ASK, COMPACTING, writingTheNote, endTurn, actHandoffWhileWritingTheNote, turnStartsBackgroundWork, actHandoffWithBusyTurn, shownText, countOf, ACT_COMPACTING, BUSY_COMPACTED_MESSAGE } from './wait-for-turn-helpers'
+import { ACT, SESSION_ENDED_MESSAGE, BUSY_TOAST, BUSY_LOG, ASK, COMPACTING, writingTheNote, endTurn, actHandoffWhileWritingTheNote, turnStartsBackgroundWork, actHandoffWithBusyTurn, shownText, countOf, ACT_COMPACTING, BUSY_COMPACTED_MESSAGE } from './wait-for-turn-helpers'
 
 test('It does not clear over background work that a turn started while an act-mode handoff waited', ACT, async ($, on) => {
   const world = await turnStartsBackgroundWork($, on)
@@ -109,6 +109,19 @@ test('It records compacted_before_clear on the background_busy abandon that foll
     trigger_values: { reason: 'background_busy', compacted_before_clear: true },
   })
   expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
+})
+
+test('It says the session was compacted, not cleared, in the session-ended message that follows a compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain(`toast:${SESSION_ENDED_MESSAGE} This session was compacted, not cleared.`)
+  expect(world.effects).toContain(`log:${SESSION_ENDED_MESSAGE} This session was compacted, not cleared.`)
 })
 
 test('It leaves compacted_before_clear off the background_busy abandon when compactBeforeClear is off', ACT, async ($, on) => {

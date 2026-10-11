@@ -23,8 +23,14 @@ export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterN
 }
 
 // One wording for the session's state in every message that stops a handoff, so each outcome reads the same.
-const sessionLeftLine = (hasCompacted: boolean): string =>
-  hasCompacted ? 'This session was compacted, not cleared.' : 'This session is unchanged.'
+const COMPACTED_NOT_CLEARED = 'This session was compacted, not cleared.'
+
+const sessionLeftLine = (hasCompacted: boolean): string => (hasCompacted ? COMPACTED_NOT_CLEARED : 'This session is unchanged.')
+
+export const sessionEndedMessage = (hasCompacted: boolean): string => {
+  const message = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
+  return hasCompacted ? `${message} ${COMPACTED_NOT_CLEARED}` : message
+}
 
 export const clearFailedMessage = (hasCompacted: boolean): string =>
   `The handoff was written but /clear failed. ${sessionLeftLine(hasCompacted)} Type /handoff to try again.`

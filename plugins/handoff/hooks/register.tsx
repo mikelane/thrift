@@ -41,6 +41,7 @@ import {
   FINAL_MESSAGES,
   busyRefusalMessage,
   clearFailedMessage,
+  sessionEndedMessage,
   HANDOFF_PROMPT,
   handoffMessage,
   groupHeldPrompts,
@@ -106,7 +107,6 @@ const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
-const SESSION_ENDED = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const HELD_FOR_HANDOFF = 'A handoff is in progress. Your prompt is held and will be sent when it finishes, or put back if it fails.'
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'
@@ -575,7 +575,7 @@ const runHandoff = async (
     const { outcome, hasCompactedBeforeClear, isBusy, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', SESSION_ENDED, prepared.oldId)
+      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear), prepared.oldId)
     }
     if (outcome === 'abandon_busy') {
       const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
