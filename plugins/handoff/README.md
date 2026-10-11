@@ -288,7 +288,7 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
   the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
   already holds it as a whole line is left alone.
-- **A prompt can be neither sent nor put back in the box.** It is written to the transcript (not
+- **A prompt can be neither sent nor put in the prompt box.** It is written to the transcript (not
   the decision log), joined to the handoff if the append was refused, so it can be copied back.
 - **Two triggers at once.** The first to claim the handoff wins. The other prompt is not dropped.
 - **The decision log cannot be written.** The failure goes to the debug log and the turn goes on.

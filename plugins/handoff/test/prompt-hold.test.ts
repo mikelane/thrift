@@ -385,7 +385,7 @@ test('It heads the transcript copy of an unsent prompt without a doubled plugin 
   world.submitThrows = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(world.effects).toContain('log:Your prompt could not be sent or put back in the box. Here it is:\nnow ENG-2')
+  expect(world.effects).toContain('log:Your prompt could not be sent or put in the prompt box. Here it is:\nnow ENG-2')
 })
 
 test('It writes an unattended prompt to the transcript when it cannot be sent after the clear', ACT, async ($, on) => {

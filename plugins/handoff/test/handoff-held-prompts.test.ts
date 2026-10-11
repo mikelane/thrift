@@ -237,7 +237,7 @@ describe('refusing a prompt with attachments or context', () => {
     world.fillRefusal = 'dialog'
     await submitPerson($, 'look', { attachments: IMAGE })
     await world.clock.settle()
-    expect(world.effects).toContain('log:Your prompt could not be sent or put back in the box. Here it is:\nlook')
+    expect(world.effects).toContain('log:Your prompt could not be sent or put in the prompt box. Here it is:\nlook')
   })
 
   test('It holds a text prompt next to a refused one', async ($, on) => {
@@ -333,7 +333,7 @@ describe('abandoning a handoff and restoring held prompts', () => {
     await finishNote()
     expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:Your prompt'))]).toEqual([
       'person says',
-      ['log:Your prompt could not be sent or put back in the box. Here it is:\nnightly job'],
+      ['log:Your prompt could not be sent or put in the prompt box. Here it is:\nnightly job'],
     ])
   })
 

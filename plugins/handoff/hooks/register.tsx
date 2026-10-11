@@ -124,7 +124,7 @@ const keptRefusedPrompt = (kind: string, text: string): string =>
   `A prompt from ${senderLabel(kind)} had attachments or context, so it could not be held during the handoff and did not run. Its attachments and context were not kept. Its text, to send again after the handoff:\n${text}`
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
-const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Here it is:'
+const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
