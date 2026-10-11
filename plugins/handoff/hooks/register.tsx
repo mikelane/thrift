@@ -666,6 +666,8 @@ const waitForClearWindow = async (
 
 type AbandonCause = 'session_ended' | 'busy' | 'clear_failed'
 
+// Abandons a handoff after the wait: the session ended, background work was running, or the clear failed.
+// No clear starts here, so the no-await rule on waitForClearWindow does not apply.
 const abandonAfterWait = (
   $: EngineInterface,
   state: SessionState,
@@ -673,15 +675,21 @@ const abandonAfterWait = (
   cause: AbandonCause,
   hasCompactedBeforeClear: boolean,
   oldId: string,
-) => {
-  if (cause === 'session_ended') {
-    return abandonHandoff($, state, settledHandoff, 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, oldId), oldId)
+): ReturnType<typeof abandonHandoff> => {
+  switch (cause) {
+    case 'session_ended':
+      return abandonHandoff($, state, settledHandoff, 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, oldId), oldId)
+    case 'busy': {
+      const busySettled = { ...settledHandoff, trigger: busyRefusalTrigger(settledHandoff.trigger) }
+      return abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), oldId)
+    }
+    case 'clear_failed':
+      return abandonHandoff($, state, settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
+    default: {
+      const unhandled: never = cause
+      return unhandled
+    }
   }
-  if (cause === 'busy') {
-    const busySettled = { ...settledHandoff, trigger: busyRefusalTrigger(settledHandoff.trigger) }
-    return abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), oldId)
-  }
-  return abandonHandoff($, state, settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
 }
 
 const runHandoff = async (
@@ -1049,7 +1057,7 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
-// The length is the registration list: the engine requires every handler that takes $ to be declared at the top level.
+// Long because every on(...) call lives here: the engine lets $ pass only to functions declared at the top of this file.
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   // SAFETY: a hot reload (a code change under --plugin-dir watch, or a setting changed in /config) runs register again, and

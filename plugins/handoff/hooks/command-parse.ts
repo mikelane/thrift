@@ -42,11 +42,13 @@ const skipHeredocBodies = (command: string, start: number, heredocs: readonly He
 const isWordStart = (command: string, index: number): boolean =>
   index === 0 || /\s/.test(command.charAt(index - 1)) || SEPARATORS.has(command.charAt(index - 1))
 
-export type QuotingStep = { text: string; index: number; quote: string | null }
+export type Quote = "'" | '"'
 
-// Handles the characters whose meaning depends on quoting: text inside quotes, backslash escapes, and an opening quote. Returns
-// null when the character at `index` is outside all three, so the caller treats it as shell syntax.
-export const scanQuoting = (command: string, index: number, quote: string | null): QuotingStep | null => {
+export type QuotingStep = { text: string; index: number; quote: Quote | null }
+
+// Reads one step at `index` that quoting decides: a character inside quotes, a backslash escape, or an opening quote.
+// Returns null for anything else, which the caller reads as shell syntax.
+export const readQuotingStep = (command: string, index: number, quote: Quote | null): QuotingStep | null => {
   const char = command.charAt(index)
   const next = command[index + 1]
   if (quote === "'" || (quote === '"' && char !== '\\')) {
@@ -63,7 +65,7 @@ export const commandSegments = (command: string): string[] => {
   const segments: string[] = []
   const pending: Heredoc[] = []
   let current = ''
-  let quote: string | null = null
+  let quote: Quote | null = null
   let index = 0
   const endSegment = () => {
     if (current.trim() !== '') segments.push(current.trim())
@@ -71,7 +73,7 @@ export const commandSegments = (command: string): string[] => {
   }
   while (index < command.length) {
     const char = command.charAt(index)
-    const quoting = scanQuoting(command, index, quote)
+    const quoting = readQuotingStep(command, index, quote)
     if (quoting) {
       current += quoting.text
       index = quoting.index
@@ -103,7 +105,7 @@ const shellWords = (segment: string): string[] => {
   const parsedWords: string[] = []
   let word = ''
   let hasWord = false
-  let quote: string | null = null
+  let quote: Quote | null = null
 
   for (let index = 0; index < segment.length; index += 1) {
     const char = segment.charAt(index)

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commandSegments, finishesTask, scanQuoting } from '../hooks/command-parse'
+import { commandSegments, finishesTask, readQuotingStep } from '../hooks/command-parse'
 
 const segmentCases = [
   ['git status', ['git status']],
@@ -143,6 +143,8 @@ const quotingCases = [
   ['"x', 0, null, { text: '"', index: 1, quote: '"' }],
   ["x'", 1, "'", { text: "'", index: 2, quote: null }],
   ['x"', 1, '"', { text: '"', index: 2, quote: null }],
+  ["\"'", 1, '"', { text: "'", index: 2, quote: '"' }],
+  ["'\"", 1, "'", { text: '"', index: 2, quote: "'" }],
   ['a;b', 1, "'", { text: ';', index: 2, quote: "'" }],
   ['a;b', 1, '"', { text: ';', index: 2, quote: '"' }],
   ["\\'", 0, "'", { text: '\\', index: 1, quote: "'" }],
@@ -155,7 +157,7 @@ const quotingCases = [
 ] as const
 
 for (const [command, index, quote, expected] of quotingCases) {
-  test(`It returns ${JSON.stringify(expected)} from scanQuoting for ${JSON.stringify(command)} at ${index} in ${JSON.stringify(quote)}`, () => {
-    expect(scanQuoting(command, index, quote)).toEqual(expected)
+  test(`It returns ${JSON.stringify(expected)} from readQuotingStep for ${JSON.stringify(command)} at ${index} in ${JSON.stringify(quote)}`, () => {
+    expect(readQuotingStep(command, index, quote)).toEqual(expected)
   })
 }

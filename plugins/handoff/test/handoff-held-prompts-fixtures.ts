@@ -24,8 +24,6 @@ export const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so thi
 
 export const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
 
-export const entered = (world: World) => world.effects.filter(effect => effect.startsWith('entered:'))
-
 export const heldBeforeTheHandoff = async ($: Engine, on: On) => {
   const world = install($, on)
   const fork = holdFork(world)

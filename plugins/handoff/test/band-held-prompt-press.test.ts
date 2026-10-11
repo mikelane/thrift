@@ -1,9 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  dropOf,
   bash,
+  buttonLabels,
+  clears,
   completeTurn,
+  dropOf,
   growTo200k,
   install,
   mountBand,
@@ -13,7 +15,7 @@ import {
   submitPerson,
   usageOf,
 } from './helpers'
-import { ASK, weakBand, buttonLabels, clears } from './band-turn-fixtures'
+import { ASK, weakBand } from './band-turn-fixtures'
 
 const heldPromptBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
   world.branch = 'alice/eng-1-start'

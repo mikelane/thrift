@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   bash,
+  buttonLabels,
+  clears,
   completeTurn,
   growTo200k,
   install,
@@ -11,7 +13,7 @@ import {
   startTurn,
   submitPerson,
 } from './helpers'
-import { ASK, bandAfterFinishedTask, buttonLabels, clears } from './band-turn-fixtures'
+import { ASK, bandAfterFinishedTask } from './band-turn-fixtures'
 
 test('It keeps the band up when the person starts the next turn', ASK, async ($, on) => {
   const world = install($, on)

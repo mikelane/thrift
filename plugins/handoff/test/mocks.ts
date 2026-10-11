@@ -1,7 +1,61 @@
-import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { Engine, MockClock } from 'claude-code/testing'
+import type { AgentInfo, ModelForkResult, On, SessionCompactResult, SessionVersion, TurnUsage } from 'claude-code'
 
-import type { LogRecord, World } from './helpers'
+export type LogRecord = {
+  ts: string
+  session_id: string
+  component: string
+  mode: string
+  action: string
+  engine_version: string
+  trigger_values: Record<string, unknown>
+}
+
+type Box = { text: string; cursor: number }
+
+export type World = {
+  clock: MockClock
+  effects: string[]
+  records: LogRecord[]
+  logTargets: string[][]
+  logArgv: string[][]
+  debugLines: string[]
+  sessionId: string
+  nextSessionId: string
+  contextTokens: number | undefined
+  version: SessionVersion
+  versionThrows: boolean
+  branch: string | null
+  gitCalls: number
+  agents: AgentInfo[]
+  agentListThrows: boolean
+  // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
+  onAgentList: (() => Promise<void>) | undefined
+  box: Box
+  fillRefusal: 'no_composer' | 'dialog' | undefined
+  fork: () => Promise<ModelForkResult>
+  compact: () => Promise<SessionCompactResult>
+  clearThrows: boolean
+  appendDenied: boolean
+  forkPrompts: string[]
+  registerThrows: boolean
+  logWrite: 'ok' | 'exit' | 'throw'
+  stateSetThrows: boolean
+  offerWrites: unknown[]
+  usageDenied: boolean
+  boxReadDenied: boolean
+  sessionIdDenials: number
+  submitThrows: boolean
+  submitDropped: boolean
+  // One-shot callbacks, one per upcoming prompt.submit in order; an undefined entry lets that submit pass untouched.
+  submitHooks: Array<(() => void) | undefined>
+  gitThrows: boolean
+  gitFailure: boolean
+  step: { usage: TurnUsage | null; advisorCalls: number }
+  toolResult: unknown
+  toolMode: 'ok' | 'error' | 'deny'
+  appended: string[]
+}
 
 const LOG_RECORD_STRINGS = ['ts', 'session_id', 'component', 'mode', 'action', 'engine_version'] as const
 

@@ -3,9 +3,11 @@ import { expect, test } from 'claude-code/testing'
 import { bandControls } from '../hooks/band-text'
 import { bandButtons } from '../hooks/signals'
 import {
-  dropOf,
   bash,
+  buttonLabels,
+  clears,
   completeTurn,
+  dropOf,
   growTo200k,
   install,
   mountBand,
@@ -14,7 +16,7 @@ import {
   startTurn,
   submitPerson,
 } from './helpers'
-import { ASK, weakBand, buttonLabels, clears, BUSY_REFUSAL } from './band-turn-fixtures'
+import { ASK, weakBand, BUSY_REFUSAL } from './band-turn-fixtures'
 
 const BUSY_START = { result: { backgroundTaskId: 'bg1' } }
 

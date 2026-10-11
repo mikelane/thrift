@@ -2,17 +2,19 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   bash,
+  buttonLabels,
+  clears,
   completeTurn,
   growTo200k,
   install,
   lastRecord,
   mountBand,
-  startSession,
   runCommand,
+  startSession,
   startTurn,
   submitPerson,
 } from './helpers'
-import { ASK, bandAfterFinishedTask, weakBand, buttonLabels, clears, BUSY_REFUSAL } from './band-turn-fixtures'
+import { ASK, bandAfterFinishedTask, weakBand, BUSY_REFUSAL } from './band-turn-fixtures'
 
 test('It refuses to clear and says why when background work started before an immediate press', ASK, async ($, on) => {
   const world = install($, on)
@@ -108,7 +110,7 @@ test('It keeps a band whose busy state is unchanged after an interrupted turn', 
 })
 
 test('It draws no band after an interrupted turn when none was up', ASK, async ($, on) => {
-  const world = install($, on)
+  install($, on)
   await startSession($)
   await startTurn($)
   await completeTurn($, { reason: 'aborted' })

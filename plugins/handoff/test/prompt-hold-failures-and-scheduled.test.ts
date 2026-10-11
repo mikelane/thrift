@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bash, completeTurn, dropOf, lastRecord, mountBand, submitPerson } from './helpers'
-import { ASK, ACT, NOTE_HEADING, ready, entered } from './prompt-hold-fixtures'
+import { bash, completeTurn, dropOf, entered, lastRecord, mountBand, submitPerson } from './helpers'
+import { ASK, ACT, NOTE_HEADING, ready } from './prompt-hold-fixtures'
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
   const world = await ready($, on)

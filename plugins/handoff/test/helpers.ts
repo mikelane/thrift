@@ -1,13 +1,5 @@
 import { mock, type Engine, type MockClock } from 'claude-code/testing'
-import type {
-  AgentInfo,
-  ModelForkResult,
-  On,
-  SessionCompactResult,
-  SessionVersion,
-  ToolCallResult,
-  TurnUsage,
-} from 'claude-code'
+import type { ModelForkResult, On, SessionCompactResult, ToolCallResult, TurnUsage } from 'claude-code'
 
 import {
   installCommandMocks,
@@ -19,63 +11,11 @@ import {
   installToolMocks,
   installTurnMocks,
   installUiMocks,
+  type LogRecord,
+  type World,
 } from './mocks'
 
-export type LogRecord = {
-  ts: string
-  session_id: string
-  component: string
-  mode: string
-  action: string
-  engine_version: string
-  trigger_values: Record<string, unknown>
-}
-
-type Box = { text: string; cursor: number }
-
-export type World = {
-  clock: MockClock
-  effects: string[]
-  records: LogRecord[]
-  logTargets: string[][]
-  logArgv: string[][]
-  debugLines: string[]
-  sessionId: string
-  nextSessionId: string
-  contextTokens: number | undefined
-  version: SessionVersion
-  versionThrows: boolean
-  branch: string | null
-  gitCalls: number
-  agents: AgentInfo[]
-  agentListThrows: boolean
-  // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
-  onAgentList: (() => Promise<void>) | undefined
-  box: Box
-  fillRefusal: 'no_composer' | 'dialog' | undefined
-  fork: () => Promise<ModelForkResult>
-  compact: () => Promise<SessionCompactResult>
-  clearThrows: boolean
-  appendDenied: boolean
-  forkPrompts: string[]
-  registerThrows: boolean
-  logWrite: 'ok' | 'exit' | 'throw'
-  stateSetThrows: boolean
-  offerWrites: unknown[]
-  usageDenied: boolean
-  boxReadDenied: boolean
-  sessionIdDenials: number
-  submitThrows: boolean
-  submitDropped: boolean
-  // One-shot callbacks, one per upcoming prompt.submit in order; an undefined entry lets that submit pass untouched.
-  submitHooks: Array<(() => void) | undefined>
-  gitThrows: boolean
-  gitFailure: boolean
-  step: { usage: TurnUsage | null; advisorCalls: number }
-  toolResult: unknown
-  toolMode: 'ok' | 'error' | 'deny'
-  appended: string[]
-}
+export type { LogRecord, World } from './mocks'
 
 export const ZERO_USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 0 }
 
@@ -294,3 +234,10 @@ export const writingTheNote = async ($: Engine, on: On) => {
   }
   return { world, finishNote: () => finishWith(answered('The handoff note.')), failNote: () => finishWith({ isAnswered: false, reason: 'nothing-to-fork' }) }
 }
+
+export const entered = (world: World) => world.effects.filter(effect => effect.startsWith('entered:'))
+
+export const clears = (world: World) => world.effects.filter(effect => effect === 'clear')
+
+export const buttonLabels = async (band: Awaited<ReturnType<typeof mountBand>>) =>
+  (await band.findAll({ type: 'Button' })).map(button => button.props.label)

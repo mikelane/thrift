@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, submitPerson, writingTheNote } from './helpers'
+import { dropOf, entered, submitPerson, writingTheNote } from './helpers'
 import {
   ASK,
   NOTE_MESSAGE,
   HELD_FOR_HANDOFF,
   REPEAT_NOT_ADDED,
   IMAGE,
-  entered,
   heldBeforeTheHandoff,
   unattendedHandoffWriting,
   carriedPlusScheduled,

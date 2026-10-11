@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend } from '../hooks/handoff-note'
-import { answered, dropOf, submitPerson, writingTheNote } from './helpers'
+import { answered, dropOf, entered, submitPerson, writingTheNote } from './helpers'
 import {
   ASK,
   HELD_FOR_HANDOFF,
   REPEAT_NOT_ADDED,
-  entered,
   heldBeforeTheHandoff,
   repeatingDuringDelivery,
   carriedPlusScheduled,

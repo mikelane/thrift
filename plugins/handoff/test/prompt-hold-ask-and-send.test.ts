@@ -2,8 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { PromptOrigin } from 'claude-code'
 
-import { dropOf, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
-import { ASK, ACT, ready, entered } from './prompt-hold-fixtures'
+import { dropOf, entered, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
+import { ASK, ACT, ready } from './prompt-hold-fixtures'
 
 test('It drops a prompt that names new work and holds it in ask mode', ASK, async ($, on) => {
   const world = await ready($, on)

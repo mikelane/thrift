@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { compacted, dropOf, install, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
-import { NOTE_MESSAGE, HELD_FOR_HANDOFF, IMAGE, entered } from './handoff-held-prompts-fixtures'
+import { compacted, dropOf, entered, install, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
+import { NOTE_MESSAGE, HELD_FOR_HANDOFF, IMAGE } from './handoff-held-prompts-fixtures'
 
 const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Send it again after the handoff.'
