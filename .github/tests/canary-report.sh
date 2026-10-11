@@ -852,6 +852,46 @@ test_failed_issue_creation_does_not_use_up_the_cap() {
   assert_out_lacks 'left unopened'
 }
 
+test_dedupe_finds_an_open_issue_beyond_the_first_page_of_results() {
+  local i
+  for i in $(seq 1 40); do echo "Unrelated issue $i" >> "$GH_OPEN_TITLES"; done
+  add_log handoff
+  mark_open handoff
+  run_report false
+  assert_gh_calls 'issue create' 0
+}
+test_dedupe_reads_the_issue_listing_and_not_the_lagging_search_index() {
+  add_log handoff
+  mark_open handoff
+  run_report false
+  assert_gh_calls 'issue create' 0
+  ! grep -q -- '--search' "$GH_CALLS" || fail 'the dedupe queried the search index'
+}
+test_dedupe_runs_before_the_cap_so_an_open_issue_is_not_counted_as_left_unopened() {
+  local plugin
+  for plugin in a b c d e f; do add_log "$plugin" x; done
+  mark_open f
+  run_report false
+  assert_rc 0
+  assert_gh_calls 'issue create' 5
+  assert_out_lacks 'left unopened'
+}
+test_dry_run_reports_an_issue_that_is_already_open() {
+  add_log handoff
+  mark_open handoff
+  run_report true
+  assert_rc 0
+  assert_out_has 'dry run: issue already open for Claude Code 2.1.300 breaks handoff'
+}
+test_open_issue_with_the_exact_title_is_not_opened_again() {
+  add_log handoff
+  mark_open handoff
+  run_report false
+  assert_rc 0
+  assert_gh_calls 'issue create' 0
+  assert_out_has 'Issue already open for Claude Code 2.1.300 breaks handoff; not opening another.'
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue

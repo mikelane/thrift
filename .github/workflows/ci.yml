@@ -209,7 +209,9 @@ jobs:
               continue
             fi
             title="Claude Code ${version} breaks ${plugin}"
-            open=$(TITLE="$title" gh issue list --state open --search "\"${title}\" in:title" --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
+            # --search reads an index that lags behind new issues, so list the open issues instead
+            # and compare the whole title here. --limit lifts gh's default of 30 results.
+            open=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
               echo "Failed to list issues for ${title}"
               problems=1
               continue
