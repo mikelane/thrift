@@ -349,6 +349,16 @@ const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boo
   return submitOrKeepInTranscript($, text)
 }
 
+// A failed read leaves the id to writeRecord, which reads it again and logs nothing if that fails too.
+const readSessionId = async ($: EngineInterface): Promise<string | undefined> => {
+  try {
+    return await $.session.id()
+  } catch (error) {
+    debug($, `could not read the session id: ${String(error)}`)
+    return undefined
+  }
+}
+
 const restoreGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
@@ -368,6 +378,7 @@ const abandonHandoff = async (
 ) => {
   await takeDownBand($, state)
   announce($, message)
+  const recordedSessionId = sessionId ?? (await readSessionId($))
   const restores = await restoreGroups($, state, settledHandoff)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
@@ -378,7 +389,7 @@ const abandonHandoff = async (
       handoff_unattended: settledHandoff.isUnattended,
       held_restore: summarizeDelivery(restores),
     },
-    sessionId,
+    sessionId: recordedSessionId,
   })
 }
 
