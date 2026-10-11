@@ -75,6 +75,10 @@ run_labeled_step() {
 run_file_checks() {
   local plugin_dir="$1" check
   for check in "$plugin_dir"/checks/*.ts; do
+    if [[ -L "$check" && ! -e "$check" ]]; then
+      echo "FAILED: $plugin_dir: $check is a dangling symlink. Fix its target or remove it." >&2
+      return 1
+    fi
     [[ -e "$check" ]] || continue
     run_labeled_step "$plugin_dir" "file check: $(basename "$check")" \
       node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types "$check" || return 1
