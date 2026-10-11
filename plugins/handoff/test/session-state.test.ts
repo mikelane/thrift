@@ -559,3 +559,23 @@ test('It empties the queue of resubmitted prompts in resetForNewSession', () => 
   resetForNewSession(state)
   expect(state.resubmittedPrompts).toEqual([])
 })
+
+test('It does not queue an empty text in queueResubmittedPrompt', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, { text: '', isUnattended: true, origin: 'scheduled-trigger' })
+  expect(state.resubmittedPrompts).toEqual([])
+})
+
+test('It leaves a turn attended in startMainTurn when only an empty text was offered to the queue', () => {
+  const state = createState(settings)
+  queueResubmittedPrompt(state, { text: '', isUnattended: true, origin: 'scheduled-trigger' })
+  startMainTurn(state, 'any turn at all')
+  expect(state.isTurnUnattended).toBe(false)
+})
+
+test('It still queues a non-empty text in queueResubmittedPrompt', () => {
+  const state = createState(settings)
+  const prompt = { text: 'x', isUnattended: true, origin: 'scheduled-trigger' }
+  queueResubmittedPrompt(state, prompt)
+  expect(state.resubmittedPrompts).toEqual([prompt])
+})

@@ -251,7 +251,9 @@ export const endMainTurn = (state: SessionState): void => {
 // waits for such a turn. Either needs a turn quoting a resubmitted prompt, which is not a case worth a guard. The cost,
 // outside off, is one turn end judged as the wrong kind of sender: a person asked where a scheduled turn would act, or a scheduled turn's
 // rule applied to a person's turn, so a strong signal hands off without asking and a weak one shows no band.
+// An empty text is not queued: every turn's text contains it, so it would take the first turn that starts.
 export const queueResubmittedPrompt = (state: SessionState, prompt: HeldPrompt): void => {
+  if (prompt.text === '') return
   state.resubmittedPrompts.push(prompt)
 }
 
