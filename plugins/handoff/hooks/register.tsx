@@ -49,7 +49,7 @@ import {
   type Carried,
   type NoteDelivery,
 } from './handoff-note'
-import { summarizeDelivery } from './held-delivery'
+import { worstDelivery } from './held-delivery'
 import {
   canHoldPrompt,
   carriesExtras,
@@ -349,7 +349,8 @@ const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boo
   return submitOrKeepInTranscript($, text)
 }
 
-// A failed read leaves the id to writeRecord, which reads it again and logs nothing if that fails too.
+// A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
+// writeRecord leaves its own debug line.
 const readSessionId = async ($: EngineInterface): Promise<string | undefined> => {
   try {
     return await $.session.id()
@@ -359,7 +360,7 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
   }
 }
 
-const restoreGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
+const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
     restores.push(await restorePrompt($, group.text, group.isUnattended))
@@ -379,7 +380,10 @@ const abandonHandoff = async (
   await takeDownBand($, state)
   announce($, message)
   const recordedSessionId = sessionId ?? (await readSessionId($))
-  const restores = await restoreGroups($, state, settledHandoff)
+  // SAFETY: the record is written after restoreHeldGroups returns, so a throw inside it would lose the record. refillBox and
+  // submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
+  // can make the loop throw. Any call added to the loop must not throw either.
+  const restores = await restoreHeldGroups($, state, settledHandoff)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'none',
@@ -387,7 +391,7 @@ const abandonHandoff = async (
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
-      held_restore: summarizeDelivery(restores),
+      held_restore: worstDelivery(restores),
     },
     sessionId: recordedSessionId,
   })
@@ -466,7 +470,7 @@ const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, m
   return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
 }
 
-const sendGroups = async (
+const sendHeldGroups = async (
   $: EngineInterface,
   state: SessionState,
   groups: readonly HeldPromptGroup[],
@@ -495,9 +499,10 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  // SAFETY: the record goes out only after sendGroups returns. That relies on every call in its loop (submit, fill,
-  // and keepInTranscript's $.ui.log) catching its own errors, which no test can break. A throw there would lose the record.
-  const deliveries = await sendGroups($, state, groupsToSend, settledHandoff.isUnattended)
+  // SAFETY: the record is written after sendHeldGroups returns, so a throw inside it would lose the record. submitEntered
+  // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
+  // can make the loop throw. Any call added to the loop must not throw either.
+  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
@@ -506,7 +511,7 @@ const continueInFreshSession = async (
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
-      held_other_delivery: summarizeDelivery(deliveries),
+      held_other_delivery: worstDelivery(deliveries),
     },
   })
 }

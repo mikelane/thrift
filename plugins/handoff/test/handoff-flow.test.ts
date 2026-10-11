@@ -294,7 +294,7 @@ const HANDED_OFF =
 const IN_THE_BOX =
   'Handed off. The note summarizing the previous session is in your prompt box. Press Enter to send it. To reopen the full previous conversation: claude --resume old-session'
 const NOT_CARRIED_OVER =
-  'The handoff note could not be added to this session. The previous conversation is still available: claude --resume old-session'
+  'The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-session'
 
 const refuseEveryWayToCarryTheNote = (world: World) => {
   world.appendDenied = true

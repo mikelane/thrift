@@ -91,11 +91,15 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       note is not sent until you press Enter: "Handed off. The note summarizing the previous session
       is in your prompt box. Press Enter to send it. To reopen the full previous conversation:
       `claude --resume <id>`". If nothing could carry it: "The handoff note could not be added to
-      this session. The previous conversation is unchanged: `claude --resume <id>`". Claude Code puts
+      this session. To reopen the full previous conversation: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
-   8. If a prompt was held, submit it in the fresh session. This holds whether the handoff was
-      started by handing it off first or by running `/handoff` while the prompt was held.
+   8. Deliver any held prompts in the fresh session. If the note was not appended, held prompts of
+      the handoff's own origin ride with it. Every other held group is sent on its own: submitted
+      first, then put in the prompt box if a person sent it, then written to the transcript. The
+      `cleared` record's `held_other_delivery` field says how those groups went. This holds whether
+      the handoff was started by handing it off first or by running `/handoff` while the prompt was
+      held.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.
@@ -310,9 +314,9 @@ the log, and nothing from it is written into the session.
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 | `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, from when it was scheduled until the clear, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). A count, never prompt text |
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
-| `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff itself began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note |
-| `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the groups that did not ride with the note were delivered once the fresh session started. When the note is appended to the session, every held group is delivered this way; when the note is not appended, it carries the group of the handoff's origin and only the other group counts. `submitted` (entered into the session), `in_box` (left in the prompt box), `not_carried` (neither worked; the prompt was kept in the transcript), or `none` (no group was delivered separately). With two groups, the worst outcome (`not_carried`, then `in_box`, then `submitted`). Never prompt text |
-| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff. How the held groups were put back when the handoff was abandoned: `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked; kept in the transcript), or `none` (no group was held). With two groups, the worst outcome. The record is written after the restore, so it reports what happened. Never prompt text |
+| `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note when the note is not appended |
+| `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the held groups the note did not carry were delivered in the fresh session. An appended note carries no group, so every held group is sent separately; a note that is not appended carries the group of the handoff's origin, so only the other group is. Each group is submitted first; if that fails, a group from a person is put in the prompt box. `submitted` (entered into the session), `in_box` (left in the prompt box, unsent), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was sent separately). With two groups, the worst outcome: `not_carried`, then `in_box`, then `submitted`. Never prompt text |
+| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group from a person goes back in the prompt box first; if that fails, or the group came from a scheduled trigger, it is submitted. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With two groups, the worst outcome: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
 
 A prompt is evaluated, and so logged, only when it names new work.
 
@@ -391,8 +395,8 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefix`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
-| `hooks/handoff-note.ts` | `HANDOFF_PROMPT`, the handoff message, `NoteDelivery` (`appended`, `submitted`, `in_box`, `not_carried`) with the message the person sees for each, and the grouping of held prompts |
-| `hooks/held-delivery.ts` | `summarizeDelivery`: the worst outcome across the groups sent or restored, as one scalar |
+| `hooks/handoff-note.ts` | `HANDOFF_PROMPT`, the handoff message, `NoteDelivery` (`appended`, `submitted`, `in_box`, `not_carried`) and `Carried` (the same without `appended`), the message the person sees for each delivery, and the grouping of held prompts |
+| `hooks/held-delivery.ts` | `GroupDelivery` and `worstDelivery`: the worst outcome among the held groups sent or put back, as one value |
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
 | `hooks/session-state.ts` | The per-session state object |

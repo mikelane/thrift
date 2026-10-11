@@ -25,7 +25,7 @@ export type TriggerValues = {
   held_restore?: GroupDelivery
 }
 
-export type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
+type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
 
 export type HeldRecordFields = HeldGroupFields &
   Pick<TriggerValues, 'handoff_unattended' | 'held_other_delivery' | 'held_restore'>

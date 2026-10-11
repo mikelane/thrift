@@ -202,7 +202,7 @@ test('It says the note is in the prompt box, to send with Enter, from noteInBoxM
 
 test('It says the note could not be added to this session, with the resume command, from noteNotCarriedMessage', () => {
   expect(noteNotCarriedMessage('old-id')).toBe(
-    'The handoff note could not be added to this session. The previous conversation is still available: claude --resume old-id',
+    'The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-id',
   )
 })
 

@@ -2,11 +2,14 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelForkResult, On } from 'claude-code'
 
+import type { DecisionReason } from '../hooks/decision-reasons'
 import { answered, bash, completeTurn, growTo200k, install, runCommand, startSession, startTurn, submitPerson, type LogRecord, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const ASK = { options: { handoffMode: 'ask' } } as const
-const END_REASONS = ['no_handoff_written', 'handoff_failed', 'session_ended', 'background_busy', 'clear_failed']
+const END_REASONS: readonly DecisionReason[] = ['no_handoff_written', 'handoff_failed', 'session_ended', 'background_busy', 'clear_failed']
+
+const isEndReason = (value: unknown): boolean => END_REASONS.some(reason => reason === value)
 
 const holdFork = (world: World) => {
   const pending: { release: (result: ModelForkResult) => void } = { release: () => undefined }
@@ -18,9 +21,9 @@ const holdFork = (world: World) => {
 }
 
 const endRecords = (world: World): LogRecord[] =>
-  world.records.filter(record => record.action === 'cleared' || END_REASONS.includes(String(record.trigger_values.reason)))
+  world.records.filter(record => record.action === 'cleared' || isEndReason(record.trigger_values.reason))
 
-const expectOneEndRecord = (world: World, reason: string) => {
+const expectOneEndRecord = (world: World, reason: DecisionReason) => {
   const ends = endRecords(world)
   expect(ends).toHaveLength(1)
   expect(ends[0]).toMatchObject({
@@ -28,6 +31,7 @@ const expectOneEndRecord = (world: World, reason: string) => {
     action: 'none',
     trigger_values: { reason, held_groups: 1, held_unattended: false, handoff_unattended: false, held_restore: 'in_box' },
   })
+  expect(world.effects).toContain('fill:next thing')
   expect(JSON.stringify(ends[0])).not.toContain('next thing')
 }
 
@@ -119,6 +123,28 @@ test('It writes one cleared record under the old session when the person clears 
     action: 'cleared',
     trigger_values: { note: 'appended', held_groups: 1, held_other_delivery: 'submitted', handoff_unattended: false },
   })
+})
+
+test('It logs the failed session id read and still writes handoff_failed when readSessionId cannot read the id', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.sessionIdDenials = 2
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.debugLines.filter(line => line.startsWith('handoff: could not read the session id'))).toHaveLength(1)
+  const ends = endRecords(world)
+  expect(ends).toHaveLength(1)
+  expect(ends[0]).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'handoff_failed', held_restore: 'none' } })
+})
+
+test('It writes no handoff_failed record when readSessionId and writeRecord both cannot read the id', async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.sessionIdDenials = 3
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.debugLines.filter(line => line.startsWith('handoff: could not read the session id'))).toHaveLength(1)
+  expect(endRecords(world)).toEqual([])
 })
 
 const unattendedHandoff = async ($: Engine, on: On) => {

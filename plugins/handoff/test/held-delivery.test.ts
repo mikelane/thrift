@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Carried } from '../hooks/handoff-note'
-import { summarizeDelivery, type GroupDelivery } from '../hooks/held-delivery'
+import { worstDelivery, type GroupDelivery } from '../hooks/held-delivery'
 
 const cases: ReadonlyArray<{ name: string; outcomes: Carried[]; expected: GroupDelivery }> = [
   { name: 'no group was sent', outcomes: [], expected: 'none' },
@@ -17,10 +17,10 @@ const cases: ReadonlyArray<{ name: string; outcomes: Carried[]; expected: GroupD
   { name: 'one group was not carried and one left in the box', outcomes: ['not_carried', 'in_box'], expected: 'not_carried' },
 ]
 
-describe('summarizeDelivery', () => {
+describe('worstDelivery', () => {
   for (const { name, outcomes, expected } of cases) {
     test(`It returns ${expected} when ${name}`, () => {
-      expect(summarizeDelivery(outcomes)).toBe(expected)
+      expect(worstDelivery(outcomes)).toBe(expected)
     })
   }
 })

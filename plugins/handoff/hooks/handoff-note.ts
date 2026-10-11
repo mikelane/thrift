@@ -31,7 +31,7 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
   `Handed off. The note summarizing the previous session is in your prompt box. Press Enter to send it. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
-  `The handoff note could not be added to this session. The previous conversation is still available: ${resumeCommand(oldSessionId)}`
+  `The handoff note could not be added to this session. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
 const PROMPT_SEPARATOR = '\n\n'
 

@@ -62,6 +62,14 @@ const handoffWithHeld = async ($: Engine, on: On, held: readonly HeldKind[]) => 
   }
 }
 
+// The secret must reach an effect first, or a test that it stays out of the record proves nothing.
+const expectSecretTravelled = (world: World) => {
+  expect(world.effects.join('\n')).toContain('zebra-quartz-7731')
+}
+
+const enteredTexts = (world: World): string[] =>
+  world.effects.filter(effect => effect.startsWith('entered:plugin:')).map(effect => effect.slice('entered:plugin:'.length))
+
 const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
   const record = world.records.filter(candidate => candidate.action === action).at(-1)
   if (record === undefined) throw new Error(`no ${action} record was written`)
@@ -121,6 +129,7 @@ describe('held-prompt fields on a cleared record', () => {
   test('It keeps the held prompt text out of the serialized cleared record', async ($, on) => {
     const { clearsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     const world = await clearsWith()
+    expectSecretTravelled(world)
     expect(JSON.stringify(lastRecordOf(world, 'cleared'))).not.toContain('zebra-quartz-7731')
   })
 })
@@ -141,6 +150,7 @@ describe('held-prompt fields on an abandoned record', () => {
   test('It keeps the held prompt text out of the serialized none record', async ($, on) => {
     const { abandonsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     const world = await abandonsWith()
+    expectSecretTravelled(world)
     expect(JSON.stringify(lastRecordOf(world, 'none'))).not.toContain('zebra-quartz-7731')
   })
 })
@@ -219,17 +229,19 @@ describe('held_other_delivery on a cleared record', () => {
 
   test('It records the worse outcome when one group is submitted and the other is not carried', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
-    world.submitHooks = [undefined]
-    world.submitHooks.push(() => {
+    world.submitHooks = [undefined, () => {
       world.submitDropped = true
-    })
+    }]
     expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values.held_other_delivery).toBe('not_carried')
+    expect(enteredTexts(world)).toEqual([SECRET_PROMPT])
   })
 
   test('It records held_other_delivery none when the note carried the only held group', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person'])
     world.appendDenied = true
-    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values.held_other_delivery).toBe('none')
+    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'none' })
+    expect(enteredTexts(world)).toHaveLength(1)
+    expect(enteredTexts(world)[0]).toMatch(new RegExp(`\n\n${SECRET_PROMPT}$`))
   })
 
   test('It records the delivery of the group that did not ride with the note', async ($, on) => {
@@ -245,7 +257,9 @@ describe('held_other_delivery on a cleared record', () => {
   test('It keeps the held prompt text out of the serialized record when delivery fails', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     world.submitDropped = true
-    expect(JSON.stringify(lastRecordOf(await clearsWith(), 'cleared'))).not.toContain('zebra-quartz-7731')
+    const record = lastRecordOf(await clearsWith(), 'cleared')
+    expectSecretTravelled(world)
+    expect(JSON.stringify(record)).not.toContain('zebra-quartz-7731')
   })
 })
 
@@ -297,7 +311,9 @@ describe('held_restore on an abandoned record', () => {
     const { world, abandonsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     world.fillRefusal = 'dialog'
     world.submitDropped = true
-    expect(JSON.stringify(lastRecordOf(await abandonsWith(), 'none'))).not.toContain('zebra-quartz-7731')
+    const record = lastRecordOf(await abandonsWith(), 'none')
+    expectSecretTravelled(world)
+    expect(JSON.stringify(record)).not.toContain('zebra-quartz-7731')
   })
 })
 
