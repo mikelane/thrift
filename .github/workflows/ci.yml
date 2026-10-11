@@ -10,8 +10,8 @@ name: CI
 # Job `check` runs pull-request code and installs the floating `latest` build with install scripts
 # on, so it holds `contents: read` and nothing else. On the weekly schedule, and on a manual run,
 # its latest leg hands its failure logs and the Claude Code version to job `report` as an
-# artifact. `report` is the only job with `issues: write`; it checks out nothing and runs no
-# repository code. Only people with write access can start a manual run, so `issues: write` there
+# artifact. `report` is the only job with `issues: write`. It reads the plugin list through the API
+# at the run's own commit, but still checks out and runs no repository code. Only people with write access can start a manual run, so `issues: write` there
 # does not reintroduce the exposure pull requests had.
 #
 # A manual run defaults to a dry run: `report` prints the issues it would open instead of opening
@@ -55,6 +55,8 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'schedule' && '[{"channel":"latest","version":"latest"}]' || '[{"channel":"pinned","version":"2.1.295"},{"channel":"latest","version":"latest"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -84,8 +86,12 @@ jobs:
       - name: Let the engine write each plugin's type declarations
         run: |
           for dir in plugins/*/; do
-            CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$dir" > /dev/null 2>&1 || true
-            test -f "${dir}.claude-plugin/types/claude-code/index.d.ts" || { echo "No declarations were written for $dir"; exit 1; }
+            out=$(CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$dir" 2>&1) || true
+            if [ ! -f "${dir}.claude-plugin/types/claude-code/index.d.ts" ]; then
+              echo "No declarations were written for $dir"
+              printf '%s\n' "$out" | tail -n 50
+              exit 1
+            fi
           done
 
       - name: Validate, type-check, and test every plugin
@@ -111,7 +117,8 @@ jobs:
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'
         run: |
           mkdir -p "$RUNNER_TEMP/failures"
-          claude --version | cut -d' ' -f1 > "$RUNNER_TEMP/failures/claude-version"
+          v=$(claude --version)
+          printf '%s\n' "${v%% *}" > "$RUNNER_TEMP/failures/claude-version"
 
       - name: Upload the canary failure logs
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'
@@ -131,17 +138,24 @@ jobs:
     if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # A schedule run and a manual run must not race to open the same issue.
+    concurrency:
+      group: canary-report-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
+      contents: read
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     steps:
-      # A missing artifact means `check` died before it could record the version, and a missing
-      # `checked` marker means it died before looping over every plugin. Failing on either keeps
-      # a crashed `check` from passing as "no plugin broke". Only the latest leg uploads, so the artifact name never collides.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      # download-artifact fails when the artifact is absent, which means `check (latest)` died
+      # before it could upload anything. A missing `claude-version` or `checked` file inside the
+      # artifact is reported by the script below. Only the latest leg uploads, so the artifact name
+      # never collides.
+      - name: Download the canary artifact (missing means check (latest) died before uploading it)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: canary-failures
           path: ${{ runner.temp }}/failures
@@ -150,41 +164,88 @@ jobs:
         env:
           # The artifact is untrusted: `check (latest)` runs a floating npm build with install
           # scripts on, so it controls every file name and byte in it. Issues are opened only for
-          # plugin-shaped names, at most this many per run, with the log fenced so it can't escape.
+          # plugins that exist in the repository, at most this many per run, with the log fenced so
+          # it can't escape.
           MAX_ISSUES: 5
-          # GitHub rejects issue bodies over 65536 characters. A log with a backtick run longer
-          # than this is withheld from the body, so the fence cannot push the body past the limit.
+          # GitHub rejects issue bodies over 65536 characters. A log with a backtick run of this
+          # length or more is withheld from the body, so the fence cannot push the body past the
+          # limit.
           MAX_FENCE: 64
         run: |
           problems=0
-          version=$(cat "$RUNNER_TEMP/failures/claude-version")
-          [[ "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "Unexpected Claude Code version: ${version}"; exit 1; }
-          if [ ! -e "$RUNNER_TEMP/failures/checked" ]; then
+          failures="$RUNNER_TEMP/failures"
+
+          # Untrusted bytes must not reach stdout where the runner would read them as workflow
+          # commands, so they are printed between stop-commands markers.
+          print_untrusted() {
+            local token
+            token=$(openssl rand -hex 16)
+            echo "::stop-commands::${token}"
+            cat "$1"
+            echo "::${token}::"
+          }
+
+          if [ ! -e "$failures/checked" ]; then
             echo 'check (latest) did not reach the plugin checks, so a clean artifact proves nothing.'
             problems=1
           fi
+
+          # Without a valid version no title can be built, so no issue is opened. Everything else
+          # (the marker message, the summary, the other problems) is still reported.
+          can_open=true
+          version=$(cat "$failures/claude-version") || version=''
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            printf 'Unexpected Claude Code version: %q\n' "$version"
+            problems=1
+            can_open=false
+          fi
+
+          plugins=$(gh api "repos/${GH_REPO}/contents/plugins?ref=${GITHUB_SHA}" --jq '.[] | select(.type=="dir") | .name') || {
+            echo 'Failed to list the plugins in the repository.'
+            problems=1
+            plugins=''
+          }
+
           shopt -s nullglob
-          logs=("$RUNNER_TEMP"/failures/*.txt)
+          logs=("$failures"/*.txt)
+          mode=live
+          [ "$DRY_RUN" != true ] || mode=dry-run
+          printf 'Canary summary: mode=%s version=%q failing_logs=%s\n' "$mode" "$version" "${#logs[@]}"
+          if [ "$can_open" != true ]; then
+            logs=()
+          fi
           if [ "${#logs[@]}" = 0 ] && [ "$DRY_RUN" = true ]; then
             echo 'dry run: no failure logs, nothing to open'
           fi
+
           opened=0
-          unopened=0
+          left_unopened=()
           for log in "${logs[@]}"; do
             plugin=$(basename "$log" .txt)
-            if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ "$log" != "$RUNNER_TEMP/failures/${plugin}.txt" ]; then
-              printf 'Skipping a log with an unexpected name: %q\n' "$plugin"
+            if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]] \
+              || [ "$log" != "$failures/${plugin}.txt" ] \
+              || [ -L "$log" ] || [ ! -f "$log" ] \
+              || ! printf '%s\n' "$plugins" | grep -qxF -- "$plugin"; then
+              printf 'Skipping an untrusted log: %q\n' "$plugin"
               problems=1
               continue
             fi
             title="Claude Code ${version} breaks ${plugin}"
-            open=$(gh issue list --state open --search "\"${title}\" in:title" --json number --jq 'length')
+            open=$(TITLE="$title" gh issue list --state open --search "\"${title}\" in:title" --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
+              echo "Failed to list issues for ${title}"
+              problems=1
+              continue
+            }
             if [ "$open" != 0 ]; then
-              [ "$DRY_RUN" != true ] || echo "dry run: issue already open for ${title}"
+              if [ "$DRY_RUN" = true ]; then
+                echo "dry run: issue already open for ${title}"
+              else
+                echo "Issue already open for ${title}; not opening another."
+              fi
               continue
             fi
             if [ "$opened" -ge "$MAX_ISSUES" ]; then
-              unopened=$((unopened + 1))
+              left_unopened+=("$plugin")
               continue
             fi
             opened=$((opened + 1))
@@ -201,18 +262,25 @@ jobs:
                 fence=$(printf '`%.0s' $(seq 1 $(( longest > 2 ? longest + 1 : 3 ))))
                 echo "$fence"
                 cat "$RUNNER_TEMP/log-tail.txt"
+                [ -z "$(tail -c 1 "$RUNNER_TEMP/log-tail.txt")" ] || echo
                 echo "$fence"
               fi
             } > "$RUNNER_TEMP/issue-body.md"
             if [ "$DRY_RUN" = true ]; then
               echo "dry run: would open an issue titled: ${title}"
-              cat "$RUNNER_TEMP/issue-body.md"
+              print_untrusted "$RUNNER_TEMP/issue-body.md"
             else
-              gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md"
+              gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md" || {
+                echo "Failed to create an issue for ${title}"
+                problems=1
+                continue
+              }
             fi
           done
-          if [ "$unopened" != 0 ]; then
-            echo "Opened ${opened} issues, the cap; ${unopened} more failing plugins were left unopened."
+          if [ "${#left_unopened[@]}" != 0 ]; then
+            verb=Opened
+            [ "$DRY_RUN" != true ] || verb='Would open'
+            echo "${verb} ${opened} issues, the cap; ${#left_unopened[@]} more failing plugins were left unopened: ${left_unopened[*]}"
             problems=1
           fi
           exit "$problems"
