@@ -924,11 +924,12 @@ export const register: Register = (on, options) => {
     return yield* next(e)
   })
 
+  // next<string> stops TypeScript inferring the tool name across every MCP tool type, which slows tsc as servers connect.
   on('tool.call', async ($, e, next) => {
-    const ran = await next(e)
+    const ran = await next<string>(e)
     if (e.agentId === undefined) noteToolCall(state, e, ran)
     return ran
-  }).catch(($, e, next) => next(e))
+  }).catch(($, e, next) => next<string>(e))
 
   on('prompt.submit', async ($, e, next) => {
     if (state.heldPrompt !== null && isPersonOrigin(e.origin.kind)) await takeDownBand($, state)
