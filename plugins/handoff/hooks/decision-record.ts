@@ -1,5 +1,6 @@
 import type { DecisionReason } from './decision-reasons'
 import type { NoteDelivery } from './handoff-note'
+import type { GroupDelivery } from './held-delivery'
 import type { HeldPromptGroup } from './session-state'
 import type { Mode, Signal } from './signals'
 
@@ -19,9 +20,15 @@ export type TriggerValues = {
   note?: NoteDelivery
   held_groups?: number
   held_unattended?: boolean
+  handoff_unattended?: boolean
+  held_other_delivery?: GroupDelivery
+  held_restore?: GroupDelivery
 }
 
-export type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
+type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
+
+export type HeldRecordFields = HeldGroupFields &
+  Pick<TriggerValues, 'handoff_unattended' | 'held_other_delivery' | 'held_restore'>
 
 export const heldGroupFields = (groups: readonly HeldPromptGroup[]): HeldGroupFields => ({
   held_groups: groups.length,

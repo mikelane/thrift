@@ -12,6 +12,8 @@ Use plain Markdown, at most 400 words, and no preamble.`
 
 export type NoteDelivery = 'appended' | 'submitted' | 'in_box' | 'not_carried'
 
+export type Carried = Exclude<NoteDelivery, 'appended'>
+
 export const turnAfterNoteLine = (oldSessionId: string): string =>
   `A turn ran in the previous session while or after this note was written, so the note may not cover it. To see that turn: ${resumeCommand(oldSessionId)}`
 
@@ -29,7 +31,7 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
   `Handed off. The note summarizing the previous session is in your prompt box. Press Enter to send it. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
-  `The handoff note could not be added to this session. The previous conversation is unchanged: ${resumeCommand(oldSessionId)}`
+  `The handoff note could not be added to this session. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
 const PROMPT_SEPARATOR = '\n\n'
 

@@ -30,7 +30,7 @@ import {
   logLocation,
   type DecisionAction,
   type DecisionReason,
-  type HeldGroupFields,
+  type HeldRecordFields,
   type TriggerValues,
 } from './decision-record'
 import { isUntestedEngine } from './engine-version'
@@ -46,8 +46,10 @@ import {
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
+  type Carried,
   type NoteDelivery,
 } from './handoff-note'
+import { worstDelivery } from './held-delivery'
 import {
   canHoldPrompt,
   carriesExtras,
@@ -126,7 +128,7 @@ type Evaluation = Trigger & {
   action: DecisionAction
   reason?: DecisionReason
   note?: NoteDelivery
-  heldFields?: HeldGroupFields
+  heldFields?: HeldRecordFields
   sessionId?: string
 }
 
@@ -336,13 +338,35 @@ const submitEntered = async ($: EngineInterface, text: string, failureLabel: str
   }
 }
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
-  if (!(await submitEntered($, text, 'could not restore the held prompt'))) keepInTranscript($, text)
+const submitOrKeepInTranscript = async ($: EngineInterface, text: string): Promise<Carried> => {
+  if (await submitEntered($, text, 'could not restore the held prompt')) return 'submitted'
+  keepInTranscript($, text)
+  return 'not_carried'
 }
 
-const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
-  if (!isUnattended && (await refillBox($, text))) return
-  await submitOrKeepInTranscript($, text)
+const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
+  if (!isUnattended && (await refillBox($, text))) return 'in_box'
+  return submitOrKeepInTranscript($, text)
+}
+
+// A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
+// writeRecord leaves its own debug line.
+const readSessionId = async ($: EngineInterface): Promise<string | undefined> => {
+  try {
+    return await $.session.id()
+  } catch (error) {
+    debug($, `could not read the session id: ${String(error)}`)
+    return undefined
+  }
+}
+
+const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
+  const restores: Carried[] = []
+  for (const group of settledHandoff.heldGroups) {
+    restores.push(await restorePrompt($, group.text, group.isUnattended))
+    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
+  }
+  return restores
 }
 
 const abandonHandoff = async (
@@ -355,17 +379,22 @@ const abandonHandoff = async (
 ) => {
   await takeDownBand($, state)
   announce($, message)
+  const recordedSessionId = sessionId ?? (await readSessionId($))
+  // SAFETY: the record is written after restoreHeldGroups returns, so a throw inside it would lose the record. refillBox and
+  // submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
+  // can make the loop throw. Any call added to the loop must not throw either.
+  const restores = await restoreHeldGroups($, state, settledHandoff)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'none',
     reason,
-    heldFields: heldGroupFields(settledHandoff.heldGroups),
-    sessionId,
+    heldFields: {
+      ...heldGroupFields(settledHandoff.heldGroups),
+      handoff_unattended: settledHandoff.isUnattended,
+      held_restore: worstDelivery(restores),
+    },
+    sessionId: recordedSessionId,
   })
-  for (const { text, isUnattended } of settledHandoff.heldGroups) {
-    await restorePrompt($, text, isUnattended)
-    releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
-  }
 }
 
 const writeNote = async ($: EngineInterface): Promise<string | null> => {
@@ -415,8 +444,6 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type Carried = Exclude<NoteDelivery, 'appended'>
-
 const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
   if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
   if (!isUnattended && (await refillBox($, text))) return 'in_box'
@@ -443,6 +470,20 @@ const deliverNote = async ($: EngineInterface, settledHandoff: SettledHandoff, m
   return sendOrKeepInBox($, joinPrompts(message, sameOriginGroup?.text), settledHandoff.isUnattended)
 }
 
+const sendHeldGroups = async (
+  $: EngineInterface,
+  state: SessionState,
+  groups: readonly HeldPromptGroup[],
+  handoffIsUnattended: boolean,
+): Promise<Carried[]> => {
+  const deliveries: Carried[] = []
+  for (const group of groups) {
+    deliveries.push(await sendOrKeepInBox($, group.text, group.isUnattended))
+    releaseCarriedGroup(state, group, handoffIsUnattended)
+  }
+  return deliveries
+}
+
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
@@ -456,36 +497,41 @@ const continueInFreshSession = async (
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
+  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
+  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  // SAFETY: the record is written after sendHeldGroups returns, so a throw inside it would lose the record. submitEntered
+  // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
+  // can make the loop throw. Any call added to the loop must not throw either.
+  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
     sessionId: oldId,
     note: noteDelivery,
-    heldFields: heldGroupFields(settledHandoff.heldGroups),
+    heldFields: {
+      ...heldGroupFields(settledHandoff.heldGroups),
+      handoff_unattended: settledHandoff.isUnattended,
+      held_other_delivery: worstDelivery(deliveries),
+    },
   })
-  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
-  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  for (const group of groupsToSend) {
-    await sendOrKeepInBox($, group.text, group.isUnattended)
-    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
-  }
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+  let oldId: string | undefined
   try {
     await redrawBand($, state, WRITING)
     $.ui.toast(WRITING_STATUS)
-    const oldId = await $.session.id()
+    oldId = await $.session.id()
     beginNoteWindow(state)
     const note = await writeNote($)
     if (note === null) {
-      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.')
+      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.', oldId)
       return null
     }
     return { oldId, note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.')
+    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.', oldId)
     return null
   }
 }
