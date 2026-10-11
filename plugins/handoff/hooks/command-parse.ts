@@ -97,7 +97,7 @@ export const commandSegments = (command: string): string[] => {
   return segments
 }
 
-const words = (segment: string): string[] => {
+const shellWords = (segment: string): string[] => {
   const parsedWords: string[] = []
   let word = ''
   let hasWord = false
@@ -148,7 +148,7 @@ const finishesWithGh = (rest: readonly string[]): boolean =>
   rest[0] === 'pr' && (rest[1] === 'create' || rest[1] === 'merge') && !rest.includes('--dry-run')
 
 const finishesSegment = (segment: string): boolean => {
-  const segmentWords = words(segment)
+  const segmentWords = shellWords(segment)
   const start = segmentWords.findIndex(word => !ASSIGNMENT.test(word))
   if (start === -1) return false
   const [program, ...rest] = segmentWords.slice(start)

@@ -21,9 +21,9 @@ const HOTKEYS: Readonly<Record<Button, string>> = {
 
 const ACT_MODE_HINT = 'Set handoffMode to act in /config to skip asking.'
 
-const hintFor = ({ signal, heldPrompt, isBusy }: Offer): string => {
+const hintFor = ({ signal, hasHeldPrompt, isBusy }: Offer): string => {
   const { handoff, 'send-here': sendHere, 'not-now': dismiss } = HOTKEYS
-  if (heldPrompt) {
+  if (hasHeldPrompt) {
     return isBusy
       ? 'ctrl+x Tab, then Enter to send it here.'
       : `ctrl+x Tab, then Enter to hand off and send it, or ${sendHere} to send it here.`
@@ -68,7 +68,7 @@ export const offerWithBusyState = (offer: Offer, contextTokens: number, isBusy: 
   ...offer,
   contextTokens,
   isBusy,
-  signal: isBusy && !offer.heldPrompt ? 'weak' : offer.signal,
+  signal: isBusy && !offer.hasHeldPrompt ? 'weak' : offer.signal,
 })
 
 export const WRITING: Writing = { isWriting: true, stage: 'note' }
@@ -86,19 +86,19 @@ export const isWriting = (band: BandState): band is Writing => 'isWriting' in ba
 export const isSameOffer = (a: BandState, b: BandState): boolean =>
   !isWriting(a) &&
   !isWriting(b) &&
-  a.signal === b.signal && a.contextTokens === b.contextTokens && a.heldPrompt === b.heldPrompt && a.isBusy === b.isBusy
+  a.signal === b.signal && a.contextTokens === b.contextTokens && a.hasHeldPrompt === b.hasHeldPrompt && a.isBusy === b.isBusy
 
-const question = ({ signal, heldPrompt, isBusy }: Offer): string => {
-  if (heldPrompt && isBusy) return 'A handoff would orphan that work, so send it here?'
-  if (heldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
+const question = ({ signal, hasHeldPrompt, isBusy }: Offer): string => {
+  if (hasHeldPrompt && isBusy) return 'A handoff would orphan that work, so send it here?'
+  if (hasHeldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
   if (signal === 'strong') return 'Hand off to a fresh session now?'
   if (isBusy) return 'A handoff would orphan that work, so compact instead?'
   return 'Compact, or hand off to a fresh session?'
 }
 
-const situation = ({ signal, contextTokens, heldPrompt, isBusy }: Offer): string => {
+const situation = ({ signal, contextTokens, hasHeldPrompt, isBusy }: Offer): string => {
   const context = `Context is ${formatTokens(contextTokens)}`
-  if (heldPrompt) return `${context} and this prompt starts new work.`
+  if (hasHeldPrompt) return `${context} and this prompt starts new work.`
   if (signal === 'strong') return `${context} and the task just finished.`
   return isBusy ? `${context} and background work is still running.` : `${context}.`
 }

@@ -90,7 +90,7 @@ const usedState = () => {
   state.hasBand = true
   state.isTurnRunning = true
   state.isPressRunning = true
-  state.deferredPress = { offer: { signal: 'strong', contextTokens: 200_000, heldPrompt: false, isBusy: false }, button: 'handoff' }
+  state.deferredPress = { offer: { signal: 'strong', contextTokens: 200_000, hasHeldPrompt: false, isBusy: false }, button: 'handoff' }
   return state
 }
 

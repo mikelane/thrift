@@ -111,7 +111,7 @@ import {
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
-import { branchTicketPrefix, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
+import { branchTicketPrefixes, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
 const BRANCH_READ_TIMEOUT_MS = 5000
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
@@ -245,11 +245,11 @@ const takeDownBandFromBeforeReload = async ($: EngineInterface, state: SessionSt
   await takeDownBand($, state)
 }
 
-const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, heldPrompt: boolean) => {
+const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigger, hasHeldPrompt: boolean) => {
   const offer: Offer = {
     signal: trigger.signal === 'strong' ? 'strong' : 'weak',
     contextTokens: trigger.contextTokens,
-    heldPrompt,
+    hasHeldPrompt,
     isBusy: trigger.isBusy,
   }
   try {
@@ -779,7 +779,7 @@ const readBranch = async ($: EngineInterface): Promise<string> => {
 
 const inspectPrompt = async ($: EngineInterface, state: SessionState, text: string): Promise<boolean> => {
   for (const prefix of ticketUrlPrefixes(text)) state.urlPrefixes.add(prefix)
-  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefix(await readBranch($)) : []
+  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefixes(await readBranch($)) : []
   const prefixes = [...state.urlPrefixes, ...branchPrefixes]
   const isNewWork = namesNewWork(text, state.seenRefs, prefixes)
   for (const ref of workRefs(text, prefixes)) state.seenRefs.add(ref)

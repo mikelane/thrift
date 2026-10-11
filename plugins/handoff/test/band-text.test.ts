@@ -5,19 +5,19 @@ import { bandButtons } from '../hooks/signals'
 
 const messageCases = [
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: false },
     'Context is 152k and this prompt starts new work.',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: false, isBusy: false },
     'Context is 152k and the task just finished.',
   ],
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true },
     'Context is 190k and background work is still running.',
   ],
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: false },
     'Context is 190k.',
   ],
 ] as const
@@ -34,23 +34,23 @@ for (const [offer, opening] of messageCases) {
 
 const questionCases = [
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: false },
     'Hand off and send it in a fresh session, or send it here?',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: false, isBusy: false },
     'Hand off to a fresh session now?',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: true },
     'A handoff would orphan that work, so send it here?',
   ],
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true },
     'A handoff would orphan that work, so compact instead?',
   ],
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: false },
     'Compact, or hand off to a fresh session?',
   ],
 ] as const
@@ -62,7 +62,7 @@ for (const [offer, question] of questionCases) {
 }
 
 test('It warns that a handoff would orphan background work from bandMessage', () => {
-  const message = bandMessage({ signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true })
+  const message = bandMessage({ signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true })
   expect(message).toContain('orphan')
 })
 
@@ -82,23 +82,23 @@ for (const [button, label] of labelCases) {
 
 const hintCases = [
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: false },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: false },
     'ctrl+x Tab, then Enter to compact or h to hand off. 0 to dismiss.',
   ],
   [
-    { signal: 'weak', contextTokens: 190_000, heldPrompt: false, isBusy: true },
+    { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true },
     'ctrl+x Tab, then Enter to compact. 0 to dismiss.',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: false, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: false, isBusy: false },
     'ctrl+x Tab, then Enter to hand off. 0 to dismiss.',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: false },
     'ctrl+x Tab, then Enter to hand off and send it, or s to send it here.',
   ],
   [
-    { signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: true },
+    { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: true },
     'ctrl+x Tab, then Enter to send it here.',
   ],
 ] as const
@@ -114,7 +114,7 @@ for (const [offer, hint] of hintCases) {
 }
 
 test('It never tells a held-prompt band to type 0 from bandHint', () => {
-  expect(bandHint({ signal: 'strong', contextTokens: 152_400, heldPrompt: true, isBusy: false })).not.toContain('0')
+  expect(bandHint({ signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: false })).not.toContain('0')
 })
 
 const controlCases = [
@@ -155,11 +155,11 @@ test('It marks no held-prompt button as dismiss from bandControls', () => {
 })
 
 const everyShape = [
-  { signal: 'strong', heldPrompt: true, isBusy: false },
-  { signal: 'strong', heldPrompt: true, isBusy: true },
-  { signal: 'strong', heldPrompt: false, isBusy: false },
-  { signal: 'weak', heldPrompt: false, isBusy: true },
-  { signal: 'weak', heldPrompt: false, isBusy: false },
+  { signal: 'strong', hasHeldPrompt: true, isBusy: false },
+  { signal: 'strong', hasHeldPrompt: true, isBusy: true },
+  { signal: 'strong', hasHeldPrompt: false, isBusy: false },
+  { signal: 'weak', hasHeldPrompt: false, isBusy: true },
+  { signal: 'weak', hasHeldPrompt: false, isBusy: false },
 ] as const
 
 for (const shape of everyShape) {
@@ -188,14 +188,14 @@ for (const [button, clears] of clearsSessionCases) {
   })
 }
 
-const strongOffer = { signal: 'strong', contextTokens: 150_000, heldPrompt: false, isBusy: false } as const
+const strongOffer = { signal: 'strong', contextTokens: 150_000, hasHeldPrompt: false, isBusy: false } as const
 
 test('It returns a weak signal for a busy band with no held prompt from offerWithBusyState', () => {
   expect(offerWithBusyState(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
 })
 
 test('It keeps the signal of a busy band holding a prompt from offerWithBusyState', () => {
-  const held = { ...strongOffer, heldPrompt: true }
+  const held = { ...strongOffer, hasHeldPrompt: true }
   expect(offerWithBusyState(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
 })
 
@@ -210,7 +210,7 @@ test('It returns true for offers with equal fields from isSameOffer', () => {
 const differingOffers = [
   { ...strongOffer, signal: 'weak' },
   { ...strongOffer, contextTokens: 1 },
-  { ...strongOffer, heldPrompt: true },
+  { ...strongOffer, hasHeldPrompt: true },
   { ...strongOffer, isBusy: true },
 ] as const
 

@@ -8,7 +8,7 @@ const unique = (values: Iterable<string>): string[] => [...new Set(values)]
 export const ticketUrlPrefixes = (text: string): string[] =>
   unique([...text.matchAll(TICKET_URL)].map(([, prefix = '']) => prefix.toUpperCase()))
 
-export const branchTicketPrefix = (branch: string): string[] =>
+export const branchTicketPrefixes = (branch: string): string[] =>
   unique([...branch.matchAll(TICKET_TOKEN)].map(([, prefix = '']) => prefix.toUpperCase()))
 
 export const hasTicketShapedToken = (text: string): boolean => new RegExp(TICKET_TOKEN.source).test(text)

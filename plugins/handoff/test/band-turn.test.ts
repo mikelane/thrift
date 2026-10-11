@@ -569,11 +569,11 @@ test('It refreshes the band on a refusal turn end', ASK, async ($, on) => {
 })
 
 const SHAPES = [
-  { signal: 'strong', heldPrompt: false, isBusy: false },
-  { signal: 'strong', heldPrompt: true, isBusy: false },
-  { signal: 'strong', heldPrompt: true, isBusy: true },
-  { signal: 'weak', heldPrompt: false, isBusy: false },
-  { signal: 'weak', heldPrompt: false, isBusy: true },
+  { signal: 'strong', hasHeldPrompt: false, isBusy: false },
+  { signal: 'strong', hasHeldPrompt: true, isBusy: false },
+  { signal: 'strong', hasHeldPrompt: true, isBusy: true },
+  { signal: 'weak', hasHeldPrompt: false, isBusy: false },
+  { signal: 'weak', hasHeldPrompt: false, isBusy: true },
 ] as const
 
 for (const shape of SHAPES) {
