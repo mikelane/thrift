@@ -817,6 +817,23 @@ test_engine_type_generation_config_directory_is_removed_when_the_run_ends() {
   [[ -z "$(find "$T/tmp" -mindepth 1)" ]] || fail "check.sh left entries in TMPDIR: $(find "$T/tmp" -mindepth 1)"
 }
 
+test_invalid_version_dry_run_does_not_claim_there_were_no_failure_logs() {
+  echo 'Claude Code 2.1.300' > "$FAILURES/claude-version"
+  add_log handoff
+  run_report true
+  assert_rc 1
+  assert_out_has 'failing_logs=1'
+  assert_out_lacks 'no failure logs'
+}
+test_invalid_version_run_says_how_many_failing_logs_it_left_unopened() {
+  echo bad > "$FAILURES/claude-version"
+  add_log handoff
+  add_log a
+  run_report false
+  assert_rc 1
+  assert_out_has 'Opening nothing for 2 failing logs because the version is invalid.'
+}
+
 # ---------------------------------------------------------------------------------------------
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   [[ -z "$FILTER" || "$t" == *"$FILTER"* ]] || continue

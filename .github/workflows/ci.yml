@@ -188,11 +188,12 @@ jobs:
           mode=live
           [ "$DRY_RUN" != true ] || mode=dry-run
           printf 'Canary summary: mode=%s version=%q failing_logs=%s\n' "$mode" "$version" "${#logs[@]}"
-          if [ "$can_open" != true ]; then
-            logs=()
-          fi
           if [ "${#logs[@]}" = 0 ] && [ "$DRY_RUN" = true ]; then
             echo 'dry run: no failure logs, nothing to open'
+          fi
+          if [ "$can_open" != true ] && [ "${#logs[@]}" != 0 ]; then
+            echo "Opening nothing for ${#logs[@]} failing logs because the version is invalid."
+            logs=()
           fi
 
           opened=0
