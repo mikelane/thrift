@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { DECISION_REASONS } from '../hooks/decision-reasons'
-import { findReasonDrift, formatDriftMessages, parseReadmeReasons } from '../hooks/readme-reasons'
+import { driftExitCode, findReasonDrift, formatDriftMessages, parseReadmeReasons } from '../hooks/readme-reasons'
 
 const reasonRow = (cell: string) => `| \`trigger_values.reason\` | ${cell} |`
 const backticked = (values: readonly string[]) => values.map(value => `\`${value}\``).join(', ')
@@ -96,6 +96,27 @@ const driftCases: { name: string; union: string[]; readme: string[]; expected: R
 for (const { name, union, readme, expected } of driftCases) {
   test(`It returns ${name}`, () => {
     expect(findReasonDrift(union, readme)).toEqual(expected)
+  })
+}
+
+test('It keeps the values after an escaped pipe inside the cell', () => {
+  expect(parseReadmeReasons(reasonRow('x: `backoff` (a \\| b), `not_now`'))).toEqual(['backoff', 'not_now'])
+})
+
+test('It reads a value that follows an escaped pipe and is missing from DECISION_REASONS', () => {
+  const documented = parseReadmeReasons(reasonRow('x: `backoff` (a \\| b), `bogus_reason`'))
+  expect(findReasonDrift(['backoff'], documented).missingFromUnion).toEqual(['bogus_reason'])
+})
+
+const exitCodeCases: { name: string; messages: string[]; expected: number }[] = [
+  { name: 'no drift messages', messages: [], expected: 0 },
+  { name: 'one drift message', messages: ['a'], expected: 1 },
+  { name: 'several drift messages', messages: ['a', 'b', 'c'], expected: 1 },
+]
+
+for (const { name, messages, expected } of exitCodeCases) {
+  test(`It returns exit code ${expected} for ${name}`, () => {
+    expect(driftExitCode(messages)).toBe(expected)
   })
 }
 
