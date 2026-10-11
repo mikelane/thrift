@@ -66,10 +66,14 @@ plugins/<name>/
 
 ## Checks before every push
 
-Run these for each plugin the change touches:
+Run `npm ci` once, then `scripts/check.sh <name>...` with each plugin the change touches (no
+arguments checks every plugin). CI runs the same script. For each plugin it lets the engine write
+the type declarations, then runs these in order and stops at the first failure:
 
 1. `claude plugin validate plugins/<name>`: no refusals.
-2. `tsc -p plugins/<name>`: zero errors.
+2. `tsc -p plugins/<name>` (the root `package.json` pins TypeScript): zero errors.
+   `claude plugin test` does not type-check, so only this step fails a `@ts-expect-error` test
+   whose guarded type has been loosened.
 3. `claude plugin test plugins/<name>`: all pass, no skipped tests, no network access.
    `plugin test` measures no coverage (checked on 2.1.294), so review enforces it: every
    exported function and every branch in `hooks/` has a test whose name says which, and

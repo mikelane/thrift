@@ -66,13 +66,15 @@ jobs:
         env:
           CLAUDE_CODE_VERSION: ${{ matrix.version }}
         run: |
-          npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" typescript@5.6.3
+          # --ignore-scripts is safe: typescript, the only dependency, has no install scripts.
+          npm ci --ignore-scripts
+          npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           echo "$RUNNER_TEMP/tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Show the installed builds
         run: |
           claude --version
-          tsc --version
+          node_modules/.bin/tsc --version
 
       - name: Check the pinned build is the one every plugin was tested through
         if: matrix.channel == 'pinned'
@@ -83,35 +85,10 @@ jobs:
             grep -q "TESTED_THROUGH = '${PINNED_VERSION}'" "$file" || { echo "$file does not name ${PINNED_VERSION}"; exit 1; }
           done
 
-      - name: Let the engine write each plugin's type declarations
-        run: |
-          for dir in plugins/*/; do
-            out=$(CLAUDE_CODE_PLUGIN_DIR_WATCH=1 claude -p x --plugin-dir "$dir" 2>&1) || true
-            if [ ! -f "${dir}.claude-plugin/types/claude-code/index.d.ts" ]; then
-              echo "No declarations were written for $dir"
-              printf '%s\n' "$out" | tail -n 50
-              exit 1
-            fi
-          done
-
-      - name: Validate, type-check, and test every plugin
-        run: |
-          mkdir -p "$RUNNER_TEMP/failures"
-          status=0
-          for dir in plugins/*/; do
-            name=$(basename "$dir")
-            log="$RUNNER_TEMP/failures/$name.txt"
-            {
-              echo '## claude plugin validate'
-              claude plugin validate "plugins/$name" &&
-                echo '## tsc -p' &&
-                tsc -p "plugins/$name" &&
-                echo '## claude plugin test' &&
-                claude plugin test "plugins/$name"
-            } > "$log" 2>&1 && rm "$log" || { cat "$log"; status=1; }
-          done
-          touch "$RUNNER_TEMP/failures/checked"
-          exit "$status"
+      - name: Check every plugin with scripts/check.sh
+        env:
+          CHECK_LOG_DIR: ${{ runner.temp }}/failures
+        run: scripts/check.sh
 
       - name: Record the Claude Code version for the canary issue job
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'
