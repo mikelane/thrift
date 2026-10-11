@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson } from './helpers'
-import { ASK, COMPACTING, WAITING, BASE_MESSAGE, LATE_TURN_MESSAGE, holdFork, writingTheNote, turnRunningWhenTheNoteIsWritten, endTurn, waitingForATurn, shownText } from './wait-for-turn-helpers'
+import { ACT, ASK, COMPACTING, WAITING, BASE_MESSAGE, LATE_TURN_MESSAGE, holdFork, writingTheNote, turnRunningWhenTheNoteIsWritten, endTurn, waitingForATurn, shownText } from './wait-for-turn-helpers'
 
 test('It does not clear while a turn that started during the note is running', async ($, on) => {
   const { world, finishNote } = await writingTheNote($, on)
@@ -282,4 +282,23 @@ test('It keeps a person prompt held while the waiting status is up', async ($, o
   await completeTurn($)
   await world.clock.settle()
   expect(world.effects).toContain('entered:plugin:next thing')
+})
+
+// Guard for the `if (!state.isTurnRunning) break` after the pre-clear busy check in waitForClearWindow.
+test('It waits for the turn instead of clearing when one starts during the pre-clear background check', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await bash($, world, 'git commit -m x')
+  await completeTurn($)
+  world.onAgentList = async () => {
+    world.onAgentList = undefined
+    await startTurn($)
+  }
+  await world.clock.settle()
+  expect(world.onAgentList).toBeUndefined()
+  expect(world.effects).not.toContain('clear')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
 })

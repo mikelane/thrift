@@ -111,17 +111,20 @@ test('It records compacted_before_clear on the background_busy abandon that foll
   expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
 })
 
-test('It says the session was compacted, not cleared, in the session-ended message that follows a compaction', COMPACTING, async ($, on) => {
+test('It names the compacted previous session in the session-ended message that follows a compaction', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)
   world.compact = async () => {
     await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    world.sessionId = 'resumed-session'
     return compacted(48_000)
   }
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(world.effects).toContain(`toast:${SESSION_ENDED_MESSAGE} This session was compacted, not cleared.`)
-  expect(world.effects).toContain(`log:${SESSION_ENDED_MESSAGE} This session was compacted, not cleared.`)
+  const message = `${SESSION_ENDED_MESSAGE} The previous session was compacted. To reopen it: claude --resume old-session`
+  expect(world.effects).toContain(`toast:${message}`)
+  expect(world.effects).toContain(`log:${message}`)
+  expect(world.effects.filter(effect => effect.includes('This session was compacted'))).toEqual([])
 })
 
 test('It leaves compacted_before_clear off the background_busy abandon when compactBeforeClear is off', ACT, async ($, on) => {

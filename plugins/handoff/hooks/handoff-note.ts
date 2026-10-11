@@ -27,9 +27,10 @@ const COMPACTED_NOT_CLEARED = 'This session was compacted, not cleared.'
 
 const sessionLeftLine = (hasCompacted: boolean): string => (hasCompacted ? COMPACTED_NOT_CLEARED : 'This session is unchanged.')
 
-export const sessionEndedMessage = (hasCompacted: boolean): string => {
+// The session that ended is the one that was compacted; the session the person sees now never was.
+export const sessionEndedMessage = (hasCompacted: boolean, oldSessionId: string): string => {
   const message = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
-  return hasCompacted ? `${message} ${COMPACTED_NOT_CLEARED}` : message
+  return hasCompacted ? `${message} The previous session was compacted. To reopen it: ${resumeCommand(oldSessionId)}` : message
 }
 
 export const clearFailedMessage = (hasCompacted: boolean): string =>

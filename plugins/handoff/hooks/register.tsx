@@ -575,7 +575,7 @@ const runHandoff = async (
     const { outcome, hasCompactedBeforeClear, isBusy, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear), prepared.oldId)
+      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, prepared.oldId), prepared.oldId)
     }
     if (outcome === 'abandon_busy') {
       const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
