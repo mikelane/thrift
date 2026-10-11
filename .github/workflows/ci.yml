@@ -287,6 +287,9 @@ jobs:
               print_untrusted "$RUNNER_TEMP/issue-body.md"
             else
               # A failed create does not count toward the cap, so a later plugin still gets its turn.
+              # SAFETY: a create that fails after GitHub stored the issue is not counted either. The
+              # number of plugin directories in the repository still bounds how many issues one run
+              # can open, because each plugin is tried once and its title is deduped on the next run.
               gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md" || {
                 echo "Failed to create an issue for ${title}"
                 problems=1
