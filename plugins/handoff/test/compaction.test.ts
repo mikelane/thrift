@@ -45,6 +45,15 @@ test('It logs one compacted record at the turn-end point with the weak signal', 
   })
 })
 
+test('It records effective_mode act on a compacted record', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'compacted', trigger_values: { setting: 'act', effective_mode: 'act' } })
+})
+
 test('It compacts for a weak signal when background work is running', ACT, async ($, on) => {
   const world = install($, on)
   await startSession($)

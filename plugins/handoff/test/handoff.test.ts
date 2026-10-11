@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { completeTurn, growTo200k, install, lastRecord, runStep, startSession, usageOf } from './helpers'
+import { completeTurn, growTo200k, install, lastRecord, runCommand, runStep, startSession, usageOf } from './helpers'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const ACT = { options: { handoffMode: 'act' } } as const
@@ -40,7 +40,7 @@ test('It names the component, session, engine version, and time in every record'
   })
 })
 
-test('It logs the point, setting, threshold, context size, and cache read tokens as scalars', async ($, on) => {
+test('It logs the point, setting, effective mode, threshold, context size, and cache read tokens as scalars', async ($, on) => {
   const world = install($, on)
   await startSession($)
   await runStep($, world, { usage: usageOf(1_000, 0, 49_000) })
@@ -52,6 +52,7 @@ test('It logs the point, setting, threshold, context size, and cache read tokens
     threshold: 150_000,
     is_background_busy: false,
     setting: 'off',
+    effective_mode: 'off',
     cache_read_tokens: 33_000,
   })
 })
@@ -248,4 +249,59 @@ test('It still starts the session when the version cannot be read', ACT, async (
   world.versionThrows = true
   expect(await startSession($)).toEqual({ cwd: '/work' })
   expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', engine_version: 'unknown' })
+})
+
+test('It records effective_mode off and setting act for /handoff before session.start', ACT, async ($, on) => {
+  const world = install($, on)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
+})
+
+test('It records effective_mode off and setting act for /handoff under -p', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($, false)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
+})
+
+test('It records effective_mode off and setting act for /handoff on an untested build', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { point: 'command', setting: 'act', effective_mode: 'off' } })
+})
+
+test('It records effective_mode off and setting act on the untested_engine record', ACT, async ($, on) => {
+  const world = install($, on)
+  world.version = { version: '2.1.296', base: '2.1.296' }
+  await startSession($)
+  expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', trigger_values: { setting: 'act', effective_mode: 'off' } })
+})
+
+test('It records effective_mode act on a /handoff cleared record on a tested interactive build', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { setting: 'act', effective_mode: 'act' } })
+})
+
+test('It records effective_mode ask on an advised record on a tested interactive build', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ action: 'advised', trigger_values: { setting: 'ask', effective_mode: 'ask' } })
+})
+
+test('It records effective_mode act on a none record on a tested interactive build', ACT, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await runStep($, world, { usage: usageOf(1_000, 0, 49_000) })
+  await completeTurn($)
+  expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { setting: 'act', effective_mode: 'act' } })
 })
