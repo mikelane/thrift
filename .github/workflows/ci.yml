@@ -66,7 +66,7 @@ jobs:
         env:
           CLAUDE_CODE_VERSION: ${{ matrix.version }}
         run: |
-          # typescript has no install scripts, so the lockfile install runs none.
+          # --ignore-scripts is safe: typescript, the only dependency, has no install scripts.
           npm ci --ignore-scripts
           npm install --ignore-scripts=false --prefix "$RUNNER_TEMP/tools" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           echo "$RUNNER_TEMP/tools/node_modules/.bin" >> "$GITHUB_PATH"
@@ -85,7 +85,7 @@ jobs:
             grep -q "TESTED_THROUGH = '${PINNED_VERSION}'" "$file" || { echo "$file does not name ${PINNED_VERSION}"; exit 1; }
           done
 
-      - name: Validate, type-check, and test every plugin
+      - name: Check every plugin with scripts/check.sh
         env:
           CHECK_LOG_DIR: ${{ runner.temp }}/failures
         run: scripts/check.sh
