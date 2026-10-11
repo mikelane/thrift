@@ -484,20 +484,21 @@ const continueInFreshSession = async (
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
+  let oldId: string | undefined
   try {
     await redrawBand($, state, WRITING)
     $.ui.toast(WRITING_STATUS)
-    const oldId = await $.session.id()
+    oldId = await $.session.id()
     beginNoteWindow(state)
     const note = await writeNote($)
     if (note === null) {
-      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.')
+      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.', oldId)
       return null
     }
     return { oldId, note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.')
+    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.', oldId)
     return null
   }
 }

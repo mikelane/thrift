@@ -301,6 +301,18 @@ describe('held_restore on an abandoned record', () => {
   })
 })
 
+describe('session_id on an abandoned record', () => {
+  test('It records the session the handoff began in when a restore runs past a session change', async ($, on) => {
+    const { world, abandonsWith } = await handoffWithHeld($, on, ['scheduled'])
+    world.submitHooks = [
+      () => {
+        world.sessionId = world.nextSessionId
+      },
+    ]
+    expect(lastRecordOf(await abandonsWith(), 'none').session_id).toBe('old-session')
+  })
+})
+
 describe('handoff_unattended on the records that end a handoff', () => {
   const unattendedHandoff = async ($: Engine, on: On) => {
     const world = install($, on)
