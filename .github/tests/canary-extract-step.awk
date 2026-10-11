@@ -1,4 +1,5 @@
-# The awk program behind extract_step in canary-extract-lib.sh. The step spec arrives in the
+# The awk program behind extract_step in canary-extract-lib.sh (run with
+# canary-yaml-key.awk). The step spec arrives in the
 # SPEC environment variable and the step's `- name:` line in the `want` variable.
 BEGIN {
   count = split(ENVIRON["SPEC"], entries, "\n")
@@ -16,13 +17,10 @@ BEGIN {
   allowed["run"] = 1
   state = 0
 }
-function check_key(    key) {
-  key = $0
-  sub(/^        /, "", key)
-  sub(/:.*/, "", key)
+function check_key(key) {
   seen[key] = 1
   if (!(key in allowed)) problem = "has the key \"" key "\", which the harness does not model"
-  else if ((key in value) && $0 != "        " key ": " value[key]) problem = "has \"" key "\" set to something other than \"" value[key] "\""
+  else if ((key in value) && yaml_value($0, 8) != value[key]) problem = "has \"" key "\" set to something other than \"" value[key] "\""
 }
 state == 4 { next }
 state == 0 { if ($0 == want) state = 1; next }
@@ -32,8 +30,8 @@ state == 2 {
   if (substr($0, 1, 10) == "          ") { print substr($0, 11); next }
   state = 3
 }
-$0 ~ /^        [A-Za-z_-]+:/ {
-  check_key()
+yaml_key($0, 8) != "" {
+  check_key(yaml_key($0, 8))
   if (state == 1 && $0 == "        run: |") state = 2
   else if (state == 1 && index($0, "        run: ") == 1) { print substr($0, 14); state = 3 }
 }

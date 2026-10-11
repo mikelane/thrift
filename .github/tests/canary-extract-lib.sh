@@ -23,7 +23,7 @@ extract_step() {
     echo "The step '$step_name' appears $occurrences times in $ci_yml, so the harness cannot tell which one runs. Give each step a unique name." >&2
     return 1
   fi
-  script=$(SPEC="$spec" awk -v want="      - name: $step_name" -f "$HARNESS_DIR/canary-extract-step.awk" "$ci_yml" 2> "$WORK_DIR/extract.err") || status=$?
+  script=$(SPEC="$spec" awk -v want="      - name: $step_name" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-extract-step.awk" "$ci_yml" 2> "$WORK_DIR/extract.err") || status=$?
   if [[ "$status" == 3 ]]; then
     echo "The step '$step_name' in $ci_yml $(cat "$WORK_DIR/extract.err"). If the change is intended, update the step's key list in $HARNESS_DIR/canary-extract-lib.sh." >&2
     return 1
@@ -64,4 +64,28 @@ extract_or_die() {
     echo "The step '$step_name' no longer contains '$must_contain', so the harness would test the wrong script. If the step changed on purpose, update the expected text in $HARNESS_DIR/canary-extract-lib.sh." >&2
     exit 2
   }
+}
+
+# The condition the report job runs under. Only a schedule or a manual run opens issues.
+# shellcheck disable=SC2016 # the workflow expression is matched literally
+REPORT_JOB_IF=$'${{ !cancelled() && (github.event_name == \'schedule\' || github.event_name == \'workflow_dispatch\') }}'
+
+# read_job_key <job> <key> <ci.yml>: prints the value of each job-level `key:` of a job, one per line.
+read_job_key() {
+  awk -v want_job="  $1:" -v want_key="$2" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-job-keys.awk" "$3"
+}
+
+# Exits 1, and says why, unless the job has exactly one job-level `if:` with the expected value, so
+# a job that never runs, or runs on other events, fails the harness instead of passing it.
+check_job_condition() {
+  local ci_yml="$1" job="$2" expected="$3" values why
+  grep -qxF -- "  $job:" "$ci_yml" || { echo "No job named '$job' in $ci_yml, so the harness cannot check its condition." >&2; return 1; }
+  values=$(read_job_key "$job" if "$ci_yml")
+  if [[ -z "$values" ]]; then why='has no "if" key'
+  elif [[ "$values" == *$'\n'* ]]; then why='has "if" more than once'
+  elif [[ "$values" != "$expected" ]]; then why="has \"if\" set to something other than \"$expected\""
+  else return 0
+  fi
+  echo "The job '$job' in $ci_yml $why. If the change is intended, update REPORT_JOB_IF in $HARNESS_DIR/canary-extract-lib.sh." >&2
+  return 1
 }

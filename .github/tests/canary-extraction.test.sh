@@ -89,4 +89,83 @@ test_report_job_checks_out_nothing_and_keeps_its_script_inline() {
   [[ "$job" != *'scripts/'* ]] || fail 'the report job runs a script from the repository'
 }
 
+# ---------------------------------------------------------------------------------------------
+# Keys written in other YAML forms, and the report job's own condition
+# ---------------------------------------------------------------------------------------------
+run_harness_against() { # run_harness_against <ci.yml>
+  EXIT_CODE=0
+  CANARY_CI_YML="$1" "$BASH" "${BASH_SOURCE[0]}" nothing-matches > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+# add_line_after_report_step_name <line>: writes $TEST_DIR/ci.yml with the line under the step's name.
+add_line_after_report_step_name() {
+  awk -v name="      - name: $REPORT_STEP" -v line="$1" '{ print } $0 == name { print line }' "$CI_YML" > "$TEST_DIR/ci.yml"
+  grep -qxF -- "$1" "$TEST_DIR/ci.yml" || fail "the fixture did not add: $1"
+}
+# replace_report_job_line <old-prefix> <new-line>: writes $TEST_DIR/ci.yml with the first line that
+# starts with the prefix, inside the report job, replaced. An empty new line drops it, and `\n` in it
+# starts another line.
+replace_report_job_line() {
+  awk -v old="$1" -v new="$2" '
+    /^  report:/ { inside = 1 }
+    inside && !done && index($0, old) == 1 { done = 1; if (new != "") print new; next }
+    { print }' "$CI_YML" > "$TEST_DIR/ci.yml"
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail "the fixture changed nothing: $1"
+  return 0
+}
+test_harness_exits_2_when_the_report_step_gains_a_double_quoted_if_key() {
+  add_line_after_report_step_name '        "if": false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has the key "if"'
+}
+test_harness_exits_2_when_the_report_step_gains_a_single_quoted_if_key() {
+  add_line_after_report_step_name "        'if': false"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has the key "if"'
+}
+test_harness_exits_2_when_the_report_step_gains_an_if_key_with_a_space_before_the_colon() {
+  add_line_after_report_step_name '        if : false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has the key "if"'
+}
+test_harness_exits_2_when_the_report_step_runs_under_another_shell_written_with_a_spaced_key() {
+  sed 's/^        shell: bash$/        shell : sh/' "$CI_YML" > "$TEST_DIR/ci.yml"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has "shell" set to something other than "bash"'
+}
+test_harness_accepts_the_report_step_shell_key_written_with_quotes() {
+  sed 's/^        shell: bash$/        "shell": bash/' "$CI_YML" > "$TEST_DIR/ci.yml"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+test_harness_exits_2_when_the_report_job_condition_is_changed() {
+  replace_report_job_line '    if: ' '    if: false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has "The job 'report'"
+  assert_out_has 'has "if" set to something other than'
+}
+test_harness_exits_2_when_the_report_job_condition_is_removed() {
+  replace_report_job_line '    if: ' ''
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has "The job 'report'"
+  assert_out_has 'has no "if" key'
+}
+test_harness_exits_2_when_the_report_job_condition_is_changed_and_written_with_quotes() {
+  replace_report_job_line '    if: ' '    "if": false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has "if" set to something other than'
+}
+test_harness_exits_2_when_the_report_job_gains_a_second_condition() {
+  replace_report_job_line '    if: ' "$(grep -m1 '^    if: ' "$CI_YML")\n    \"if\": false"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has "if" more than once'
+}
+
 run_tests "$@"
