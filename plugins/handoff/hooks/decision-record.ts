@@ -4,6 +4,19 @@ import type { Mode, Signal } from './signals'
 
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
+export type DecisionReason =
+  | 'backoff'
+  | 'compaction_vetoed'
+  | 'compaction_failed'
+  | 'no_handoff_written'
+  | 'handoff_failed'
+  | 'clear_failed'
+  | 'session_ended'
+  | 'band_failed'
+  | 'not_now'
+  | 'send_here'
+  | 'background_busy'
+
 export type TriggerValues = {
   point: 'turn-end' | 'prompt' | 'command' | 'button' | 'session-start'
   signal: Signal
@@ -12,7 +25,7 @@ export type TriggerValues = {
   is_background_busy: boolean
   setting: Mode
   cache_read_tokens: number
-  reason?: string
+  reason?: DecisionReason
   note?: NoteDelivery
   held_groups?: number
   held_unattended?: boolean
