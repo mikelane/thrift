@@ -9,6 +9,10 @@ specific to this repo.
 - Each plugin is self-contained under `plugins/<name>/`. Plugins never import from each other.
 - `.claude-plugin/marketplace.json` lists every plugin with `"source": "./plugins/<name>"`. A
   plugin's entry lands in the same PR that adds the plugin, never before.
+- Tests for the repo's own CI live in `.github/tests/`, not under a plugin. `canary-report.sh`
+  pulls the canary step scripts out of `ci.yml` and runs them, with `scripts/check.sh`, against stub
+  `gh`, `claude` and `tsc`. It needs `jq` and `openssl` and runs on bash 3.2 and 5. Pass part of a
+  test name to run only matching tests: `.github/tests/canary-report.sh [name-fragment]`.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
 

@@ -11,8 +11,14 @@ name: CI
 # on, so it holds `contents: read` and nothing else. On the weekly schedule, and on a manual run,
 # its latest leg hands its failure logs and the Claude Code version to job `report` as an
 # artifact. `report` is the only job with `issues: write`. It reads the plugin list through the API
-# at the run's own commit, but still checks out and runs no repository code. Only people with write access can start a manual run, so `issues: write` there
-# does not reintroduce the exposure pull requests had.
+# at the run's own commit, but still checks out and runs no repository code. Only people with write
+# access can start a manual run, so `issues: write` there does not reintroduce the exposure pull
+# requests had.
+#
+# Job `canary-harness` runs .github/tests/canary-report.sh, which pulls the canary step scripts out
+# of this file and runs them, with scripts/check.sh, against stub `gh`, `claude` and `tsc`. It holds
+# `contents: read`, installs no Claude Code, and the harness makes no network calls. Like every job
+# here it has no path filter. It takes seconds, so every pull request runs it.
 #
 # A manual run defaults to a dry run: `report` prints the issues it would open instead of opening
 # them, which exercises the canary path without waiting for Monday.
@@ -106,6 +112,20 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  canary-harness:
+    name: canary report harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the canary report harness against the real report script
+        run: .github/tests/canary-report.sh
+
   report:
     name: open canary issues
     needs: check
@@ -115,7 +135,11 @@ jobs:
     if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # A schedule run and a manual run must not race to open the same issue.
+    # A schedule run and a manual run must not race to open the same issue. GitHub keeps one running
+    # and one pending run per group, and a newer pending run replaces the older one even with
+    # cancel-in-progress false. So a manual dry run queued behind a running report can drop a waiting
+    # scheduled live run. That window is the few seconds the job runs, and the next scheduled run
+    # opens the issue, so the group stays as it is.
     concurrency:
       group: canary-report-${{ github.repository }}
       cancel-in-progress: false
@@ -148,6 +172,9 @@ jobs:
           # length or more is withheld from the body, so the fence cannot push the body past the
           # limit.
           MAX_FENCE: 64
+        # With no shell key, Actions runs `bash -e`. `shell: bash` adds pipefail, so a failed stage of
+        # any pipeline below fails the step, and the harness runs the script with the same options.
+        shell: bash
         run: |
           problems=0
           failures="$RUNNER_TEMP/failures"
@@ -172,13 +199,16 @@ jobs:
           can_open=true
           version=$(cat "$failures/claude-version") || version=''
           if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-            printf 'Unexpected Claude Code version: %q\n' "$version"
+            # %q does not escape ':'. A version like "::error::x" is not read as a workflow command
+            # only because text comes before it on the line. Keep a prefix on every line that prints
+            # the version.
+            printf 'Unexpected Claude Code version: %q. Check the version step in check (latest).\n' "$version"
             problems=1
             can_open=false
           fi
 
           plugins=$(gh api "repos/${GH_REPO}/contents/plugins?ref=${GITHUB_SHA}" --jq '.[] | select(.type=="dir") | .name') || {
-            echo 'Failed to list the plugins in the repository.'
+            echo 'Failed to list the plugins in the repository, so no issue can be opened. Rerun the job.'
             problems=1
             plugins=''
           }
@@ -188,11 +218,12 @@ jobs:
           mode=live
           [ "$DRY_RUN" != true ] || mode=dry-run
           printf 'Canary summary: mode=%s version=%q failing_logs=%s\n' "$mode" "$version" "${#logs[@]}"
-          if [ "$can_open" != true ]; then
-            logs=()
-          fi
           if [ "${#logs[@]}" = 0 ] && [ "$DRY_RUN" = true ]; then
             echo 'dry run: no failure logs, nothing to open'
+          fi
+          if [ "$can_open" != true ] && [ "${#logs[@]}" != 0 ]; then
+            echo "Opening no issues for ${#logs[@]} failing logs because the version is invalid. Read the failures in the check (latest) log."
+            logs=()
           fi
 
           opened=0
@@ -202,14 +233,18 @@ jobs:
             if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]] \
               || [ "$log" != "$failures/${plugin}.txt" ] \
               || [ -L "$log" ] || [ ! -f "$log" ] \
-              || ! printf '%s\n' "$plugins" | grep -qxF -- "$plugin"; then
+              || ! grep -qxF -- "$plugin" <<< "$plugins"; then
               printf 'Skipping an untrusted log: %q\n' "$plugin"
               problems=1
               continue
             fi
             title="Claude Code ${version} breaks ${plugin}"
-            open=$(TITLE="$title" gh issue list --state open --search "\"${title}\" in:title" --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
-              echo "Failed to list issues for ${title}"
+            # --search reads an index that lags behind new issues, so list the open issues and compare
+            # whole titles here. --limit raises gh's default of 30 results.
+            # SAFETY: this repo has far fewer than 1000 open issues. Past that, a run could open a
+            # duplicate, but MAX_ISSUES still caps how many it opens.
+            open=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
+              echo "Failed to list issues for ${title}. Rerun the job to open it."
               problems=1
               continue
             }
@@ -225,11 +260,16 @@ jobs:
               left_unopened+=("$plugin")
               continue
             fi
-            opened=$((opened + 1))
             # Passing-test lines are most of a long log and would push the failing test out of the
-            # tail. grep exiting 1 on an all-pass log is harmless: the pipeline status is tr's.
-            grep -av '^(pass) ' "$log" | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
-            longest=$(grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
+            # tail. grep exits 1 when it prints nothing, so each grep may find nothing. Any other
+            # status is a read error: an unscanned log could escape a 3-backtick fence, so that plugin
+            # is reported and skipped, and the other plugins still run.
+            if ! { grep -av '^(pass) ' "$log" || [ $? = 1 ]; } | tail -c 60000 | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt" \
+              || ! longest=$({ grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" || [ $? = 1 ]; } | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }'); then
+              echo "Failed to read the log for ${plugin}; not opening an issue."
+              problems=1
+              continue
+            fi
             {
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
               echo "Full log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -250,12 +290,17 @@ jobs:
               echo "dry run: would open an issue titled: ${title}"
               print_untrusted "$RUNNER_TEMP/issue-body.md"
             else
+              # A failed create does not count toward the cap, so a later plugin still gets its turn.
+              # SAFETY: a create that fails after GitHub stored the issue is not counted either. A run
+              # still opens at most one issue per plugin directory, because each plugin is tried once,
+              # and the next run's dedupe finds the stored issue.
               gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md" || {
-                echo "Failed to create an issue for ${title}"
+                echo "Failed to create an issue for ${title}. Rerun the job to open it."
                 problems=1
                 continue
               }
             fi
+            opened=$((opened + 1))
           done
           if [ "${#left_unopened[@]}" != 0 ]; then
             verb=Opened
