@@ -86,6 +86,9 @@ const modeCases = [
   ['cleared', 'off', 'off', 'command', 'active'],
   ['none', 'off', 'off', 'command', 'active'],
   ['none', 'act', 'off', 'command', 'active'],
+  ['none', 'off', 'off', 'button', 'active'],
+  ['none', 'act', 'off', 'button', 'active'],
+  ['none', 'ask', 'off', 'button', 'active'],
   ['untested_engine', 'act', 'off', 'turn-end', 'active'],
 ] as const
 
