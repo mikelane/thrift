@@ -26,10 +26,15 @@ for tool in jq openssl; do
 done
 
 # Prints the body of one step's `run:` from a workflow file, de-indented. Exits 1, and says why,
-# when the step is not found at the indentation the workflow uses, so a renamed or re-indented
-# step fails the harness instead of leaving it with nothing to test.
+# when the step is not found at the indentation the workflow uses, or is found more than once, so a
+# renamed, re-indented or duplicated step fails the harness instead of testing a stale copy.
 extract_step() {
-  local ci_yml="$1" step_name="$2" script
+  local ci_yml="$1" step_name="$2" script occurrences
+  occurrences=$(grep -cxF -- "      - name: $step_name" "$ci_yml" || true)
+  if [[ "$occurrences" -gt 1 ]]; then
+    echo "The step '$step_name' appears $occurrences times in $ci_yml, so the harness cannot tell which one runs." >&2
+    return 1
+  fi
   script=$(awk -v want="      - name: $step_name" '
     state == 0 { if ($0 == want) state = 1; next }
     state == 1 {
@@ -291,6 +296,11 @@ test_extraction_finds_the_report_step_in_the_real_workflow() {
 test_extraction_fails_when_the_step_is_renamed() {
   sed 's/- name: Open an issue for each plugin/- name: Open issues for each plugin/' "$CI_YML" > "$T/ci.yml"
   extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed on a renamed step'
+  return 0
+}
+test_extraction_fails_when_the_step_name_appears_twice() {
+  { cat "$CI_YML"; printf '  decoy:\n    steps:\n      - name: %s\n        run: |\n          gh issue create\n' "$REPORT_STEP"; } > "$T/ci.yml"
+  extract_step "$T/ci.yml" "$REPORT_STEP" > "$T/out" 2>&1 && fail 'extraction passed with the step name in two places'
   return 0
 }
 test_extraction_fails_when_the_workflow_is_re_indented() {
