@@ -1,5 +1,6 @@
-// Limit: the README line supplies its own field set, so this catches a key placed, named or valued differently from
-// what recordFromEvaluation writes, but not an optional key dropped from the sample.
+// Limit: the README line supplies its own field set and values, which are carried through rather than compared. This
+// catches a key placed, named or typed differently from what recordFromEvaluation writes, but not an optional key
+// dropped from the sample or a value the code would never write.
 import { readFileSync } from 'node:fs'
 
 import { recordFromEvaluation } from '../hooks/decision-record.ts'

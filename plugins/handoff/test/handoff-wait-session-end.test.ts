@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { answered, compacted, growTo200k, install, lastRecord, runCommand, startSession, startTurn, submitPerson } from './helpers'
+import type { Engine } from 'claude-code/testing'
+import { answered, compacted, completeTurn, growTo200k, install, lastRecord, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
 import { ACT, SESSION_ENDED_TOAST, SESSION_ENDED_LOG, COMPACTING, BASE_MESSAGE, SECOND_MESSAGE, LATE_TURN_MESSAGE, holdFork, writingTheNote, waitingForATurn, endSession, clearCount, RECORD_KEYS, resumeDuringCompaction } from './wait-for-turn-helpers'
 
 test('It does not clear a session the person resumed while the handoff waited for a turn', async ($, on) => {
@@ -253,4 +254,89 @@ test('It logs the cleared record against the handoff session after compacting', 
   await runCommand($, 'handoff')
   await world.clock.settle()
   expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', action: 'cleared' })
+})
+
+const ENDED = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
+const COMPACTED_ENDED = `${ENDED} The previous session was compacted. To reopen it: claude --resume old-session`
+
+const endOldSession = async ($: Engine, world: World, reason: 'resume' | 'prompt_input_exit') => {
+  await $.session.end({ reason, sessionId: 'old-session', resume: { id: 'old-session' } })
+  world.sessionId = 'resumed-session'
+}
+
+test('It names the compacted old session when the session is resumed during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await endOldSession($, world, 'resume')
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain(`toast:${COMPACTED_ENDED}`)
+  expect(world.effects).toContain(`log:${COMPACTED_ENDED}`)
+  expect(world.effects.filter(effect => effect.includes('The session ended'))).toHaveLength(2)
+})
+
+test('It names the compacted old session when the session is left through prompt input during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await endOldSession($, world, 'prompt_input_exit')
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects).toContain(`toast:${COMPACTED_ENDED}`)
+  expect(world.effects).toContain(`log:${COMPACTED_ENDED}`)
+  expect(world.effects.filter(effect => effect.includes('The session ended'))).toHaveLength(2)
+})
+
+test('It names the compacted old session when the session is resumed during the wait after the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await startTurn($)
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await endOldSession($, world, 'resume')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain(`toast:${COMPACTED_ENDED}`)
+  expect(world.effects).toContain(`log:${COMPACTED_ENDED}`)
+  expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
+})
+
+test('It names the compacted old session when the session is left through prompt input during the wait after the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await startTurn($)
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await endOldSession($, world, 'prompt_input_exit')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).toContain(`toast:${COMPACTED_ENDED}`)
+  expect(world.effects).toContain(`log:${COMPACTED_ENDED}`)
+  expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
+})
+
+test('It leaves the resume line off when the session ends during the wait before any compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await startTurn($)
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  await endOldSession($, world, 'resume')
+  await completeTurn($)
+  await world.clock.settle()
+  expect(world.effects).not.toContain('compact')
+  expect(world.effects).toContain(`toast:${ENDED}`)
+  expect(world.effects).toContain(`log:${ENDED}`)
+  expect(world.effects.filter(effect => effect.includes('The session ended'))).toHaveLength(2)
 })
