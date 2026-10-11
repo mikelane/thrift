@@ -238,6 +238,8 @@ jobs:
             title="Claude Code ${version} breaks ${plugin}"
             # --search reads an index that lags behind new issues, so list the open issues instead
             # and compare the whole title here. --limit lifts gh's default of 30 results.
+            # SAFETY: this repo keeps far fewer than 1000 issues open. Past that, a duplicate could
+            # slip through, and MAX_ISSUES still bounds how many a run opens.
             open=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length') || {
               echo "Failed to list issues for ${title}"
               problems=1
