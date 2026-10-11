@@ -1,6 +1,7 @@
 import type { PromptOrigin } from 'claude-code'
 import { classify, respond, type Mode, type Signal } from './signals'
 
+// auto-continuation is deliberately not a person origin: the engine resubmits it on its own, with no one behind it.
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'scheduled-trigger'])
 
 type DuringHandoffInput = { isCarried: boolean; isHolding: boolean; hasExtras: boolean }

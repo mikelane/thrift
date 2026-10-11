@@ -354,6 +354,9 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
   }
 }
 
+// SAFETY: the record is written after restoreHeldGroups and sendHeldGroups return, so a throw inside either loop would lose
+// the record. refillBox and submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no
+// async calls, so no test can make a loop throw. Any call added to a loop must not throw either.
 const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
   const restores: Carried[] = []
   for (const group of settledHandoff.heldGroups) {
@@ -396,9 +399,6 @@ const abandonHandoff = async (
   await takeDownBand($, state)
   announce($, message)
   const recordedSessionId = sessionId ?? (await readSessionId($))
-  // SAFETY: the record is written after restoreHeldGroups returns, so a throw inside it would lose the record. refillBox and
-  // submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
-  // can make the loop throw. Any call added to the loop must not throw either.
   const restores = await restoreHeldGroups($, state, settledHandoff)
   const late = await restoreLateArrivals($, state)
   await writeRecord($, state, {
@@ -543,9 +543,6 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  // SAFETY: the record is written after sendHeldGroups returns, so a throw inside it would lose the record. submitEntered
-  // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
-  // can make the loop throw. Any call added to the loop must not throw either.
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
   const late = await sendLateArrivals($, state)
   await writeRecord($, state, {
@@ -828,6 +825,9 @@ const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput, placeme
 }
 
 // The placement is read now: by the time the clock fires, the delivery may be over.
+// SAFETY: during a restore, a refused composer prompt that arrives before a held composer prompt still lands after it in the
+// box, because the hand-back waits for clock.after(0). Reaching that takes two composer submits within one engine round trip,
+// which a real session cannot produce, so no code guards it.
 const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
   const placement = refusedPromptPlacement(state.handoffHold)
   debug($, 'refused a prompt with attachments or context during the handoff')

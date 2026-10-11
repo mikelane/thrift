@@ -73,7 +73,7 @@ export type World = {
   submitHooks: Array<(() => void) | undefined>
   gitThrows: boolean
   gitFailure: boolean
-  step:{ usage: TurnUsage | null; advisorCalls: number }
+  step: { usage: TurnUsage | null; advisorCalls: number }
   toolResult: unknown
   toolMode: 'ok' | 'error' | 'deny'
   appended: string[]
