@@ -381,6 +381,9 @@ branch in `hooks/` has a test whose name says which.
 |---|---|
 | `hooks/register.tsx` | Engine wiring. Every function that takes `$` lives here, because the engine follows `$` only through functions declared at the top of this file. |
 | `hooks/signals.ts` | Pure signal logic: setting parsers (`asMode`, `asThreshold`), context size (`contextFromStep`, `formatTokens`), classification (`classify`), the band's buttons (`bandButtons`), the mode table (`respond`), and the busy-refusal trigger (`busyRefusalTrigger`) |
+| `hooks/turn-end-plan.ts` | What a turn's end calls for: the signal and the plan from `planTurnEnd` (advise, compact, hand off, back off, or nothing), and the back-off window (`isBackedOff`) |
+| `hooks/prompt-plan.ts` | What a submitted prompt calls for: prompt origins (`isPersonOrigin`, `isUnattendedOrigin`), attachments or context (`carriesExtras`), what to do with one that arrives during a handoff (`planPromptDuringHandoff`), whether one can be held (`canHoldPrompt`), and the plan for new work (`planNewWorkPrompt`) |
+| `hooks/tool-call-tracking.ts` | What a tool call tells the state: background tasks that start or stop, and a finished task (`noteToolCall`) |
 | `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), and `finishesTask` |
 | `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefix`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
