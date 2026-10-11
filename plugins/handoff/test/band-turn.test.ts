@@ -8,6 +8,7 @@ import {
   completeTurn,
   growTo200k,
   install,
+  lastRecord,
   mountBand,
   notify,
   startSession,
@@ -399,7 +400,9 @@ test('It writes the background_busy record of a refused press with no held-promp
   const band = await weakBand($, world)
   await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
   await band.press({ key: 'handoff' })
-  expect(Object.keys(world.records.at(-1)?.trigger_values ?? {}).sort()).toEqual(
+  const { trigger_values } = lastRecord(world)
+  expect(trigger_values.reason).toBe('background_busy')
+  expect(Object.keys(trigger_values).sort()).toEqual(
     ['cache_read_tokens', 'context_tokens', 'effective_mode', 'is_background_busy', 'point', 'reason', 'setting', 'signal', 'threshold'],
   )
 })

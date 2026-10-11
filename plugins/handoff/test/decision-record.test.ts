@@ -124,13 +124,20 @@ describe('recordFromEvaluation', () => {
   })
 
   test('It reads the effective mode from the evaluation, not the state', () => {
-    const { trigger_values } = recordFromEvaluation({ ...state, mode: 'off' }, evaluation, NOW, 'abc')
+    const offState: RecordSessionFields = { ...state, mode: 'off' }
+    const { trigger_values } = recordFromEvaluation(offState, evaluation, NOW, 'abc')
     expect(trigger_values.effective_mode).toBe('act')
   })
 
   test('It marks a none action in off mode as shadow', () => {
     const record = recordFromEvaluation(state, { ...evaluation, action: 'none', effectiveMode: 'off' }, NOW, 'abc')
     expect(record.mode).toBe('shadow')
+  })
+
+  test('It marks a none action decided in act as active when the state has since fallen to off', () => {
+    const offState: RecordSessionFields = { ...state, mode: 'off' }
+    const record = recordFromEvaluation(offState, { ...evaluation, action: 'none', effectiveMode: 'act' }, NOW, 'abc')
+    expect(record.mode).toBe('active')
   })
 })
 
