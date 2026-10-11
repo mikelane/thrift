@@ -39,6 +39,7 @@ import {
 import { isUntestedEngine } from './engine-version'
 import {
   FINAL_MESSAGES,
+  clearFailedMessage,
   HANDOFF_PROMPT,
   handedOffMessage,
   handoffMessage,
@@ -332,6 +333,7 @@ const abandonHandoff = async (
     ...settledHandoff.trigger,
     action: 'none',
     reason,
+    compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
@@ -351,16 +353,22 @@ const writeNote = async ($: EngineInterface): Promise<string | null> => {
   }
 }
 
-const compactBeforeClearing = async ($: EngineInterface, state: SessionState, trigger: Trigger, sessionId: string) => {
+// Whether the session was compacted: a vetoed or failed compaction leaves it as it was.
+const compactBeforeClearing = async (
+  $: EngineInterface,
+  state: SessionState,
+  trigger: Trigger,
+  sessionId: string,
+): Promise<boolean> => {
   try {
     const compaction = await $.session.compact()
-    if (compaction.skip !== undefined) {
-      await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
-    }
+    if (compaction.skip === undefined) return true
+    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
   } catch (error) {
     debug($, `compaction before the clear failed: ${String(error)}`)
     await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
   }
+  return false
 }
 
 const clearSession = async ($: EngineInterface): Promise<boolean> => {
@@ -447,6 +455,7 @@ const continueInFreshSession = async (
     sessionId: oldId,
     note: noteDelivery,
     clearedBy,
+    compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
@@ -512,6 +521,7 @@ const runHandoff = async (
     let isCompacted = !state.compactBeforeClear
     let isBusy = false
     let hasShownWaiting = false
+    let hasCompactedBeforeClear = false
     for (;;) {
       while (state.isTurnRunning) {
         if (!hasShownWaiting) {
@@ -526,19 +536,20 @@ const runHandoff = async (
       if (state.sessionEndBeforeClear !== null) break
       if (!isCompacted) {
         isCompacted = true
-        await compactBeforeClearing($, state, request.trigger, prepared.oldId)
+        hasCompactedBeforeClear = await compactBeforeClearing($, state, request.trigger, prepared.oldId)
         continue
       }
       if (!mustRefuseWhenBusy) break
       isBusy = await isBackgroundBusy($, state)
       if (!state.isTurnRunning) break
     }
+    const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
     if (outcome === 'abandon_session_ended') {
-      return await abandonHandoff($, state, settleHandoff(state, request), 'session_ended', SESSION_ENDED, prepared.oldId)
+      return await abandonHandoff($, state, settleAfterWait(), 'session_ended', SESSION_ENDED, prepared.oldId)
     }
     if (outcome === 'abandon_busy') {
-      const busySettled = { ...settleHandoff(state, request), trigger: busyRefusalTrigger(request.trigger) }
+      const busySettled = { ...settleAfterWait(), trigger: busyRefusalTrigger(request.trigger) }
       return await abandonHandoff($, state, busySettled, 'background_busy', BUSY_REFUSAL, prepared.oldId)
     }
     const hasTurnAfterNote = state.hasTurnAfterNote
@@ -551,14 +562,14 @@ const runHandoff = async (
       // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
       await takeDownBand($, state)
     }
-    const settledHandoff = settleHandoff(state, request)
+    const settledHandoff = settleAfterWait()
     if (!isCleared) {
       return await abandonHandoff(
         $,
         state,
         settledHandoff,
         'clear_failed',
-        'The handoff was written but /clear failed. This session is unchanged.',
+        clearFailedMessage(hasCompactedBeforeClear),
         prepared.oldId,
       )
     }

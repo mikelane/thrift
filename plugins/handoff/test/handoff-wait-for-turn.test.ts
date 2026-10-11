@@ -1000,3 +1000,30 @@ test('It records cleared_by handoff on the cleared record when the handoff runs 
   expect(world.effects).toContain('clear')
   expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
 })
+
+const ACT_COMPACTING = { options: { handoffMode: 'act', compactBeforeClear: true } } as const
+
+test('It records compacted_before_clear on the background_busy abandon that follows a compaction', ACT_COMPACTING, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(lastRecord(world)).toMatchObject({
+    action: 'none',
+    trigger_values: { reason: 'background_busy', compacted_before_clear: true },
+  })
+})
+
+test('It leaves compacted_before_clear off the background_busy abandon when compactBeforeClear is off', ACT, async ($, on) => {
+  const world = await actHandoffWithBusyTurn($, on)
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
+})
+
+test('It records compacted_before_clear on the session_ended abandon that follows a compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_ended', compacted_before_clear: true } })
+})

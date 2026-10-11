@@ -51,6 +51,7 @@ describe('recordFromEvaluation', () => {
     { name: 'a note delivery', extra: { note: 'in_box' }, expected: { note: 'in_box' } },
     { name: 'held fields', extra: { heldFields }, expected: heldFields },
     { name: 'cleared_by person', extra: { clearedBy: 'person' }, expected: { cleared_by: 'person' } },
+    { name: 'compacted_before_clear', extra: { compactedBeforeClear: true }, expected: { compacted_before_clear: true } },
     { name: 'cleared_by handoff', extra: { clearedBy: 'handoff' }, expected: { cleared_by: 'handoff' } },
   ]
   for (const { name, extra, expected } of optionalFields) {
@@ -66,6 +67,7 @@ describe('recordFromEvaluation', () => {
     expect(trigger_values).not.toHaveProperty('note')
     expect(trigger_values).not.toHaveProperty('held_groups')
     expect(trigger_values).not.toHaveProperty('cleared_by')
+    expect(trigger_values).not.toHaveProperty('compacted_before_clear')
   })
 
   test('It reads the threshold, setting and mode from the state, not the evaluation', () => {

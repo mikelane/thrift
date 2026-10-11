@@ -27,6 +27,7 @@ export type TriggerValues = {
   held_other_delivery?: GroupDelivery
   held_restore?: GroupDelivery
   cleared_by?: ClearedBy
+  compacted_before_clear?: true
 }
 
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
@@ -61,6 +62,7 @@ export type Evaluation = Trigger & {
   reason?: DecisionReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
+  compactedBeforeClear?: boolean
   heldFields?: HeldRecordFields
   sessionId?: string
 }
@@ -76,6 +78,7 @@ export type SettledHandoff = {
   trigger: Trigger
   isUnattended: boolean
   heldGroups: HeldPromptGroup[]
+  hasCompactedBeforeClear?: boolean
 }
 
 export type RecordState = Pick<
@@ -104,7 +107,7 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
 })
 
 export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation, now: number, sessionId: string) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
   return decisionRecord({
     now,
     sessionId,
@@ -122,6 +125,7 @@ export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation,
       ...(reason ? { reason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
+      ...(compactedBeforeClear ? { compacted_before_clear: true as const } : {}),
       ...heldFields,
     },
   })

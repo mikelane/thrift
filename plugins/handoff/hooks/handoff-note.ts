@@ -22,6 +22,9 @@ export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterN
   return hasTurnAfterNote ? `${message}\n\n${turnAfterNoteLine(oldSessionId)}` : message
 }
 
+export const clearFailedMessage = (hasCompacted: boolean): string =>
+  `The handoff was written but /clear failed. ${hasCompacted ? 'This session was compacted but not cleared.' : 'This session is unchanged.'}`
+
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 
 export const handedOffMessage = (oldSessionId: string): string =>
