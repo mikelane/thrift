@@ -70,12 +70,24 @@ run_labeled_step() {
   return "$rc"
 }
 
+# Runs every plugins/<name>/checks/*.ts under Node's type stripping: a check that needs the plugin's
+# files on disk, which `claude plugin test` cannot read. A plugin without a checks/ directory skips it.
+run_file_checks() {
+  local plugin_dir="$1" check
+  for check in "$plugin_dir"/checks/*.ts; do
+    [[ -e "$check" ]] || continue
+    run_labeled_step "$plugin_dir" "file check: $(basename "$check")" \
+      node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types "$check" || return 1
+  done
+}
+
 # Chained with && because set -e is off inside a function called from an `if`.
 run_checks_in_dir() {
   local plugin_dir="$1"
   run_labeled_step "$plugin_dir" 'type declarations' write_type_declarations "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'claude plugin validate' claude plugin validate "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'tsc -p' "$tsc_bin" -p "$plugin_dir" &&
+    run_file_checks "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'claude plugin test' claude plugin test "$plugin_dir"
 }
 

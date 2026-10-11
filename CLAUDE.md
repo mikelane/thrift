@@ -80,6 +80,12 @@ the type declarations, then runs these in order and stops at the first failure:
    `test-coverage-mapper` reports no uncovered changed function. Go back to a measured 100%
    once `plugin test` reports coverage.
 
+A check that needs a plugin's files on disk, which `plugin test` cannot read (it has no fs), goes
+in `plugins/<name>/checks/*.ts`. `scripts/check.sh` runs each one with
+`node --experimental-strip-types` after `tsc` and before `plugin test`, and a non-zero exit fails
+the run. Such a file imports its siblings with explicit `.ts` extensions, so those modules import
+nothing and use only erasable TypeScript.
+
 Tests use `claude-code/testing`. The kit mocks the clock, store, env, and `session.append`
 directly (`mock.*`). Every other engine call (`model.fork`, `process.run`, `agent.list`,
 `prompt.read`/`fill`, `command.run`, `session.compact`, `session.usage`) is mocked by the
