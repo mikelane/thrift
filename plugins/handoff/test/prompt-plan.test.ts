@@ -59,10 +59,6 @@ for (const [kind, isPerson, isUnattended] of originCases) {
   })
 }
 
-test('It excludes auto-continuation from the person origins', () => {
-  expect(isPersonOrigin('auto-continuation')).toBe(false)
-})
-
 const extrasCases = [
   [{}, false],
   [{ attachments: [], context: [] }, false],

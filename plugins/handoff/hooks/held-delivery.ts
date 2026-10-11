@@ -7,7 +7,8 @@ const FROM_WORST_TO_BEST = ['not_carried', 'in_box', 'submitted'] as const satis
 
 type MustBeTrue<Condition extends true> = Condition
 
-// Fails to compile when Carried gains an outcome the order above leaves out.
+// Fails to compile when Carried gains an outcome the order above leaves out. Nothing imports it: it is exported only so the
+// compile-time check is not an unused local.
 export type RanksEveryOutcome = MustBeTrue<[Exclude<Carried, (typeof FROM_WORST_TO_BEST)[number]>] extends [never] ? true : false>
 
 export const worstDelivery = (outcomes: readonly Carried[]): GroupDelivery =>

@@ -314,9 +314,34 @@ test('It shades the band with the subtle theme color', ASK, async ($, on) => {
   expect((await band.find({ type: 'Box' }))?.props.backgroundColor).toBe('subtle')
 })
 
-test('It keeps the offer under a shape tag, so a reload declines an offer an older version wrote', ASK, async ($, on) => {
+// The tag is what makes a reload decline an offer an older version wrote, under heldPrompt rather than hasHeldPrompt.
+test('It writes the offer once, under the offer-has-held-prompt shape tag, after a finished task', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await finishedTaskTurn($, world)
-  expect(world.offerWrites[0]).toMatchObject({ shape: 'offer-has-held-prompt', value: { signal: 'strong', hasHeldPrompt: false } })
+  expect(world.offerWrites).toEqual([
+    { shape: 'offer-has-held-prompt', value: { signal: 'strong', contextTokens: 200_000, hasHeldPrompt: false, isBusy: false } },
+  ])
 })
+
+const OLD_OFFER = { signal: 'strong', contextTokens: 200_000, heldPrompt: false, isBusy: false }
+
+const storedOfferCases = [
+  ['an older shape tag', { shape: 'offer', value: OLD_OFFER }, []],
+  ['no shape tag', OLD_OFFER, []],
+  [
+    'the current shape tag',
+    { shape: 'offer-has-held-prompt', value: { signal: 'strong', contextTokens: 200_000, hasHeldPrompt: false, isBusy: false } },
+    [{ shape: 'offer-has-held-prompt', value: null }],
+  ],
+] as const
+
+for (const [name, stored, takedowns] of storedOfferCases) {
+  test(`It writes ${JSON.stringify(takedowns)} at session start when the offer stored before a reload has ${name}`, ASK, async ($, on) => {
+    const world = install($, on)
+    // Version 0 is the store's own version, so the takedown's compare-and-set lands on the first try.
+    on('state.get', () => ({ value: { value: stored, version: 0 } }))
+    await startSession($)
+    expect(world.offerWrites).toEqual(takedowns)
+  })
+}

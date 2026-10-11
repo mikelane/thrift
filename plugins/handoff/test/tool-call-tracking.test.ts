@@ -62,10 +62,13 @@ for (const [name, call, ran, tasksBefore, tasksAfter, hasFinishedTask] of callCa
   })
 }
 
-test('It fails the type check for a call that names no tool', () => {
-  const state = createState({ setting: 'ask', threshold: 150_000, compactBeforeClear: false })
-  const ran: TrackedResult = { result: {} }
-  // @ts-expect-error a result is not a call: it has no tool
-  noteToolCall(state, ran, ran)
-  expect(state.backgroundTasks.size).toBe(0)
+// The directive is the check: once a call may leave out its tool, it is unused and tsc fails.
+test('It leaves tasks [] and finished false after a call that names no tool, which the type check refuses', () => {
+  const result = noteCall(
+    // @ts-expect-error a call with no tool is not a TrackedCall
+    { command: 'git commit -m x' },
+    { result: { backgroundTaskId: 'bg1' } },
+    [],
+  )
+  expect(result).toEqual({ tasks: [], hasFinishedTask: false })
 })

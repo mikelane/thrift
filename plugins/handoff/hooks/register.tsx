@@ -826,9 +826,9 @@ const handBackRefused = async ($: EngineInterface, e: PromptSubmitInput, placeme
 }
 
 // The placement is read now: by the time the clock fires, the delivery may be over.
-// SAFETY: during a restore, a refused composer prompt that arrives before a held composer prompt still lands after it in the
-// box, because the hand-back waits for clock.after(0). Reaching that takes two composer submits within one engine round trip,
-// which a real session cannot produce, so no code guards it.
+// SAFETY: during a restore, a refused composer prompt can land in the box after a held composer prompt that arrived later,
+// because the hand-back waits for clock.after(0). That takes two composer submits within one engine round trip, which a real
+// session cannot produce, so no code guards it.
 const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
   const placement = refusedPromptPlacement(state.handoffHold)
   debug($, 'refused a prompt with attachments or context during the handoff')

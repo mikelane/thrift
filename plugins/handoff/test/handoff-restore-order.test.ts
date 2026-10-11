@@ -196,6 +196,23 @@ describe('the transcript wording for a scheduled turn handoff note that could no
     await world.clock.settle()
     expect([logs(world), world.box.text]).toEqual([[`log:The handoff note could not be sent, so here it is:\n${NOTE}`, NOTE_NOT_ADDED], ''])
   })
+
+  test('It names the note and a prompt, without the box, when a scheduled note and a held scheduled prompt cannot be sent', ACT, async ($, on) => {
+    const world = install($, on)
+    const fork = holdFork(world)
+    await startSession($)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await growTo200k($, world)
+    await bash($, world, 'git commit -m x')
+    await completeTurn($)
+    await world.clock.settle()
+    await submitPerson($, 'second job', { kind: 'scheduled-trigger' })
+    world.appendDenied = true
+    world.submitDropped = true
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    expect([logs(world), world.box.text]).toEqual([[`log:The handoff note and a prompt could not be sent, so here they are:\n${NOTE}\n\nsecond job`, NOTE_NOT_ADDED], ''])
+  })
 })
 
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
@@ -249,6 +266,17 @@ describe('restore order on every abandon reason', () => {
     await world.clock.settle()
     expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
   })
+
+  test('It restores held and late prompts in order when background work stops the handoff', ACT, async ($, on) => {
+    const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
+    await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+    await submitPerson($, 'held one')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    arriveTogether($, world, LATE)
+    await finishNote()
+    await endTurn($, world)
+    expect([entered(world), world.box.text]).toEqual(RESTORED_IN_ORDER)
+  })
 })
 
 describe('the box placement of a prompt refused during a handoff', () => {
@@ -259,6 +287,14 @@ describe('the box placement of a prompt refused during a handoff', () => {
     arriveTogether($, world, [{ text: 'late with image', options: { attachments: IMAGE } }])
     await failNote()
     expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job'], 'held one\nlate with image'])
+  })
+
+  test('It keeps a held late person prompt ahead of a later refused one in the box', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    arriveTogether($, world, [{ text: 'late typed' }, { text: 'late with image', options: { attachments: IMAGE } }])
+    await failNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job'], 'late typed\nlate with image'])
   })
 
   test('It puts a person prompt refused while the note is written in front of the draft', async ($, on) => {
@@ -277,62 +313,5 @@ describe('the box placement of a prompt refused during a handoff', () => {
     const result = await submitPerson($, 'with image', { attachments: IMAGE })
     await world.clock.settle()
     expect([dropOf(result), entered(world), world.box.text]).toEqual([undefined, ['entered:composer:with image'], 'draft'])
-  })
-})
-
-type ArrivalWithImage = { text: string; kind?: 'composer' | 'bridge' | 'scheduled-trigger'; attachments?: typeof IMAGE }
-
-// Every arrival lands during the first submit of the restore, in the order given.
-const arriveDuringFirstSubmit = ($: Parameters<typeof submitPerson>[0], world: World, arrivals: ArrivalWithImage[]) => {
-  world.submitHooks = [
-    () => {
-      for (const { text, kind = 'composer', attachments } of arrivals) void submitPerson($, text, { kind, ...(attachments ? { attachments } : {}) })
-    },
-  ]
-}
-
-describe('a handoff that background work stops restores held and late prompts', () => {
-  test('It restores held and late prompts in order when background work stops the handoff', ACT, async ($, on) => {
-    const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
-    await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
-    await submitPerson($, 'held one')
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    arriveDuringFirstSubmit($, world, [{ text: 'late typed' }, { text: 'late bridge', kind: 'bridge' }])
-    await finishNote()
-    await endTurn($, world)
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job', 'entered:plugin:late bridge'], 'held one\nlate typed'])
-  })
-})
-
-describe('a refused prompt that arrives after a held late prompt', () => {
-  test('It keeps a held late person prompt ahead of a later refused one in the box', async ($, on) => {
-    const { world, failNote } = await writingTheNote($, on)
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    arriveDuringFirstSubmit($, world, [{ text: 'late typed' }, { text: 'late with image', attachments: IMAGE }])
-    await failNote()
-    expect(world.box.text).toBe('late typed\nlate with image')
-  })
-})
-
-describe('the unsent wording for a scheduled note joined to a scheduled prompt', () => {
-  test('It names the note and a prompt, without the box, when a scheduled note and a held scheduled prompt cannot be sent', ACT, async ($, on) => {
-    const world = install($, on)
-    const fork = holdFork(world)
-    await startSession($)
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    await growTo200k($, world)
-    await bash($, world, 'git commit -m x')
-    await completeTurn($)
-    await world.clock.settle()
-    await submitPerson($, 'second job', { kind: 'scheduled-trigger' })
-    world.appendDenied = true
-    world.submitDropped = true
-    fork.release(answered('The handoff note.'))
-    await world.clock.settle()
-    const note = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
-    expect([world.effects.filter(e => e.startsWith('log:The handoff note and')), world.box.text]).toEqual([
-      [`log:The handoff note and a prompt could not be sent, so here they are:\n${note}\n\nsecond job`],
-      '',
-    ])
   })
 })
