@@ -8,10 +8,12 @@ import {
   compacted,
   dropOf,
   growTo200k,
+  holdFork,
   install,
   runCommand,
   startSession,
   submitPerson,
+  writingTheNote,
   type World,
 } from './helpers'
 
@@ -23,28 +25,6 @@ const REFUSED_DURING_HANDOFF =
   'A handoff is in progress, and a prompt with attachments or context cannot be held. Its text is put back where possible. Send it again after the handoff.'
 const REFUSED_TOAST = "Not held: a prompt with attachments or context can't wait for a handoff. Send it again after."
 const IMAGE = [{ type: 'image', mediaType: 'image/png' }] as const
-
-const holdFork = (world: World) => {
-  const pendingFork: { release: (result: ModelForkResult) => void } = { release: () => undefined }
-  world.fork = () =>
-    new Promise<ModelForkResult>(resolve => {
-      pendingFork.release = resolve
-    })
-  return pendingFork
-}
-
-const writingTheNote = async ($: Engine, on: On) => {
-  const world = install($, on)
-  const fork = holdFork(world)
-  await startSession($)
-  await runCommand($, 'handoff')
-  await world.clock.settle()
-  const finishWith = async (result: ModelForkResult) => {
-    fork.release(result)
-    await world.clock.settle()
-  }
-  return { world, finishNote: () => finishWith(answered('The handoff note.')), failNote: () => finishWith({ isAnswered: false, reason: 'nothing-to-fork' }) }
-}
 
 const entered = (world: World) => world.effects.filter(effect => effect.startsWith('entered:'))
 
@@ -362,8 +342,8 @@ describe('abandoning a handoff and restoring held prompts', () => {
     const outcome = repeatOnSubmitAfter($, world, 0)
     fork.release({ isAnswered: false, reason: 'nothing-to-fork' })
     await world.clock.settle()
-    const repeat = await outcome.repeat
-    expect([dropOf(repeat), world.effects.filter(effect => effect.startsWith('entered:'))]).toEqual([
+    expect(outcome.repeat).not.toBeNull()
+    expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
       undefined,
       ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
     ])
@@ -469,27 +449,27 @@ describe('prompts that arrive after the clear', () => {
     expect(entered(world).at(-1)).toBe('entered:composer:now ENG-2')
   })
 
-  test('It sends a carried prompt the person re-sends from the box after the fresh session refused it', ASK, async ($, on) => {
+  test('It holds a carried prompt the person re-sends from the box while the scheduled group is delivered', ASK, async ($, on) => {
     const { world, fork } = await carriedPlusScheduled($, on)
     world.submitDropped = true
     const outcome = repeatOnSubmitAfter($, world, 1)
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
-    const repeat = await outcome.repeat
-    expect(dropOf(repeat)).toBeUndefined()
+    expect(outcome.repeat).not.toBeNull()
+    expect(dropOf(await outcome.repeat)).toBe(HELD_FOR_HANDOFF)
   })
 
-  test('It runs a carried prompt the person re-sends from the box after the append was denied and the note was refused', ASK, async ($, on) => {
+  test('It sends a carried prompt the person re-sends from the box after the scheduled group, once the note was refused', ASK, async ($, on) => {
     const { world, fork } = await carriedPlusScheduled($, on)
     world.appendDenied = true
     world.submitDropped = true
     const outcome = repeatOnSubmitAfter($, world, 1)
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
-    const repeat = await outcome.repeat
-    expect([dropOf(repeat), world.effects.filter(effect => effect.startsWith('entered:'))]).toEqual([
-      undefined,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:composer:now ENG-2'],
+    expect(outcome.repeat).not.toBeNull()
+    expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
+      HELD_FOR_HANDOFF,
+      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:plugin:now ENG-2'],
     ])
   })
 })

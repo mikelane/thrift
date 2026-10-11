@@ -17,10 +17,13 @@ export type HeldPromptGroup = HeldPrompt
 // One field instead of two nullable ones, so a state like "prompts taken but still collecting" cannot be written.
 //   holding:    the handoff is being prepared; prompts that arrive are kept, and the carried prompt is a repeat to drop.
 //   delivering: the held prompts were taken; only the carried prompt's text is still watched, until it is handed back.
+//   sending:    the fresh session is being given the note and the held prompts; a prompt that arrives now is kept in
+//               lateArrivals and sent after them, so it cannot run ahead of them.
 export type HandoffHold =
   | { phase: 'idle' }
   | { phase: 'holding'; heldPrompts: HeldPrompt[]; promptCarriedByHandoff: string | null }
   | { phase: 'delivering'; promptCarriedByHandoff: string }
+  | { phase: 'sending'; promptCarriedByHandoff: string | null; lateArrivals: HeldPrompt[] }
 
 // Where a handoff stands relative to its own /clear, so the session end that /clear causes is not taken for the person's.
 //   idle:         no handoff.
@@ -129,14 +132,21 @@ export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null
   }
 }
 
-export const isHoldingForHandoff = (state: SessionState): boolean => state.handoffHold.phase === 'holding'
+export const isHoldingForHandoff = (state: SessionState): boolean =>
+  state.handoffHold.phase === 'holding' || state.handoffHold.phase === 'sending'
 
 // Returns how many prompts are held now, or 0 when no handoff is holding and nothing was added.
 export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number => {
   const hold = state.handoffHold
-  if (hold.phase !== 'holding') return 0
-  hold.heldPrompts.push(prompt)
-  return hold.heldPrompts.length
+  if (hold.phase === 'holding') {
+    hold.heldPrompts.push(prompt)
+    return hold.heldPrompts.length
+  }
+  if (hold.phase === 'sending') {
+    hold.lateArrivals.push(prompt)
+    return hold.lateArrivals.length
+  }
+  return 0
 }
 
 export const isCarriedByHandoff = (state: SessionState, text: string): boolean =>
@@ -153,9 +163,34 @@ export const takeHeldPrompts = (state: SessionState): HeldPrompt[] => {
   return hold.heldPrompts
 }
 
+// The held prompts are taken before the fresh session gets anything, so this starts at the top of the delivery with no await
+// before it. Holding stays on until takeLateArrivals finds nothing left.
+export const beginSending = (state: SessionState): void => {
+  const hold = state.handoffHold
+  state.handoffHold = {
+    phase: 'sending',
+    promptCarriedByHandoff: hold.phase === 'idle' ? null : hold.promptCarriedByHandoff,
+    lateArrivals: [],
+  }
+}
+
+// Prompts that arrived while sending, oldest first. Finding none ends the sending in the same synchronous run, so a prompt
+// cannot land between the empty check and the end of the hold and be left unsent.
+export const takeLateArrivals = (state: SessionState): HeldPrompt[] => {
+  const hold = state.handoffHold
+  if (hold.phase !== 'sending') return []
+  if (hold.lateArrivals.length === 0) {
+    state.handoffHold = { phase: 'idle' }
+    return []
+  }
+  return hold.lateArrivals.splice(0)
+}
+
 // The carried prompt is no longer a repeat to drop once it has been handed back or sent: a later copy is a new prompt.
 export const releaseCarried = (state: SessionState): void => {
-  if (state.handoffHold.phase === 'delivering') state.handoffHold = { phase: 'idle' }
+  const hold = state.handoffHold
+  if (hold.phase === 'delivering') state.handoffHold = { phase: 'idle' }
+  if (hold.phase === 'sending') hold.promptCarriedByHandoff = null
 }
 
 // The carried prompt travels in the group that shares the handoff's origin.

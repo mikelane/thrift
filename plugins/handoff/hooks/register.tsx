@@ -64,6 +64,7 @@ import {
 } from './prompt-plan'
 import {
   addHeldPrompt,
+  beginSending,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -84,8 +85,10 @@ import {
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
+  takeLateArrivals,
   waitForTurnEnd,
   type ButtonPress,
+  type HeldPrompt,
   type HeldPromptGroup,
   type SessionState,
 } from './session-state'
@@ -425,6 +428,20 @@ const sendHeldGroups = async (
   return deliveries
 }
 
+// Prompts that arrived during the delivery go in one by one in arrival order, and more may arrive while they do.
+const sendLateArrivals = async ($: EngineInterface, state: SessionState) => {
+  const prompts: HeldPrompt[] = []
+  const deliveries: Carried[] = []
+  for (let arrived = takeLateArrivals(state); arrived.length > 0; arrived = takeLateArrivals(state)) {
+    for (const prompt of arrived) {
+      await inspectPrompt($, state, prompt.text)
+      deliveries.push(await sendOrKeepInBox($, prompt.text, prompt.isUnattended))
+    }
+    prompts.push(...arrived)
+  }
+  return { prompts, deliveries }
+}
+
 const continueInFreshSession = async (
   $: EngineInterface,
   state: SessionState,
@@ -434,6 +451,8 @@ const continueInFreshSession = async (
   hasTurnAfterNote: boolean,
   clearedBy: ClearedBy,
 ) => {
+  // Before the first await: from here a prompt that arrives is held until the note and the held prompts have gone in.
+  beginSending(state)
   await registerHandoffCommand($)
   const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
@@ -445,6 +464,7 @@ const continueInFreshSession = async (
   // and refillBox catch their own failures, and keepInTranscript and releaseCarriedGroup make no async calls, so no test
   // can make the loop throw. Any call added to the loop must not throw either.
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
+  const late = await sendLateArrivals($, state)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
@@ -453,9 +473,9 @@ const continueInFreshSession = async (
     clearedBy,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
-      ...heldGroupFields(settledHandoff.heldGroups),
+      ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
-      held_other_delivery: worstDelivery(deliveries),
+      held_other_delivery: worstDelivery([...deliveries, ...late.deliveries]),
     },
   })
 }

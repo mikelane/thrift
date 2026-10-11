@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   addHeldPrompt,
+  beginSending,
   preClearOutcome,
   beginHandoffHold,
   beginBeforeClear,
@@ -23,6 +24,7 @@ import {
   releaseCarriedGroup,
   resetForNewSession,
   takeHeldPrompts,
+  takeLateArrivals,
 } from '../hooks/session-state'
 
 const settings = { setting: 'ask', threshold: 120_000, compactBeforeClear: true } as const
@@ -436,4 +438,64 @@ test('It stores zero from noteCacheReads when the turn reported no cache reads',
   state.cacheReadTokens = 99_000
   noteCacheReads(state, undefined)
   expect(state.cacheReadTokens).toBe(0)
+})
+
+const sendingState = () => {
+  const state = createState(settings)
+  beginHandoffHold(state, person)
+  takeHeldPrompts(state)
+  beginSending(state)
+  return state
+}
+
+test('It reports holding while sending from isHoldingForHandoff', () => {
+  expect(isHoldingForHandoff(sendingState())).toBe(true)
+})
+
+test('It keeps the prompt the handoff carries watched through beginSending', () => {
+  expect(isCarriedByHandoff(sendingState(), person.text)).toBe(true)
+})
+
+test('It watches no carried prompt after beginSending when the handoff carried none', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  takeHeldPrompts(state)
+  beginSending(state)
+  expect(state.handoffHold).toEqual({ phase: 'sending', promptCarriedByHandoff: null, lateArrivals: [] })
+})
+
+test('It returns the number of prompts that arrived while sending from addHeldPrompt', () => {
+  const state = sendingState()
+  expect([addHeldPrompt(state, nightly), addHeldPrompt(state, person)]).toEqual([1, 2])
+})
+
+test('It returns the prompts that arrived while sending, oldest first, from takeLateArrivals', () => {
+  const state = sendingState()
+  addHeldPrompt(state, nightly)
+  addHeldPrompt(state, person)
+  expect(takeLateArrivals(state)).toEqual([nightly, person])
+})
+
+test('It keeps holding after takeLateArrivals returned prompts, so more can still arrive', () => {
+  const state = sendingState()
+  addHeldPrompt(state, nightly)
+  takeLateArrivals(state)
+  expect([addHeldPrompt(state, person), takeLateArrivals(state)]).toEqual([1, [person]])
+})
+
+test('It ends the sending when takeLateArrivals finds no prompt', () => {
+  const state = sendingState()
+  expect([takeLateArrivals(state), state.handoffHold, isHoldingForHandoff(state)]).toEqual([[], { phase: 'idle' }, false])
+})
+
+test('It returns nothing from takeLateArrivals when the handoff is not sending', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, person)
+  expect([takeLateArrivals(state), state.handoffHold.phase]).toEqual([[], 'holding'])
+})
+
+test('It stops watching the carried prompt after releaseCarried while sending, and keeps holding', () => {
+  const state = sendingState()
+  releaseCarried(state)
+  expect([isCarriedByHandoff(state, person.text), isHoldingForHandoff(state)]).toEqual([false, true])
 })
