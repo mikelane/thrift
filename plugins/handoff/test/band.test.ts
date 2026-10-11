@@ -313,3 +313,10 @@ test('It shades the band with the subtle theme color', ASK, async ($, on) => {
   const band = await mountBand($)
   expect((await band.find({ type: 'Box' }))?.props.backgroundColor).toBe('subtle')
 })
+
+test('It keeps the offer under a shape tag, so a reload declines an offer an older version wrote', ASK, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  await finishedTaskTurn($, world)
+  expect(world.offerWrites[0]).toMatchObject({ shape: 'offer-has-held-prompt', value: { signal: 'strong', hasHeldPrompt: false } })
+})

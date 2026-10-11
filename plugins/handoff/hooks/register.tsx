@@ -139,7 +139,8 @@ const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be
 const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): string =>
   `Untested on Claude Code ${engineVersion}, so this session only logs decisions.${isInteractive ? ' /handoff still works.' : ''}`
 
-const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
+// The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
+const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
 
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 

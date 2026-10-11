@@ -1,3 +1,5 @@
+import type { Shaped } from 'claude-code'
+
 export type Offer = {
   signal: 'strong' | 'weak'
   contextTokens: number
@@ -11,6 +13,6 @@ export type BandState = Offer | Writing
 
 declare module 'claude-code' {
   interface PluginState {
-    handoff: { offer: BandState | null }
+    handoff: { offer: Shaped<BandState | null> }
   }
 }

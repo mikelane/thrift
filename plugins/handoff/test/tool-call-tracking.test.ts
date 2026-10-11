@@ -62,7 +62,7 @@ for (const [name, call, ran, tasksBefore, tasksAfter, hasFinishedTask] of callCa
   })
 }
 
-test('It refuses a call that names no tool', () => {
+test('It fails the type check for a call that names no tool', () => {
   const state = createState({ setting: 'ask', threshold: 150_000, compactBeforeClear: false })
   const ran: TrackedResult = { result: {} }
   // @ts-expect-error a result is not a call: it has no tool

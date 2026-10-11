@@ -64,6 +64,7 @@ export type World = {
   registerThrows: boolean
   logWrite: 'ok' | 'exit' | 'throw'
   stateSetThrows: boolean
+  offerWrites: unknown[]
   usageDenied: boolean
   boxReadDenied: boolean
   sessionIdDenials: number
@@ -130,6 +131,7 @@ const defaultWorld = (clock: MockClock): World => ({
   registerThrows: false,
   logWrite: 'ok',
   stateSetThrows: false,
+  offerWrites: [],
   usageDenied: false,
   boxReadDenied: false,
   sessionIdDenials: 0,
@@ -273,6 +275,7 @@ const installTurnMocks = (on: On, world: World) => {
 const installStateMocks = (on: On, world: World) => {
   on('state.set', (_$, e, next) => {
     if (world.stateSetThrows) return { deny: 'cannot write' }
+    if (e.key === 'offer') world.offerWrites.push(e.value)
     return next(e)
   })
 }
