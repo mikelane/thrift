@@ -152,6 +152,9 @@ jobs:
           # scripts on, so it controls every file name and byte in it. Issues are opened only for
           # plugin-shaped names, at most this many per run, with the log fenced so it can't escape.
           MAX_ISSUES: 5
+          # GitHub rejects issue bodies over 65536 characters. A log with a backtick run longer
+          # than this is withheld from the body, so the fence cannot push the body past the limit.
+          MAX_FENCE: 64
         run: |
           problems=0
           version=$(cat "$RUNNER_TEMP/failures/claude-version")
@@ -169,13 +172,9 @@ jobs:
           unopened=0
           for log in "${logs[@]}"; do
             plugin=$(basename "$log" .txt)
-            if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            if [[ ! "$plugin" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ "$log" != "$RUNNER_TEMP/failures/${plugin}.txt" ]; then
               printf 'Skipping a log with an unexpected name: %q\n' "$plugin"
               problems=1
-              continue
-            fi
-            if [ "$opened" -ge "$MAX_ISSUES" ]; then
-              unopened=$((unopened + 1))
               continue
             fi
             title="Claude Code ${version} breaks ${plugin}"
@@ -184,18 +183,26 @@ jobs:
               [ "$DRY_RUN" != true ] || echo "dry run: issue already open for ${title}"
               continue
             fi
+            if [ "$opened" -ge "$MAX_ISSUES" ]; then
+              unopened=$((unopened + 1))
+              continue
+            fi
             opened=$((opened + 1))
-            tail -c 60000 "$log" > "$RUNNER_TEMP/log-tail.txt"
-            longest=$(grep -o '`*' "$RUNNER_TEMP/log-tail.txt" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
-            fence=$(printf '`%.0s' $(seq 1 $(( longest > 2 ? longest + 1 : 3 ))))
+            tail -c 60000 "$log" | tr -d '\000' > "$RUNNER_TEMP/log-tail.txt"
+            longest=$(grep -ao '`*' "$RUNNER_TEMP/log-tail.txt" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
             {
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
               echo
               echo 'The fix moves the pinned build in this workflow and TESTED_THROUGH in the plugin forward.'
               echo
-              echo "$fence"
-              cat "$RUNNER_TEMP/log-tail.txt"
-              echo "$fence"
+              if [ "$longest" -ge "$MAX_FENCE" ]; then
+                echo "The log is withheld because it contains an unusually long backtick run. See ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} for it."
+              else
+                fence=$(printf '`%.0s' $(seq 1 $(( longest > 2 ? longest + 1 : 3 ))))
+                echo "$fence"
+                cat "$RUNNER_TEMP/log-tail.txt"
+                echo "$fence"
+              fi
             } > "$RUNNER_TEMP/issue-body.md"
             if [ "$DRY_RUN" = true ]; then
               echo "dry run: would open an issue titled: ${title}"
