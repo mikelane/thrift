@@ -1,0 +1,8 @@
+{
+  "name": "thrift",
+  "private": true,
+  "description": "Pins the tools the plugin checks run with; scripts/check.sh and CI both read this.",
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}
