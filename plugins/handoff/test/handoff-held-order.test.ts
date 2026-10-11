@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, lastRecord, submitPerson, writingTheNote, type World } from './helpers'
+import { dropOf, lastRecord, runCommand, submitPerson, writingTheNote, type World } from './helpers'
 import type { Engine } from 'claude-code/testing'
 
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
@@ -113,6 +113,45 @@ describe('prompts that arrive while the handoff delivers', () => {
     await finishNote()
     expect(dropOf(await submitPerson($, 'after'))).toBeUndefined()
     expect(entered(world)).toEqual(['entered:plugin:held one', 'entered:composer:after'])
+  })
+})
+
+describe('events that land while the handoff delivers', () => {
+  test('It sends a prompt that arrives mid-delivery after the note a person-run /clear made room for', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await runCommand($, 'clear')
+    await submitPerson($, 'held one')
+    arriveDuringSubmits($, world, [{ text: 'late' }])
+    await finishNote()
+    expect(entered(world)).toEqual(['entered:plugin:held one', 'entered:plugin:late'])
+  })
+
+  test('It refuses a second /handoff while the first is delivering', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    let reply: unknown
+    world.submitHooks = [
+      () => {
+        void runCommand($, 'handoff').then(result => {
+          reply = result
+        })
+      },
+    ]
+    await finishNote()
+    expect([reply, world.forkPrompts.length]).toEqual([{ text: 'A handoff or compaction is already in progress.' }, 1])
+  })
+
+  test('It puts a prompt with an attachment that arrives mid-delivery back in the box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    let late: Promise<unknown> = Promise.resolve(undefined)
+    world.submitHooks = [
+      () => {
+        late = submitPerson($, 'late picture', { attachments: [{ type: 'image', mediaType: 'image/png' }] })
+      },
+    ]
+    await finishNote()
+    expect([dropOf(await late) === undefined, world.box.text]).toEqual([false, 'late picture'])
   })
 })
 
