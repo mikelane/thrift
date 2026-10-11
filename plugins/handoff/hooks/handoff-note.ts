@@ -12,6 +12,8 @@ Use plain Markdown, at most 400 words, and no preamble.`
 
 export type NoteDelivery = 'appended' | 'submitted' | 'in_box' | 'not_carried'
 
+export type Carried = Exclude<NoteDelivery, 'appended'>
+
 export const turnAfterNoteLine = (oldSessionId: string): string =>
   `A turn ran in the previous session while or after this note was written, so the note may not cover it. To see that turn: ${resumeCommand(oldSessionId)}`
 

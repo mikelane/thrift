@@ -287,7 +287,7 @@ that decide nothing are logged too, so you can compute a trigger rate. Prompt te
 the log, and nothing from it is written into the session.
 
 ```json
-{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","held_groups":0,"held_unattended":false,"effective_mode":"act"}}
+{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
 ```
 
 | Field | Values |
@@ -310,6 +310,9 @@ the log, and nothing from it is written into the session.
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 | `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, from when it was scheduled until the clear, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). A count, never prompt text |
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
+| `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff itself began from a scheduled trigger, `false` when a person began it. The held group of the same origin is the one that rides with the note |
+| `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the groups that did not ride with the note were delivered once the fresh session started. When the note is appended to the session, every held group is delivered this way; when the note is sent as a prompt, it carries the group of the handoff's origin and only the other group counts. `submitted` (entered into the session), `in_box` (left in the prompt box), `not_carried` (neither worked; the prompt was kept in the transcript), or `none` (no group was delivered separately). With two groups, the worst outcome (`not_carried`, then `in_box`, then `submitted`). Never prompt text |
+| `trigger_values.held_restore` | Present only on the `none` record that ends a handoff. How the held groups were put back when the handoff was abandoned: `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked; kept in the transcript), or `none` (no group was held). With two groups, the worst outcome. The record is written after the restore, so it reports what happened. Never prompt text |
 
 A prompt is evaluated, and so logged, only when it names new work.
 
@@ -389,6 +392,7 @@ branch in `hooks/` has a test whose name says which.
 | `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
 | `hooks/decision-record.ts` | The log record and the log location |
 | `hooks/handoff-note.ts` | `HANDOFF_PROMPT` and the handoff message |
+| `hooks/held-delivery.ts` | `summarizeDelivery`: the worst outcome across the groups sent or restored, as one scalar |
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
 | `hooks/session-state.ts` | The per-session state object |

@@ -30,7 +30,7 @@ import {
   logLocation,
   type DecisionAction,
   type DecisionReason,
-  type HeldGroupFields,
+  type HeldRecordFields,
   type TriggerValues,
 } from './decision-record'
 import { isUntestedEngine } from './engine-version'
@@ -46,8 +46,10 @@ import {
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
+  type Carried,
   type NoteDelivery,
 } from './handoff-note'
+import { summarizeDelivery } from './held-delivery'
 import {
   canHoldPrompt,
   carriesExtras,
@@ -126,7 +128,7 @@ type Evaluation = Trigger & {
   action: DecisionAction
   reason?: DecisionReason
   note?: NoteDelivery
-  heldFields?: HeldGroupFields
+  heldFields?: HeldRecordFields
   sessionId?: string
 }
 
@@ -336,13 +338,15 @@ const submitEntered = async ($: EngineInterface, text: string, failureLabel: str
   }
 }
 
-const submitOrKeepInTranscript = async ($: EngineInterface, text: string) => {
-  if (!(await submitEntered($, text, 'could not restore the held prompt'))) keepInTranscript($, text)
+const submitOrKeepInTranscript = async ($: EngineInterface, text: string): Promise<Carried> => {
+  if (await submitEntered($, text, 'could not restore the held prompt')) return 'submitted'
+  keepInTranscript($, text)
+  return 'not_carried'
 }
 
-const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean) => {
-  if (!isUnattended && (await refillBox($, text))) return
-  await submitOrKeepInTranscript($, text)
+const restorePrompt = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
+  if (!isUnattended && (await refillBox($, text))) return 'in_box'
+  return submitOrKeepInTranscript($, text)
 }
 
 const abandonHandoff = async (
@@ -355,17 +359,22 @@ const abandonHandoff = async (
 ) => {
   await takeDownBand($, state)
   announce($, message)
+  const restores: Carried[] = []
+  for (const { text, isUnattended } of settledHandoff.heldGroups) {
+    restores.push(await restorePrompt($, text, isUnattended))
+    releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
+  }
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'none',
     reason,
-    heldFields: heldGroupFields(settledHandoff.heldGroups),
+    heldFields: {
+      ...heldGroupFields(settledHandoff.heldGroups),
+      handoff_unattended: settledHandoff.isUnattended,
+      held_restore: summarizeDelivery(restores),
+    },
     sessionId,
   })
-  for (const { text, isUnattended } of settledHandoff.heldGroups) {
-    await restorePrompt($, text, isUnattended)
-    releaseCarriedGroup(state, { text, isUnattended }, settledHandoff.isUnattended)
-  }
 }
 
 const writeNote = async ($: EngineInterface): Promise<string | null> => {
@@ -415,8 +424,6 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type Carried = Exclude<NoteDelivery, 'appended'>
-
 const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: boolean): Promise<Carried> => {
   if (await submitEntered($, text, 'could not send the prompt')) return 'submitted'
   if (!isUnattended && (await refillBox($, text))) return 'in_box'
@@ -456,19 +463,24 @@ const continueInFreshSession = async (
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
+  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
+  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  const deliveries: Carried[] = []
+  for (const group of groupsToSend) {
+    deliveries.push(await sendOrKeepInBox($, group.text, group.isUnattended))
+    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
+  }
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
     sessionId: oldId,
     note: noteDelivery,
-    heldFields: heldGroupFields(settledHandoff.heldGroups),
+    heldFields: {
+      ...heldGroupFields(settledHandoff.heldGroups),
+      handoff_unattended: settledHandoff.isUnattended,
+      held_other_delivery: summarizeDelivery(deliveries),
+    },
   })
-  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
-  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  for (const group of groupsToSend) {
-    await sendOrKeepInBox($, group.text, group.isUnattended)
-    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
-  }
 }
 
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
