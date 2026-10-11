@@ -6,6 +6,9 @@ import type { Mode, Signal } from './signals'
 
 export type { DecisionReason }
 
+// Who ran the clear that a `cleared` record follows: the person's own /clear during the wait, or the handoff's.
+export type ClearedBy = 'person' | 'handoff'
+
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
 export type TriggerValues = {
@@ -23,6 +26,7 @@ export type TriggerValues = {
   handoff_unattended?: boolean
   held_other_delivery?: GroupDelivery
   held_restore?: GroupDelivery
+  cleared_by?: ClearedBy
 }
 
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
@@ -56,6 +60,7 @@ export type Evaluation = Trigger & {
   action: DecisionAction
   reason?: DecisionReason
   note?: NoteDelivery
+  clearedBy?: ClearedBy
   heldFields?: HeldRecordFields
   sessionId?: string
 }
@@ -99,7 +104,7 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
 })
 
 export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation, now: number, sessionId: string) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, heldFields } = evaluation
   return decisionRecord({
     now,
     sessionId,
@@ -116,6 +121,7 @@ export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation,
       cache_read_tokens: cacheReadTokens,
       ...(reason ? { reason } : {}),
       ...(note ? { note } : {}),
+      ...(clearedBy ? { cleared_by: clearedBy } : {}),
       ...heldFields,
     },
   })

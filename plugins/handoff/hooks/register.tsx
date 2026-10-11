@@ -29,6 +29,7 @@ import {
   logLocation,
   recordFromEvaluation,
   snapshot,
+  type ClearedBy,
   type DecisionReason,
   type Evaluation,
   type HandoffRequest,
@@ -427,6 +428,7 @@ const continueInFreshSession = async (
   oldId: string,
   note: string,
   hasTurnAfterNote: boolean,
+  clearedBy: ClearedBy,
 ) => {
   await registerHandoffCommand($)
   const noteDelivery = await deliverNote($, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
@@ -444,6 +446,7 @@ const continueInFreshSession = async (
     action: 'cleared',
     sessionId: oldId,
     note: noteDelivery,
+    clearedBy,
     heldFields: {
       ...heldGroupFields(settledHandoff.heldGroups),
       handoff_unattended: settledHandoff.isUnattended,
@@ -559,7 +562,8 @@ const runHandoff = async (
         prepared.oldId,
       )
     }
-    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote)
+    const clearedBy = outcome === 'clear' ? 'handoff' : 'person'
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
   } finally {
     endHandoff(state)
     state.pending = null

@@ -988,3 +988,15 @@ test('It logs to debug that the wait is for stopping the handoff once the sessio
   await world.clock.settle()
   expect(world.debugLines).toContain('handoff: waiting for a running turn to end before stopping the handoff')
 })
+
+test('It records cleared_by person on the cleared record when the person clears during the wait', async ($, on) => {
+  const world = await firstHandoffEndsByPersonClear($, on)
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
+})
+
+test('It records cleared_by handoff on the cleared record when the handoff runs its own clear', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await finishNote()
+  expect(world.effects).toContain('clear')
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
+})

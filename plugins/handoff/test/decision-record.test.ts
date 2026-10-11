@@ -50,6 +50,8 @@ describe('recordFromEvaluation', () => {
     { name: 'a reason', extra: { reason: 'backoff' }, expected: { reason: 'backoff' } },
     { name: 'a note delivery', extra: { note: 'in_box' }, expected: { note: 'in_box' } },
     { name: 'held fields', extra: { heldFields }, expected: heldFields },
+    { name: 'cleared_by person', extra: { clearedBy: 'person' }, expected: { cleared_by: 'person' } },
+    { name: 'cleared_by handoff', extra: { clearedBy: 'handoff' }, expected: { cleared_by: 'handoff' } },
   ]
   for (const { name, extra, expected } of optionalFields) {
     test(`It adds ${name} to trigger_values only when the evaluation has them`, () => {
@@ -58,11 +60,12 @@ describe('recordFromEvaluation', () => {
     })
   }
 
-  test('It leaves out reason, note and held fields when the evaluation has none', () => {
+  test('It leaves out reason, note, cleared_by and held fields when the evaluation has none', () => {
     const { trigger_values } = recordFromEvaluation(state, evaluation, NOW, 'abc')
     expect(trigger_values).not.toHaveProperty('reason')
     expect(trigger_values).not.toHaveProperty('note')
     expect(trigger_values).not.toHaveProperty('held_groups')
+    expect(trigger_values).not.toHaveProperty('cleared_by')
   })
 
   test('It reads the threshold, setting and mode from the state, not the evaluation', () => {
