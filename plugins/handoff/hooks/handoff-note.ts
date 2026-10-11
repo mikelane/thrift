@@ -33,6 +33,13 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
   `The handoff note could not be added to this session. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
+export const FINAL_MESSAGES: Record<NoteDelivery, (oldSessionId: string) => string> = {
+  appended: handedOffMessage,
+  submitted: handedOffMessage,
+  in_box: noteInBoxMessage,
+  not_carried: noteNotCarriedMessage,
+}
+
 const PROMPT_SEPARATOR = '\n\n'
 
 export const joinPrompts = (handoff: string, heldPrompts: string | undefined): string =>

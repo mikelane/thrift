@@ -24,17 +24,20 @@ import {
   statusText,
 } from './band-text'
 import {
-  decisionRecord,
   heldGroupFields,
   LOG_WRITER,
   logLocation,
-  type DecisionAction,
+  recordFromEvaluation,
+  snapshot,
   type DecisionReason,
-  type HeldRecordFields,
-  type TriggerValues,
+  type Evaluation,
+  type HandoffRequest,
+  type SettledHandoff,
+  type Trigger,
 } from './decision-record'
 import { isUntestedEngine } from './engine-version'
 import {
+  FINAL_MESSAGES,
   HANDOFF_PROMPT,
   handedOffMessage,
   handoffMessage,
@@ -64,12 +67,14 @@ import {
   beginBeforeClear,
   beginOwnClear,
   beginNoteWindow,
+  claim,
   createState,
   preClearOutcome,
   endHandoff,
   endMainTurn,
   isCarriedByHandoff,
   isHoldingForHandoff,
+  noteCacheReads,
   recordSessionEnd,
   releaseCarried,
   releaseCarriedGroup,
@@ -116,75 +121,19 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put back in the box. Her
 
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null)
 
-type Trigger = {
-  point: TriggerValues['point']
-  signal: Signal
-  isBusy: boolean
-  contextTokens: number
-  cacheReadTokens: number
-}
-
-type Evaluation = Trigger & {
-  action: DecisionAction
-  reason?: DecisionReason
-  note?: NoteDelivery
-  heldFields?: HeldRecordFields
-  sessionId?: string
-}
-
-type HandoffRequest = {
-  trigger: Trigger
-  heldPrompt?: string
-  isUnattended: boolean
-}
-
-// What a handoff delivers once its held prompts are taken: one group per origin, each following its own flag.
-type SettledHandoff = {
-  trigger: Trigger
-  isUnattended: boolean
-  heldGroups: HeldPromptGroup[]
-}
-
-const snapshot = (state: SessionState, point: Trigger['point'], signal: Signal, isBusy: boolean): Trigger => ({
-  point,
-  signal,
-  isBusy,
-  contextTokens: state.contextTokens,
-  cacheReadTokens: state.cacheReadTokens,
-})
-
 const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, heldFields, sessionId } = evaluation
   try {
     const [now, id, thriftHome, home] = await Promise.all([
       $.clock.now(),
-      sessionId ?? $.session.id(),
+      evaluation.sessionId ?? $.session.id(),
       $.env.get('THRIFT_HOME'),
       $.env.get('HOME'),
     ])
     const location = logLocation(thriftHome, home)
     if (location === null) return debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
-    const record = decisionRecord({
-      now,
-      sessionId: id,
-      action,
-      engineVersion: state.engineVersion,
-      effectiveMode: state.mode,
-      triggerValues: {
-        point,
-        signal,
-        context_tokens: contextTokens,
-        threshold: state.threshold,
-        is_background_busy: isBusy,
-        setting: state.setting,
-        cache_read_tokens: cacheReadTokens,
-        ...(reason ? { reason } : {}),
-        ...(note ? { note } : {}),
-        ...heldFields,
-      },
-    })
+    const record = recordFromEvaluation(state, evaluation, now, id)
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
       stdin: `${JSON.stringify(record)}\n`,
     })
@@ -242,12 +191,6 @@ const runCompaction = async ($: EngineInterface, state: SessionState, trigger: T
   } finally {
     state.pending = null
   }
-}
-
-const claim = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
-  if (state.pending !== null) return false
-  state.pending = kind
-  return true
 }
 
 const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger): boolean => {
@@ -451,13 +394,6 @@ const sendOrKeepInBox = async ($: EngineInterface, text: string, isUnattended: b
   return 'not_carried'
 }
 
-const FINAL_MESSAGES: Record<NoteDelivery, (oldId: string) => string> = {
-  appended: handedOffMessage,
-  submitted: handedOffMessage,
-  in_box: noteInBoxMessage,
-  not_carried: noteNotCarriedMessage,
-}
-
 const announce = ($: EngineInterface, message: string) => {
   $.ui.log(message)
   $.ui.toast(message)
@@ -638,10 +574,6 @@ const scheduleHandoff = (
     void logFailure($, runHandoff($, state, request, beforeRun))
   })
   return true
-}
-
-const noteCacheReads = (state: SessionState, e: TurnCompleteInput) => {
-  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
 }
 
 const evaluateTurnEnd = async (

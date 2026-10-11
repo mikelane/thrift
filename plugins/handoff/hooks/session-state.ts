@@ -1,3 +1,5 @@
+import type { TurnCompleteInput } from 'claude-code'
+
 import type { Offer } from '../types'
 import type { Button, Mode } from './signals'
 
@@ -212,4 +214,14 @@ export const releaseTurnEndWaiter = (state: SessionState): void => {
   const waiter = state.turnEndWaiter
   state.turnEndWaiter = null
   waiter?.()
+}
+
+export const claim = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
+  if (state.pending !== null) return false
+  state.pending = kind
+  return true
+}
+
+export const noteCacheReads = (state: SessionState, e: TurnCompleteInput): void => {
+  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
 }
