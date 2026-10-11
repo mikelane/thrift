@@ -76,12 +76,29 @@ run_labeled_step() {
   return "$rc"
 }
 
+# Runs each plugins/<name>/checks/*.ts with Node's type stripping. These checks read the plugin's
+# files, which `claude plugin test` cannot. A plugin with no checks/ directory has nothing to run.
+run_file_checks() {
+  local plugin_dir="$1" check
+  for check in "$plugin_dir"/checks/*.ts; do
+    if [[ -L "$check" && ! -e "$check" ]]; then
+      echo "## file check: $(basename "$check")"
+      echo "FAILED: $plugin_dir: file check: $(basename "$check") is a dangling symlink. Point it at an existing file or delete it." >&2
+      return 1
+    fi
+    [[ -e "$check" ]] || continue
+    run_labeled_step "$plugin_dir" "file check: $(basename "$check")" \
+      node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types "$check" || return 1
+  done
+}
+
 # Chained with && because set -e is off inside a function called from an `if`.
 run_checks_in_dir() {
   local plugin_dir="$1"
   run_labeled_step "$plugin_dir" 'type declarations' write_type_declarations "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'claude plugin validate' claude plugin validate "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'tsc -p' "$tsc_bin" -p "$plugin_dir" &&
+    run_file_checks "$plugin_dir" &&
     run_labeled_step "$plugin_dir" 'claude plugin test' claude plugin test "$plugin_dir"
 }
 

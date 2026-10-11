@@ -1,21 +1,11 @@
+import type { DecisionReason } from './decision-reasons'
 import type { NoteDelivery } from './handoff-note'
 import type { HeldPromptGroup } from './session-state'
 import type { Mode, Signal } from './signals'
 
-export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
+export type { DecisionReason }
 
-export type DecisionReason =
-  | 'backoff'
-  | 'compaction_vetoed'
-  | 'compaction_failed'
-  | 'no_handoff_written'
-  | 'handoff_failed'
-  | 'clear_failed'
-  | 'session_ended'
-  | 'band_failed'
-  | 'not_now'
-  | 'send_here'
-  | 'background_busy'
+export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
 export type TriggerValues = {
   point: 'turn-end' | 'prompt' | 'command' | 'button' | 'session-start'
