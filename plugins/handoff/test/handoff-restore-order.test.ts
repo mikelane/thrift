@@ -2,7 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts } from '../hooks/handoff-note'
 import type { HeldPrompt } from '../hooks/session-state'
-import { bash, runCommand, completeTurn, dropOf, growTo200k, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
+import { answered, bash, runCommand, completeTurn, dropOf, growTo200k, holdFork, install, lastRecord, startSession, submitPerson, writingTheNote, type World } from './helpers'
+import { ACT, actHandoffWhileWritingTheNote, endTurn } from './wait-for-turn-helpers'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 
@@ -276,5 +277,62 @@ describe('the box placement of a prompt refused during a handoff', () => {
     const result = await submitPerson($, 'with image', { attachments: IMAGE })
     await world.clock.settle()
     expect([dropOf(result), entered(world), world.box.text]).toEqual([undefined, ['entered:composer:with image'], 'draft'])
+  })
+})
+
+type ArrivalWithImage = { text: string; kind?: 'composer' | 'bridge' | 'scheduled-trigger'; attachments?: typeof IMAGE }
+
+// Every arrival lands during the first submit of the restore, in the order given.
+const arriveDuringFirstSubmit = ($: Parameters<typeof submitPerson>[0], world: World, arrivals: ArrivalWithImage[]) => {
+  world.submitHooks = [
+    () => {
+      for (const { text, kind = 'composer', attachments } of arrivals) void submitPerson($, text, { kind, ...(attachments ? { attachments } : {}) })
+    },
+  ]
+}
+
+describe('a handoff that background work stops restores held and late prompts', () => {
+  test('It restores held and late prompts in order when background work stops the handoff', ACT, async ($, on) => {
+    const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
+    await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
+    await submitPerson($, 'held one')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    arriveDuringFirstSubmit($, world, [{ text: 'late typed' }, { text: 'late bridge', kind: 'bridge' }])
+    await finishNote()
+    await endTurn($, world)
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job', 'entered:plugin:late bridge'], 'held one\nlate typed'])
+  })
+})
+
+describe('a refused prompt that arrives after a held late prompt', () => {
+  test('It keeps a held late person prompt ahead of a later refused one in the box', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    arriveDuringFirstSubmit($, world, [{ text: 'late typed' }, { text: 'late with image', attachments: IMAGE }])
+    await failNote()
+    expect(world.box.text).toBe('late typed\nlate with image')
+  })
+})
+
+describe('the unsent wording for a scheduled note joined to a scheduled prompt', () => {
+  test('It names the note and a prompt, without the box, when a scheduled note and a held scheduled prompt cannot be sent', ACT, async ($, on) => {
+    const world = install($, on)
+    const fork = holdFork(world)
+    await startSession($)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await growTo200k($, world)
+    await bash($, world, 'git commit -m x')
+    await completeTurn($)
+    await world.clock.settle()
+    await submitPerson($, 'second job', { kind: 'scheduled-trigger' })
+    world.appendDenied = true
+    world.submitDropped = true
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    const note = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
+    expect([world.effects.filter(e => e.startsWith('log:The handoff note and')), world.box.text]).toEqual([
+      [`log:The handoff note and a prompt could not be sent, so here they are:\n${note}\n\nsecond job`],
+      '',
+    ])
   })
 })
