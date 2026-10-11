@@ -6,7 +6,7 @@ import { turnAfterNoteLine } from '../hooks/handoff-note'
 import { answered, bash, compacted, completeTurn, growTo200k, dropOf, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson, type World } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
-const BUSY_MESSAGE = 'Background work started, and a handoff would cut it off. Nothing was cleared. Type /handoff to hand off anyway.'
+const BUSY_MESSAGE = 'Background work is running, and a handoff would cut it off. This session is unchanged. Type /handoff to hand off anyway.'
 const BUSY_TOAST = `toast:${BUSY_MESSAGE}`
 const BUSY_LOG = `log:${BUSY_MESSAGE}`
 const SESSION_ENDED_MESSAGE = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
@@ -14,7 +14,7 @@ const SESSION_ENDED_TOAST = `toast:${SESSION_ENDED_MESSAGE}`
 const SESSION_ENDED_LOG = `log:${SESSION_ENDED_MESSAGE}`
 const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
-const WAITING = 'Handoff note written. It continues when the current turn ends. Your prompts stay held.'
+const WAITING = 'Handoff note written. The handoff continues when the current turn ends. Your prompts stay held.'
 
 const BASE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
 const SECOND_MESSAGE = 'Handoff from the previous session (new-session), written by Claude just before a /clear:\n\nSecond note.'
@@ -575,7 +575,7 @@ test('It logs session_ended against the session the handoff started in', async (
 
 test('It logs to debug when the handoff starts waiting for a running turn', async ($, on) => {
   const world = await waitingForATurn($, on)
-  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before the clear')
+  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before the handoff goes on')
 })
 
 test('It logs to debug once when a second turn starts during the wait', async ($, on) => {
@@ -938,7 +938,9 @@ test('It takes the band down when the person clears before the note starts and t
   await runCommand($, 'handoff')
   await runCommand($, 'clear')
   await world.clock.settle()
-  expect(world.appended).toHaveLength(1)
+  // The clear lands before prepareHandoff reads the id, so the note names the new session: the race the SAFETY note in
+  // prepareHandoff accepts.
+  expect(world.appended).toEqual([BASE_MESSAGE.replace('(old-session)', '(new-session)')])
   expect(await bandText($)).toEqual(['engine band'])
 })
 
@@ -973,7 +975,7 @@ test('It shows the waiting status again on a second handoff after the first ende
 test('It logs to debug that the wait is for delivering the note once the person has cleared', async ($, on) => {
   const world = await personClearedThenTurnInFreshSession($, on)
   expect(world.debugLines).toContain('handoff: waiting for a running turn to end before delivering the note')
-  expect(world.debugLines).not.toContain('handoff: waiting for a running turn to end before the clear')
+  expect(world.debugLines).not.toContain('handoff: waiting for a running turn to end before the handoff goes on')
 })
 
 test('It logs to debug that the wait is for stopping the handoff once the session ended another way', async ($, on) => {
@@ -1009,6 +1011,7 @@ test('It records compacted_before_clear on the background_busy abandon that foll
     action: 'none',
     trigger_values: { reason: 'background_busy', compacted_before_clear: true },
   })
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
 })
 
 test('It leaves compacted_before_clear off the background_busy abandon when compactBeforeClear is off', ACT, async ($, on) => {
@@ -1026,6 +1029,7 @@ test('It records compacted_before_clear on the session_ended abandon that follow
   await runCommand($, 'handoff')
   await world.clock.settle()
   expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_ended', compacted_before_clear: true } })
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
 })
 
 test('It records cleared_by person and compacted_before_clear when the person clears during the compaction', COMPACTING, async ($, on) => {
@@ -1045,9 +1049,9 @@ test('It records cleared_by person and compacted_before_clear when the person cl
 })
 
 const BUSY_COMPACTED_MESSAGE =
-  'Background work started, and a handoff would cut it off. The session was compacted but not cleared. Type /handoff to hand off anyway.'
+  'Background work is running, and a handoff would cut it off. This session was compacted, not cleared. Type /handoff to hand off anyway.'
 
-test('It says the session was compacted but not cleared in the busy refusal that follows a compaction', ACT_COMPACTING, async ($, on) => {
+test('It says the session was compacted, not cleared, in the busy refusal that follows a compaction', ACT_COMPACTING, async ($, on) => {
   const world = await actHandoffWithBusyTurn($, on)
   expect(world.effects).toContain(`toast:${BUSY_COMPACTED_MESSAGE}`)
   expect(world.effects).toContain(`log:${BUSY_COMPACTED_MESSAGE}`)

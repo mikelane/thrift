@@ -22,11 +22,15 @@ export const handoffMessage = (oldSessionId: string, note: string, hasTurnAfterN
   return hasTurnAfterNote ? `${message}\n\n${turnAfterNoteLine(oldSessionId)}` : message
 }
 
+// One wording for the session's state in every message that stops a handoff, so each outcome reads the same.
+const sessionLeftLine = (hasCompacted: boolean): string =>
+  hasCompacted ? 'This session was compacted, not cleared.' : 'This session is unchanged.'
+
 export const clearFailedMessage = (hasCompacted: boolean): string =>
-  `The handoff was written but /clear failed. ${hasCompacted ? 'This session was compacted but not cleared.' : 'This session is unchanged.'}`
+  `The handoff was written but /clear failed. ${sessionLeftLine(hasCompacted)} Type /handoff to try again.`
 
 export const busyRefusalMessage = (hasCompacted: boolean): string =>
-  `Background work started, and a handoff would cut it off. ${hasCompacted ? 'The session was compacted but not cleared.' : 'Nothing was cleared.'} Type /handoff to hand off anyway.`
+  `Background work is running, and a handoff would cut it off. ${sessionLeftLine(hasCompacted)} Type /handoff to hand off anyway.`
 
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 

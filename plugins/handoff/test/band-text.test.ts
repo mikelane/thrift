@@ -257,5 +257,5 @@ test('It returns the waiting status for the waiting state from statusText', () =
 })
 
 test('It says the note is written, when it clears, and that prompts stay held in the waiting status', () => {
-  expect(WAITING_STATUS).toBe('Handoff note written. It continues when the current turn ends. Your prompts stay held.')
+  expect(WAITING_STATUS).toBe('Handoff note written. The handoff continues when the current turn ends. Your prompts stay held.')
 })

@@ -75,7 +75,7 @@ test('It skips the compaction and leaves compacted_before_clear off when the per
   expect(clearCount(world)).toBe(0)
 })
 
-test('It orders the cleared record keys as the README example does', COMPACTING, async ($, on) => {
+test('It orders the cleared record keys after a compaction with compacted_before_clear between cleared_by and the held fields', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await runCommand($, 'handoff')
@@ -110,7 +110,7 @@ test('It records the new session id and cleared_by person when the person clears
   expect(lastRecord(world)).toMatchObject({ action: 'cleared', session_id: 'new-session', trigger_values: { cleared_by: 'person', note: 'appended' } })
 })
 
-test('It writes one record per handoff when a second handoff follows a person clear', COMPACTING, async ($, on) => {
+test('It writes one cleared record per handoff, each compacted and cleared by the handoff, for two handoffs in a row', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await runCommand($, 'handoff')

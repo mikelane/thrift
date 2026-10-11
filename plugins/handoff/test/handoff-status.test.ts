@@ -21,7 +21,7 @@ const ASK = { options: { handoffMode: 'ask' } } as const
 const ACT = { options: { handoffMode: 'act' } } as const
 
 const STATUS = 'Writing a handoff note — this takes a few seconds…'
-const WAITING = 'Handoff note written. It continues when the current turn ends. Your prompts stay held.'
+const WAITING = 'Handoff note written. The handoff continues when the current turn ends. Your prompts stay held.'
 
 // The fork stays unanswered until the test releases it, so the band can be read while the note is being written.
 const holdFork = (world: World) => {

@@ -106,8 +106,16 @@ export const decisionRecord = ({ now, sessionId, action, engineVersion, effectiv
   trigger_values: { ...triggerValues, effective_mode: effectiveMode },
 })
 
-export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation, now: number, sessionId: string) => {
+export type DecisionRecord = ReturnType<typeof decisionRecord>
+
+export const recordFromEvaluation = (
+  state: RecordState,
+  evaluation: Evaluation,
+  now: number,
+  sessionId: string,
+): DecisionRecord => {
   const { action, point, signal, isBusy, contextTokens, cacheReadTokens, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
+  const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   return decisionRecord({
     now,
     sessionId,
@@ -125,7 +133,7 @@ export const recordFromEvaluation = (state: RecordState, evaluation: Evaluation,
       ...(reason ? { reason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
-      ...(compactedBeforeClear ? { compacted_before_clear: true as const } : {}),
+      ...compactedFields,
       ...heldFields,
     },
   })

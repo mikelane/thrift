@@ -42,13 +42,10 @@ import {
   busyRefusalMessage,
   clearFailedMessage,
   HANDOFF_PROMPT,
-  handedOffMessage,
   handoffMessage,
   groupHeldPrompts,
   holdsPrompt,
   joinPrompts,
-  noteInBoxMessage,
-  noteNotCarriedMessage,
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
@@ -73,6 +70,7 @@ import {
   claim,
   createState,
   preClearOutcome,
+  type PreClearOutcome,
   endHandoff,
   endMainTurn,
   isCarriedByHandoff,
@@ -97,7 +95,6 @@ import {
   busyRefusalTrigger,
   contextFromStep,
   type Button,
-  type Signal,
 } from './signals'
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
@@ -496,12 +493,18 @@ const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
 
 // Once a session end decided the outcome, no clear will run: the wait is for delivering the note or for stopping.
 const WAIT_STARTED_LINES = {
-  none: 'waiting for a running turn to end before the clear',
+  none: 'waiting for a running turn to end before the handoff goes on',
   cleared_by_person: 'waiting for a running turn to end before delivering the note',
   other: 'waiting for a running turn to end before stopping the handoff',
 } as const satisfies Record<'none' | NonNullable<SessionState['sessionEndBeforeClear']>, string>
 
 const waitStartedLine = (state: SessionState): string => WAIT_STARTED_LINES[state.sessionEndBeforeClear ?? 'none']
+
+// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
+const CLEARED_BY = {
+  clear: 'handoff',
+  deliver_to_person_clear: 'person',
+} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy'>, ClearedBy>
 
 const runHandoff = async (
   $: EngineInterface,
@@ -563,8 +566,8 @@ const runHandoff = async (
       isCleared = await clearSession($)
     } else {
       // No clear runs here, so this await is safe; the waiting status must not outlive the wait.
-      // SAFETY: a resume that lands during this await is still delivered to, as one landing during registerHandoffCommand
-      // already is. Both windows are one engine round trip wide and the result is a note in the resumed session. No guard.
+      // SAFETY: a resume that lands during this await gets the note in the resumed session, as one landing during
+      // registerHandoffCommand already does. Each window is one engine round trip wide. No guard.
       await takeDownBand($, state)
     }
     const settledHandoff = settleAfterWait()
@@ -578,7 +581,7 @@ const runHandoff = async (
         prepared.oldId,
       )
     }
-    const clearedBy = outcome === 'clear' ? 'handoff' : 'person'
+    const clearedBy = CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
   } finally {
     endHandoff(state)
@@ -612,7 +615,7 @@ const evaluateTurnEnd = async (
   hasFinishedTask: boolean,
 ) => {
   if (state.pending !== null) return
-  noteCacheReads(state, e)
+  noteCacheReads(state, e.usage?.cache_read_input_tokens)
   const isBusy = await isBackgroundBusy($, state)
   const { signal, outcome } = planTurnEnd({
     contextTokens: state.contextTokens,
@@ -968,7 +971,7 @@ export const register: Register = (on, options) => {
     state.deferredPress = null
     try {
       if (deferredPress !== null) {
-        noteCacheReads(state, e)
+        noteCacheReads(state, e.usage?.cache_read_input_tokens)
         await claimAndRunPress($, state, deferredPress)
       } else if (e.reason === 'answer') await evaluateTurnEnd($, state, e, hasFinishedTask)
       else await refreshBandBusyState($, state)

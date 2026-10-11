@@ -199,7 +199,7 @@ test('It tells the person the session is unchanged when /clear throws', ACT, asy
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged.')
+  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged. Type /handoff to try again.')
   expect(world.effects).not.toContain('append')
   expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'clear_failed' } })
 })
@@ -485,18 +485,19 @@ test('It leaves compacted_before_clear off the cleared record when compactBefore
   expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
 })
 
-test('It says the session was compacted but not cleared when /clear throws after a successful compaction', ACT_COMPACTING, async ($, on) => {
+test('It says the session was compacted, not cleared, when /clear throws after a successful compaction', ACT_COMPACTING, async ($, on) => {
   const world = install($, on)
   world.clearThrows = true
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session was compacted but not cleared.')
-  expect(world.effects).toContain('log:The handoff was written but /clear failed. This session was compacted but not cleared.')
+  expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session was compacted, not cleared. Type /handoff to try again.')
+  expect(world.effects).toContain('log:The handoff was written but /clear failed. This session was compacted, not cleared. Type /handoff to try again.')
   expect(lastRecord(world)).toMatchObject({
     action: 'none',
     trigger_values: { reason: 'clear_failed', compacted_before_clear: true },
   })
+  expect(lastRecord(world).trigger_values).not.toHaveProperty('cleared_by')
 })
 
 for (const [name, compaction] of compactionOutcomes) {
@@ -507,7 +508,7 @@ for (const [name, compaction] of compactionOutcomes) {
     await startSession($)
     await finishedTaskTurn($, world)
     await world.clock.settle()
-    expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged.')
+    expect(world.effects).toContain('toast:The handoff was written but /clear failed. This session is unchanged. Type /handoff to try again.')
     expect(lastRecord(world).trigger_values).not.toHaveProperty('compacted_before_clear')
   })
 }

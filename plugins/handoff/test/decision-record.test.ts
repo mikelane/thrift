@@ -46,6 +46,17 @@ describe('recordFromEvaluation', () => {
     })
   })
 
+  const BASE_VALUES = {
+    point: 'turn-end',
+    signal: 'strong',
+    context_tokens: 200000,
+    threshold: 150000,
+    is_background_busy: false,
+    setting: 'ask',
+    cache_read_tokens: 180000,
+    effective_mode: 'act',
+  } as const
+
   const optionalFields: ReadonlyArray<{ name: string; extra: Partial<Evaluation>; expected: object }> = [
     { name: 'a reason', extra: { reason: 'backoff' }, expected: { reason: 'backoff' } },
     { name: 'a note delivery', extra: { note: 'in_box' }, expected: { note: 'in_box' } },
@@ -55,20 +66,56 @@ describe('recordFromEvaluation', () => {
     { name: 'cleared_by handoff', extra: { clearedBy: 'handoff' }, expected: { cleared_by: 'handoff' } },
   ]
   for (const { name, extra, expected } of optionalFields) {
-    test(`It adds ${name} to trigger_values only when the evaluation has them`, () => {
+    test(`It adds ${name} to trigger_values and nothing else when the evaluation has it`, () => {
       const { trigger_values } = recordFromEvaluation(state, { ...evaluation, ...extra }, NOW, 'abc')
-      expect(trigger_values).toMatchObject(expected)
+      expect(trigger_values).toEqual({ ...BASE_VALUES, ...expected })
     })
   }
 
-  test('It leaves out reason, note, cleared_by and held fields when the evaluation has none', () => {
-    const { trigger_values } = recordFromEvaluation(state, evaluation, NOW, 'abc')
-    expect(trigger_values).not.toHaveProperty('reason')
-    expect(trigger_values).not.toHaveProperty('note')
-    expect(trigger_values).not.toHaveProperty('held_groups')
-    expect(trigger_values).not.toHaveProperty('cleared_by')
-    expect(trigger_values).not.toHaveProperty('compacted_before_clear')
-  })
+  // register.tsx passes compactedBeforeClear: false (not undefined) whenever no compaction ran before the clear.
+  const absentFields: ReadonlyArray<{ name: string; extra: Partial<Evaluation> }> = [
+    { name: 'compactedBeforeClear is false', extra: { compactedBeforeClear: false } },
+    { name: 'clearedBy is undefined', extra: { clearedBy: undefined } },
+    { name: 'reason is undefined', extra: { reason: undefined } },
+    { name: 'note is undefined', extra: { note: undefined } },
+    { name: 'heldFields is undefined', extra: { heldFields: undefined } },
+  ]
+  for (const { name, extra } of absentFields) {
+    test(`It returns only the base trigger_values when ${name}`, () => {
+      const { trigger_values } = recordFromEvaluation(state, { ...evaluation, ...extra }, NOW, 'abc')
+      expect(trigger_values).toEqual(BASE_VALUES)
+    })
+  }
+
+  const clearedHeld = { held_groups: 0, held_unattended: false, handoff_unattended: false, held_other_delivery: 'none' } as const
+
+  // One row per DecisionAction, each with the fields that record type carries in register.tsx.
+  const recordTypes: ReadonlyArray<{ action: Evaluation['action']; extra: Partial<Evaluation>; mode: string; values: object }> = [
+    { action: 'none', extra: { reason: 'background_busy', compactedBeforeClear: true }, mode: 'active', values: { reason: 'background_busy', compacted_before_clear: true } },
+    { action: 'advised', extra: {}, mode: 'active', values: {} },
+    {
+      action: 'cleared',
+      extra: { note: 'appended', clearedBy: 'person', compactedBeforeClear: false, heldFields: clearedHeld },
+      mode: 'active',
+      values: { note: 'appended', cleared_by: 'person', ...clearedHeld },
+    },
+    { action: 'compacted', extra: {}, mode: 'active', values: {} },
+    { action: 'untested_engine', extra: {}, mode: 'active', values: {} },
+  ]
+  for (const { action, extra, mode, values } of recordTypes) {
+    test(`It builds the ${action} record with its own trigger_values`, () => {
+      const record = recordFromEvaluation(state, { ...evaluation, action, ...extra }, NOW, 'abc')
+      expect(record).toEqual({
+        ts: '2026-10-11T12:00:00.000Z',
+        session_id: 'abc',
+        component: 'handoff',
+        mode,
+        action,
+        engine_version: '2.1.295',
+        trigger_values: { ...BASE_VALUES, ...values },
+      })
+    })
+  }
 
   test('It reads the threshold, setting and mode from the state, not the evaluation', () => {
     const { trigger_values } = recordFromEvaluation({ ...state, threshold: 99000, setting: 'off', mode: 'off' }, evaluation, NOW, 'abc')

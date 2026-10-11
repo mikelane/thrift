@@ -1,5 +1,3 @@
-import type { TurnCompleteInput } from 'claude-code'
-
 import type { Offer } from '../types'
 import type { Button, Mode } from './signals'
 
@@ -222,6 +220,6 @@ export const claim = (state: SessionState, kind: NonNullable<SessionState['pendi
   return true
 }
 
-export const noteCacheReads = (state: SessionState, e: TurnCompleteInput): void => {
-  state.cacheReadTokens = e.usage?.cache_read_input_tokens ?? 0
+export const noteCacheReads = (state: SessionState, cacheReadTokens: number | undefined): void => {
+  state.cacheReadTokens = cacheReadTokens ?? 0
 }

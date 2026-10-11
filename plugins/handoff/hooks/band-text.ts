@@ -77,7 +77,7 @@ export const WAITING: Writing = { isWriting: true, stage: 'wait' }
 
 export const WRITING_STATUS = 'Writing a handoff note — this takes a few seconds…'
 
-export const WAITING_STATUS = 'Handoff note written. It continues when the current turn ends. Your prompts stay held.'
+export const WAITING_STATUS = 'Handoff note written. The handoff continues when the current turn ends. Your prompts stay held.'
 
 export const statusText = ({ stage }: Writing): string => (stage === 'wait' ? WAITING_STATUS : WRITING_STATUS)
 
