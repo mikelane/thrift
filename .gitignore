@@ -11,3 +11,9 @@ node_modules/
 
 # Decision logs belong under $THRIFT_HOME, never in the tree
 decisions.jsonl
+
+# Compiled output from a bare tsc, and credentials that must never be committed
+plugins/*/hooks/*.js
+.env*
+*.pem
+*.key
