@@ -198,7 +198,7 @@ test_harness_accepts_the_last_step_of_a_job_followed_by_a_job_with_an_underscore
 # The report step must sit in the report job, and every key line must be readable
 # ---------------------------------------------------------------------------------------------
 # add_raw_lines_after_report_step_name <text>: the text goes in byte for byte. awk -v and ENVIRON
-# both decode escapes such as f on macOS awk, so neither carries it.
+# both decode escapes such as \u0066 on macOS awk, so neither carries it.
 add_raw_lines_after_report_step_name() {
   local at
   at=$(grep -nxF -- "      - name: $REPORT_STEP" "$CI_YML" | cut -d: -f1)
@@ -219,9 +219,11 @@ test_harness_exits_2_when_the_report_step_gains_a_hex_escaped_if_key() {
   assert_exit_code 2
 }
 test_harness_exits_2_when_the_report_step_gains_a_unicode_escaped_if_key() {
-  add_raw_lines_after_report_step_name '        "if": false'
+  add_raw_lines_after_report_step_name '        "i\u0066": false'
+  assert_file_has "$TEST_DIR/ci.yml" '\u0066'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
+  assert_out_has 'cannot read as a plain key'
 }
 test_harness_exits_2_when_the_report_step_gains_an_if_key_with_a_tab_before_the_colon() {
   add_raw_lines_after_report_step_name "        if$(printf '\t'): false"
