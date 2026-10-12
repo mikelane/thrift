@@ -34,7 +34,7 @@ test_entry_point_fails_when_no_test_file_exists() {
   assert_exit_code 2
 }
 test_entry_point_passes_a_name_fragment_with_a_space_through_unsplit() {
-  stand_in_harness a.test.sh 'echo "args:[$*] n=$#"'
+  stand_in_harness a.test.sh 'echo "args:[$*] n=$#"; echo "1 of 1 passed"'
   run_entry_point 'two words'
   assert_exit_code 0
   assert_out_has 'args:[two words] n=1'
@@ -48,6 +48,12 @@ test_entry_point_fails_when_no_test_matches_the_name_fragment() {
 test_entry_point_fails_when_a_test_file_runs_no_tests() {
   stand_in_harness a.test.sh 'true'
   run_entry_point
+  assert_exit_code_nonzero
+  assert_out_has 'a.test.sh ran no tests'
+}
+test_entry_point_fails_when_a_test_file_runs_no_tests_under_a_name_fragment() {
+  stand_in_harness a.test.sh 'true'
+  run_entry_point nothing-matches
   assert_exit_code_nonzero
   assert_out_has 'a.test.sh ran no tests'
 }

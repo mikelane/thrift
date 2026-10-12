@@ -31,7 +31,7 @@ for test_file in "${test_files[@]}"; do
   case "$status" in
     0)
       ran_any=1
-      if [[ "$#" -eq 0 ]] && ! grep -qE '^[0-9]+ of [1-9][0-9]* passed$' "$output_copy"; then
+      if ! grep -qE '^[0-9]+ of [1-9][0-9]* passed$' "$output_copy"; then
         echo "${test_file##*/} ran no tests: it printed no 'N of M passed' line. End it with: run_tests \"\$@\"" >&2
         [[ "$overall" -ge 1 ]] || overall=1
       fi ;;
