@@ -17,6 +17,9 @@ run_entry_point() {
   "$BASH" "$SCRATCH_HARNESS/canary-report.sh" "$@" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
 }
 
+test_a_test_cannot_read_the_list_of_test_names() {
+  if { read -r -u 3 _; } 2> /dev/null; then fail 'the test read a name from fd 3'; fi
+}
 test_entry_point_fails_when_a_test_file_exits_4_without_a_name_fragment() {
   make_scratch_harness a.test.sh 'exit 4'
   printf '%s\n' 'echo "1 of 1 passed"' > "$SCRATCH_HARNESS/b.test.sh"

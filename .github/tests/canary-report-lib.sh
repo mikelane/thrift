@@ -195,7 +195,7 @@ run_one_test() {
   DID_TEST_FAIL=0
   FAILURE_DETAILS=''
   setup
-  "$test_function"
+  "$test_function" 3<&-
   TEST_COUNT=$((TEST_COUNT + 1))
   if [[ "$DID_TEST_FAIL" == 0 ]]; then
     echo "PASS $test_function"
