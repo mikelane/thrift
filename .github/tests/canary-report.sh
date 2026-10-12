@@ -19,12 +19,22 @@ HARNESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 test_files=("$HARNESS_DIR"/*.test.sh)
 [[ -e "${test_files[0]}" ]] || { echo "No *.test.sh file found in $HARNESS_DIR." >&2; exit 2; }
 
+# The output of each test file is also kept in $output_copy. A file that never calls run_tests exits 0
+# without a "N of M passed" line, which a plain exit status cannot tell from a file that passed.
+output_copy=$(mktemp) || { echo 'mktemp failed, so the entry point has nowhere to keep test output.' >&2; exit 2; }
+trap 'rm -f "$output_copy"' EXIT
+
 overall=0 ran_any=0
 for test_file in "${test_files[@]}"; do
   status=0
-  "$BASH" "$test_file" "$@" || status=$?
+  "$BASH" "$test_file" "$@" | tee "$output_copy" || status=$?
   case "$status" in
-    0) ran_any=1 ;;
+    0)
+      ran_any=1
+      if [[ "$#" -eq 0 ]] && ! grep -qE '^[0-9]+ of [1-9][0-9]* passed$' "$output_copy"; then
+        echo "${test_file##*/} ran no tests: it printed no 'N of M passed' line. End it with: run_tests \"\$@\"" >&2
+        [[ "$overall" -ge 1 ]] || overall=1
+      fi ;;
     4) [[ "$#" -gt 0 ]] || { ran_any=1; overall=4; } ;;  # 4 is "no test matches the fragment" only when there is a fragment
     *) ran_any=1; [[ "$overall" -ge "$status" ]] || overall=$status ;;
   esac

@@ -45,4 +45,21 @@ test_entry_point_fails_when_no_test_matches_the_name_fragment() {
   assert_exit_code 1
 }
 
+test_entry_point_fails_when_a_test_file_runs_no_tests() {
+  stand_in_harness a.test.sh 'true'
+  run_entry_point
+  assert_exit_code_nonzero
+  assert_out_has 'a.test.sh ran no tests'
+}
+test_entry_point_passes_a_test_file_that_reports_its_tests() {
+  stand_in_harness a.test.sh 'echo "3 of 3 passed"'
+  run_entry_point
+  assert_exit_code 0
+}
+test_entry_point_fails_when_a_test_file_reports_no_tests_run() {
+  stand_in_harness a.test.sh 'echo "0 of 0 passed"'
+  run_entry_point
+  assert_exit_code_nonzero
+}
+
 run_tests "$@"
