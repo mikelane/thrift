@@ -372,4 +372,20 @@ test_harness_exits_2_when_a_line_at_indent_3_sits_between_the_report_job_keys() 
   assert_out_has 'is indented less than a job key'
 }
 
+# ---------------------------------------------------------------------------------------------
+# A job key after the report step's steps ends the step, so its lines are not the step's
+# ---------------------------------------------------------------------------------------------
+test_extraction_ignores_a_job_key_with_a_mapping_after_the_report_step() {
+  extract_report_step "$CI_YML" > "$TEST_DIR/expected"
+  { cat "$CI_YML"; printf "    outputs:\n      done: 'yes'\n"; } > "$TEST_DIR/ci.yml"
+  extract_report_step "$TEST_DIR/ci.yml" > "$TEST_DIR/out" 2>&1 || fail 'extraction failed on a job key with a mapping after the steps'
+  cmp -s "$TEST_DIR/out" "$TEST_DIR/expected" || fail 'the script changed when a job key followed the report step'
+}
+test_extraction_ignores_a_job_key_with_a_nested_mapping_after_the_report_step() {
+  extract_report_step "$CI_YML" > "$TEST_DIR/expected"
+  { cat "$CI_YML"; printf '    defaults:\n      run:\n        working-directory: .\n'; } > "$TEST_DIR/ci.yml"
+  extract_report_step "$TEST_DIR/ci.yml" > "$TEST_DIR/out" 2>&1 || fail 'extraction failed on a job key with a nested mapping after the steps'
+  cmp -s "$TEST_DIR/out" "$TEST_DIR/expected" || fail 'the script changed when a nested job key followed the report step'
+}
+
 run_tests "$@"

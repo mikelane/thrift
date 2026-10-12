@@ -33,7 +33,8 @@ function check_line() {
 }
 state == 4 { next }
 state == 0 { if ($0 == want) state = 1; next }
-$0 ~ /^      - / || $0 ~ /^([^ #]|  [^ #])/ { state = 4; next }
+# A key at the job's indentation (`    outputs:`) ends the job's steps, so the step ends there too.
+$0 ~ /^      - / || $0 ~ /^([^ #]|  [^ #])/ || yaml_key($0, 4) != "" { state = 4; next }
 state == 2 {
   if ($0 ~ /^ *$/) { print ""; next }
   if (substr($0, 1, 10) == "          ") { print substr($0, 11); next }
