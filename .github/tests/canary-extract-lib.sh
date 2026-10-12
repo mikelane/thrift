@@ -9,7 +9,10 @@ CHECK_STEP='Check every plugin with scripts/check.sh'
 # job_lines <job> <ci.yml>: the lines of one job, after its header. Every reader of a job goes
 # through this, so they agree on where the job ends (see canary-job-lines.awk).
 job_lines() {
-  awk -v want_job="  $1:" -f "$HARNESS_DIR/canary-job-lines.awk" "$2"
+  local status=0
+  awk -v want_job="  $1:" -f "$HARNESS_DIR/canary-job-lines.awk" "$2" 2> "$WORK_DIR/job-lines.err" || status=$?
+  [[ "$status" == 0 ]] || echo "The job '$1' in $2 $(cat "$WORK_DIR/job-lines.err")" >&2
+  return "$status"
 }
 
 # Prints the body of one step's `run:` from a job of a workflow file, de-indented. Exits 1, and says
@@ -25,7 +28,7 @@ job_lines() {
 # Every key at the step's indentation, before or after `run`, must be listed.
 extract_step() {
   local ci_yml="$1" job="$2" step_name="$3" spec="$4" script occurrences status=0
-  job_lines "$job" "$ci_yml" > "$WORK_DIR/job.yml"
+  job_lines "$job" "$ci_yml" > "$WORK_DIR/job.yml" || return 1
   occurrences=$(grep -cxF -- "      - name: $step_name" "$WORK_DIR/job.yml" || true)
   if [[ "$occurrences" -gt 1 ]]; then
     echo "The step '$step_name' appears $occurrences times in the job '$job' of $ci_yml, so the harness cannot tell which one runs. Give each step a unique name." >&2
@@ -80,7 +83,11 @@ REPORT_JOB_IF=$'${{ !cancelled() && (github.event_name == \'schedule\' || github
 
 # read_job_key <job> <key> <ci.yml>: prints the value of each job-level `key:` of a job, one per line.
 read_job_key() {
-  job_lines "$1" "$3" | awk -v want_key="$2" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-job-keys.awk"
+  local status=0
+  job_lines "$1" "$3" > "$WORK_DIR/job-keys.yml" || return 1
+  awk -v want_key="$2" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-job-keys.awk" "$WORK_DIR/job-keys.yml" 2> "$WORK_DIR/job-keys.err" || status=$?
+  [[ "$status" == 0 ]] || echo "The job '$1' in $3 $(cat "$WORK_DIR/job-keys.err")" >&2
+  return "$status"
 }
 
 # Exits 1, and says why, unless the job has exactly one job-level `if:` with the expected value, so
@@ -88,7 +95,7 @@ read_job_key() {
 check_job_condition() {
   local ci_yml="$1" job="$2" expected="$3" values why
   grep -qxF -- "  $job:" "$ci_yml" || { echo "No job named '$job' in $ci_yml, so the harness cannot check its condition." >&2; return 1; }
-  values=$(read_job_key "$job" if "$ci_yml")
+  values=$(read_job_key "$job" if "$ci_yml") || return 1
   if [[ -z "$values" ]]; then why='has no "if" key'
   elif [[ "$values" == *$'\n'* ]]; then why='has "if" more than once'
   elif [[ "$values" != "$expected" ]]; then why="has \"if\" set to something other than \"$expected\""

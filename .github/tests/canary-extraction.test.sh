@@ -257,4 +257,68 @@ test_report_job_check_fails_when_a_comment_is_the_only_mention_of_the_report_ste
   assert_exit_code_nonzero
 }
 
+# ---------------------------------------------------------------------------------------------
+# A plain scalar continues onto deeper-indented lines, so no key line may be followed by one
+# ---------------------------------------------------------------------------------------------
+# add_line_after <exact line> <text>: writes $TEST_DIR/ci.yml with the text, byte for byte, after the
+# first line of ci.yml that equals the given line.
+add_line_after() {
+  local at
+  at=$(grep -nxF -- "$1" "$CI_YML" | head -n 1 | cut -d: -f1)
+  [[ -n "$at" ]] || { fail "no line: $1"; return; }
+  { head -n "$at" "$CI_YML"; printf '%s\n' "$2"; tail -n "+$((at + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
+}
+# move_report_env_after_run <extra>: the report step's env block moves to the end of the step (key
+# order does not matter in YAML), followed by the extra text.
+move_report_env_after_run() {
+  EXTRA="$1" awk -v name="      - name: $REPORT_STEP" '
+    $0 == name { inside = 1; print; next }
+    inside && $0 == "        env:" { in_env = 1 }
+    inside && in_env && $0 == "        shell: bash" { in_env = 0 }
+    in_env { env = env $0 "\n"; next }
+    { print }
+    END { printf "%s%s", env, ENVIRON["EXTRA"] }' "$CI_YML" > "$TEST_DIR/ci.yml"
+}
+test_harness_exits_2_when_the_report_step_shell_continues_onto_the_next_line() {
+  add_line_after '        shell: bash' '          --noprofile --norc {0}'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'continues the value of the key above it'
+}
+test_harness_exits_2_when_the_record_step_condition_continues_onto_the_next_line() {
+  add_line_after "        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'" \
+    '          && github.run_attempt == 99'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'continues the value of the key above it'
+}
+test_harness_exits_2_when_a_step_key_the_harness_only_allows_continues_onto_the_next_line() {
+  add_line_after '        run: scripts/check.sh' '          --extra'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'continues the value of the key above it'
+}
+test_harness_exits_2_when_the_report_job_condition_continues_onto_the_next_line() {
+  add_line_after "    if: $REPORT_JOB_IF" '      && false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'continues the value of the key above it'
+}
+test_harness_exits_2_when_a_quoted_env_value_continuing_at_column_0_hides_an_if_key() {
+  move_report_env_after_run $'          NOTE: "a\nb"\n        if: false\n'
+  assert_file_has "$TEST_DIR/ci.yml" 'b"'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is not a key line'
+}
+test_harness_accepts_a_comment_and_a_blank_line_between_a_key_and_the_next_key() {
+  add_line_after '        shell: bash' $'\n          # note'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+test_harness_accepts_a_mapping_under_an_empty_key() {
+  run_harness_against "$CI_YML"
+  assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+
 run_tests "$@"

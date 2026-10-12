@@ -21,3 +21,23 @@ function yaml_value(line, indent,    rest, value) {
   sub(/^ +/, "", value)
   return value
 }
+
+# Whether the `key:` line at `indent` starts a plain or quoted scalar, which a more indented line
+# after it would continue. An empty value (a mapping or sequence follows), a comment and a block
+# scalar indicator (`|`, `>-`, `|2`) do not.
+function opens_scalar(line, indent,    value) {
+  if (yaml_key(line, indent) == "") return 0
+  value = yaml_value(line, indent)
+  return !(value == "" || value ~ /^#/ || value ~ /^[|>][-+0-9]*( +#.*)?$/)
+}
+
+# Feed every line of a region to this, in order. Returns 1 for a line that continues the scalar of
+# the `key:` line at `indent` above it: not blank, not a comment, indented deeper than that key.
+# YAML reads such a line as part of the key's value, and the harness reads only the first line.
+function continues_scalar(line, indent,    line_indent, continues) {
+  if (line ~ /^ *$/ || line ~ /^ *#/) return 0
+  line_indent = match(line, /[^ ]/) - 1
+  continues = scalar_is_open && line_indent > indent
+  scalar_is_open = !continues && opens_scalar(line, indent)
+  return continues
+}
