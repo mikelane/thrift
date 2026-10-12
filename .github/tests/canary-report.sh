@@ -25,7 +25,7 @@ for test_file in "${test_files[@]}"; do
   "$BASH" "$test_file" "$@" || status=$?
   case "$status" in
     0) ran_any=1 ;;
-    4) ;;
+    4) [[ "$#" -gt 0 ]] || { ran_any=1; overall=4; } ;;  # 4 is "no test matches the fragment" only when there is a fragment
     *) ran_any=1; [[ "$overall" -ge "$status" ]] || overall=$status ;;
   esac
 done
