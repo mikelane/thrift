@@ -41,3 +41,13 @@ function continues_scalar(line, indent,    line_indent, continues) {
   scalar_is_open = !continues && opens_scalar(line, indent)
   return continues
 }
+
+# Whether a line sits between the key lines of a region yet is indented less than any value of them
+# can be: not blank, not a comment, indented 1 to `floor - 1` spaces. A quoted value that continues
+# at that indent (`NOTE: "a` closed by a line at indent 3) is one string to libyaml, so the keys
+# the harness reads next to it may not be keys at all. Callers exempt the lines that are valid.
+function is_shallow_stray(line, floor,    line_indent) {
+  if (line ~ /^ *$/ || line ~ /^ *#/) return 0
+  line_indent = match(line, /[^ ]/) - 1
+  return line_indent >= 1 && line_indent < floor
+}

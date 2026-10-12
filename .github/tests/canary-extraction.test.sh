@@ -268,16 +268,19 @@ add_line_after() {
   [[ -n "$at" ]] || { fail "no line: $1"; return; }
   { head -n "$at" "$CI_YML"; printf '%s\n' "$2"; tail -n "+$((at + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
 }
-# move_report_env_after_run <extra>: the report step's env block moves to the end of the step (key
-# order does not matter in YAML), followed by the extra text.
+# move_report_env_after_run <extra>: the report step's env block moves to just after the step's run
+# block (key order does not matter in YAML), followed by the extra text.
 move_report_env_after_run() {
   EXTRA="$1" awk -v name="      - name: $REPORT_STEP" '
+    function flush() { printf "%s%s", env, ENVIRON["EXTRA"]; inside = 0 }
     $0 == name { inside = 1; print; next }
     inside && $0 == "        env:" { in_env = 1 }
     inside && in_env && $0 == "        shell: bash" { in_env = 0 }
     in_env { env = env $0 "\n"; next }
+    inside && in_run && $0 !~ /^ *$/ && substr($0, 1, 10) != "          " { flush() }
+    inside && $0 == "        run: |" { in_run = 1 }
     { print }
-    END { printf "%s%s", env, ENVIRON["EXTRA"] }' "$CI_YML" > "$TEST_DIR/ci.yml"
+    END { if (inside) flush() }' "$CI_YML" > "$TEST_DIR/ci.yml"
 }
 test_harness_exits_2_when_the_report_step_shell_continues_onto_the_next_line() {
   add_line_after '        shell: bash' '          --noprofile --norc {0}'
@@ -317,8 +320,56 @@ test_harness_accepts_a_comment_and_a_blank_line_between_a_key_and_the_next_key()
   assert_exit_code 4 # extraction passed, and the filter matched no test
 }
 test_harness_accepts_a_mapping_under_an_empty_key() {
-  run_harness_against "$CI_YML"
+  add_line_after '        env:' '          EXTRA_SETTING: 1'
+  assert_file_has "$TEST_DIR/ci.yml" 'EXTRA_SETTING: 1'
+  run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+# run_tests_against_copy <ci.yml> <fragment>: the tests whose name has the fragment, against the copy.
+run_tests_against_copy() {
+  EXIT_CODE=0
+  CANARY_CI_YML="$1" "$BASH" "${BASH_SOURCE[0]}" "$2" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+test_a_job_after_report_leaves_the_fixtures_working() {
+  # A plain new job after `report`. The fixtures that rewrite the report step are built from this
+  # copy, so one that assumed `report` is the last job would put its lines in the new job.
+  { cat "$CI_YML"; printf '\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n'; } > "$TEST_DIR/ci.yml"
+  run_tests_against_copy "$TEST_DIR/ci.yml" exits_2
+  assert_exit_code 0
+  run_tests_against_copy "$TEST_DIR/ci.yml" accepts
+  assert_exit_code 0
+  run_tests_against_copy "$TEST_DIR/ci.yml" extraction_
+  assert_exit_code 0
+}
+test_harness_exits_2_when_a_quoted_env_value_continues_at_a_shallow_indent_and_hides_a_step_key() {
+  add_line_after '        shell: bash' '   "'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is indented less than a'
+}
+test_harness_exits_2_when_a_line_at_indent_5_sits_between_the_report_step_keys() {
+  add_line_after '        shell: bash' '     x"'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is indented less than a step key'
+}
+test_harness_exits_2_when_a_line_at_indent_7_sits_between_the_report_step_keys() {
+  add_line_after '        shell: bash' '       x"'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is indented less than a step key'
+}
+test_harness_exits_2_when_a_line_at_indent_1_sits_between_the_report_job_keys() {
+  add_line_after '    name: open canary issues' ' x"'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is indented less than a job key'
+}
+test_harness_exits_2_when_a_line_at_indent_3_sits_between_the_report_job_keys() {
+  add_line_after '    name: open canary issues' '   x"'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'is indented less than a job key'
 }
 
 run_tests "$@"

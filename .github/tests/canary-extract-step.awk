@@ -4,7 +4,8 @@
 # step has a key the spec does not allow, a key with the wrong value, or lacks a required key, and
 # when a line at key indentation is not blank, not a comment, and not a plain `key:` yaml_key can
 # name (a quoted escape, a tab before the colon, `? key`), because it could be any key at all, and
-# when a line continues the value of the key above it (see continues_scalar).
+# when a line continues the value of the key above it (see continues_scalar), and when a line is
+# indented less than a step key and is not the start of a step (see is_shallow_stray).
 # The spec arrives in the SPEC environment variable, one entry per line (see extract_step).
 BEGIN {
   count = split(ENVIRON["SPEC"], entries, "\n")
@@ -38,6 +39,7 @@ state == 2 {
   if (substr($0, 1, 10) == "          ") { print substr($0, 11); next }
   state = 3
 }
+state >= 1 && is_shallow_stray($0, 8) && yaml_key($0, 4) == "" && problem == "" { problem = "has a line that is indented less than a step key: " $0 }
 state >= 1 && continues_scalar($0, 8) && problem == "" { problem = "has a line that continues the value of the key above it: " $0 }
 state >= 1 && $0 ~ /^        [^ #]/ && yaml_key($0, 8) == "" { check_line() }
 yaml_key($0, 8) != "" {
