@@ -14,7 +14,7 @@ run_harness_against() { # run_harness_against <ci.yml>
 # add_line_after_report_step_name <line>: writes $TEST_DIR/ci.yml with the line under the step's name.
 add_line_after_report_step_name() {
   awk -v name="      - name: $REPORT_STEP" -v line="$1" '{ print } $0 == name { print line }' "$CI_YML" > "$TEST_DIR/ci.yml"
-  grep -qxF -- "$1" "$TEST_DIR/ci.yml" || fail "the fixture did not add: $1"
+  grep -qxF -- "$1" "$TEST_DIR/ci.yml" || fail "fixture anchor not found: - name: $REPORT_STEP"
 }
 # replace_report_job_line <old-prefix> <new-line>: writes $TEST_DIR/ci.yml with the first line that
 # starts with the prefix, inside the report job, replaced. An empty new line drops it, and `\n` in it
@@ -24,7 +24,7 @@ replace_report_job_line() {
     /^  report:/ { is_in_report_job = 1 }
     is_in_report_job && !did_replace && index($0, old) == 1 { did_replace = 1; if (new != "") print new; next }
     { print }' "$CI_YML" > "$TEST_DIR/ci.yml"
-  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail "the fixture changed nothing: $1"
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail "fixture anchor not found: $1"
   return 0
 }
 test_harness_exits_2_when_the_report_step_gains_a_double_quoted_if_key() {
@@ -113,6 +113,7 @@ test_harness_accepts_the_last_step_of_a_job_followed_by_a_job_with_an_underscore
 add_raw_lines_after_report_step_name() {
   local line_number
   line_number=$(grep -nxF -- "      - name: $REPORT_STEP" "$CI_YML" | cut -d: -f1)
+  [[ -n "$line_number" ]] || { fail "fixture anchor not found: - name: $REPORT_STEP"; return; }
   { head -n "$line_number" "$CI_YML"; printf '%s\n' "$1"; tail -n "+$((line_number + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
   cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail 'the fixture changed nothing'
   return 0
@@ -163,13 +164,16 @@ test_harness_exits_2_when_the_report_step_moves_to_a_disabled_job_and_a_comment_
 # ---------------------------------------------------------------------------------------------
 # A plain scalar continues onto deeper-indented lines, so no key line may be followed by one
 # ---------------------------------------------------------------------------------------------
-# add_line_after <exact line> <text>: writes $TEST_DIR/ci.yml with the text, byte for byte, after the
-# first line of ci.yml that equals the given line.
+# add_line_after <job> <exact line> <text>: writes $TEST_DIR/ci.yml with the text, byte for byte, after
+# the first line of the job that equals the given line. Anchor on a line the harness pins.
 add_line_after() {
   local line_number
-  line_number=$(grep -nxF -- "$1" "$CI_YML" | head -n 1 | cut -d: -f1)
-  [[ -n "$line_number" ]] || { fail "no line: $1"; return; }
-  { head -n "$line_number" "$CI_YML"; printf '%s\n' "$2"; tail -n "+$((line_number + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
+  line_number=$(awk -v header="  $1:" -v want="$2" '
+    $0 == header { is_in_job = 1 }
+    is_in_job && $0 != header && /^  [^ #]/ { is_in_job = 0 }
+    is_in_job && $0 == want { print NR; exit }' "$CI_YML")
+  [[ -n "$line_number" ]] || { fail "fixture anchor not found: $2"; return; }
+  { head -n "$line_number" "$CI_YML"; printf '%s\n' "$3"; tail -n "+$((line_number + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
 }
 # move_report_env_after_run <extra>: the report step's env block moves to just after the step's run
 # block (key order does not matter in YAML), followed by the extra text.
@@ -186,26 +190,26 @@ move_report_env_after_run() {
     END { if (is_in_step) print_env_block() }' "$CI_YML" > "$TEST_DIR/ci.yml"
 }
 test_harness_exits_2_when_the_report_step_shell_continues_onto_the_next_line() {
-  add_line_after '        shell: bash' '          --noprofile --norc {0}'
+  add_line_after report '        shell: bash' '          --noprofile --norc {0}'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'continues the value of the key above it'
 }
 test_harness_exits_2_when_the_record_step_condition_continues_onto_the_next_line() {
-  add_line_after "        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.channel == 'latest'" \
+  add_line_after check "        if: ${RECORD_SPEC#+if=}" \
     '          && github.run_attempt == 99'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'continues the value of the key above it'
 }
 test_harness_exits_2_when_a_step_key_the_harness_only_allows_continues_onto_the_next_line() {
-  add_line_after '        run: scripts/check.sh' '          --extra'
+  add_line_after check '        run: scripts/check.sh' '          --extra'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'continues the value of the key above it'
 }
 test_harness_exits_2_when_the_report_job_condition_continues_onto_the_next_line() {
-  add_line_after "    if: $REPORT_JOB_IF" '      && false'
+  add_line_after report "    if: $REPORT_JOB_IF" '      && false'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'continues the value of the key above it'
@@ -218,7 +222,7 @@ test_harness_exits_2_when_a_quoted_env_value_continuing_at_column_0_hides_an_if_
   assert_out_has 'is not a key line'
 }
 test_harness_accepts_a_comment_and_a_blank_line_between_a_key_and_the_next_key() {
-  add_line_after '        shell: bash' $'\n          # note'
+  add_line_after report '        shell: bash' $'\n          # note'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 4 # extraction passed, and the filter matched no test
 }
@@ -245,6 +249,20 @@ test_a_job_after_report_leaves_the_fixtures_working() {
   run_tests_against_copy "$TEST_DIR/ci.yml" extraction_
   assert_exit_code 0
 }
+test_edits_to_report_job_lines_the_harness_does_not_pin_leave_the_fixtures_working() {
+  # `needs` as a list, a new display name and a new timeout are all valid edits to ci.yml.
+  sed -e 's/^    needs: check$/    needs: [check]/' -e 's/^    name: open canary issues$/    name: open the canary issues/' \
+    -e 's/^    timeout-minutes: 5$/    timeout-minutes: 7/' "$CI_YML" > "$TEST_DIR/ci.yml"
+  assert_file_has "$TEST_DIR/ci.yml" 'needs: [check]'
+  assert_file_has "$TEST_DIR/ci.yml" 'name: open the canary issues'
+  assert_file_has "$TEST_DIR/ci.yml" 'timeout-minutes: 7'
+  run_tests_against_copy "$TEST_DIR/ci.yml" exits_2
+  assert_exit_code 0
+  run_tests_against_copy "$TEST_DIR/ci.yml" accepts
+  assert_exit_code 0
+  run_tests_against_copy "$TEST_DIR/ci.yml" extraction_
+  assert_exit_code 0
+}
 test_harness_exits_2_when_a_quoted_env_value_continues_at_a_shallow_indent_and_hides_a_step_key() {
   # YAML reads `NOTE` as "a shell: bash", so Actions sees no shell key while the harness reads one.
   awk -v fence="          MAX_FENCE: $MAX_FENCE" '
@@ -258,62 +276,62 @@ test_harness_exits_2_when_a_quoted_env_value_continues_at_a_shallow_indent_and_h
   assert_out_has 'is indented less than a' # indent 3 is under a job key too, and the job is read first
 }
 test_harness_exits_2_when_a_line_at_indent_4_that_is_not_a_job_key_sits_between_the_report_step_keys() {
-  add_line_after '        shell: bash' '    x"'
+  add_line_after report '        shell: bash' '    x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a step key'
 }
 test_harness_exits_2_when_a_line_at_indent_6_that_is_not_a_step_sits_between_the_report_step_keys() {
-  add_line_after '        shell: bash' '      x"'
+  add_line_after report '        shell: bash' '      x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a step key'
 }
 test_harness_exits_2_when_a_line_at_indent_5_sits_between_the_report_step_keys() {
-  add_line_after '        shell: bash' '     x"'
+  add_line_after report '        shell: bash' '     x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a step key'
 }
 test_harness_exits_2_when_a_line_at_indent_7_sits_between_the_report_step_keys() {
-  add_line_after '        shell: bash' '       x"'
+  add_line_after report '        shell: bash' '       x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a step key'
 }
 test_harness_exits_2_when_a_line_at_indent_1_sits_between_the_report_job_keys() {
-  add_line_after '    name: open canary issues' ' x"'
+  add_line_after report "    if: $REPORT_JOB_IF" ' x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a job key'
 }
 test_harness_exits_2_when_a_line_at_indent_3_sits_between_the_report_job_keys() {
-  add_line_after '    name: open canary issues' '   x"'
+  add_line_after report "    if: $REPORT_JOB_IF" '   x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'is indented less than a job key'
 }
 test_harness_exits_2_when_a_line_at_indent_2_that_is_not_a_job_id_sits_between_the_report_job_keys() {
-  add_line_after '    name: open canary issues' '  x"'
+  add_line_after report "    if: $REPORT_JOB_IF" '  x"'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has "The job 'report'"
   assert_out_has 'is not a key line'
 }
 test_harness_accepts_a_comment_at_column_0_inside_the_report_job() {
-  add_line_after '    name: open canary issues' '# a comment at column 0'
+  add_line_after report "    if: $REPORT_JOB_IF" '# a comment at column 0'
   assert_file_has "$TEST_DIR/ci.yml" '# a comment at column 0'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 4 # the job did not end at the comment, so its condition and steps were still read
 }
 test_harness_accepts_a_comment_at_column_2_inside_the_report_job() {
-  add_line_after '    name: open canary issues' '  # a comment at column 2'
+  add_line_after report "    if: $REPORT_JOB_IF" '  # a comment at column 2'
   assert_file_has "$TEST_DIR/ci.yml" '# a comment at column 2'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 4 # the job did not end at the comment, so its condition and steps were still read
 }
 test_harness_exits_2_when_a_report_job_key_other_than_its_condition_continues_onto_the_next_line() {
-  add_line_after '    needs: check' '      more'
+  add_line_after report '  report:' $'    probe: value\n      more'
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 2
   assert_out_has 'continues the value of the key above it'

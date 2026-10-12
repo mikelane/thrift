@@ -171,7 +171,7 @@ run_record_step() {
 # ends the report job there and the step and everything after it belong to the new job.
 split_before_report_step() {
   JOB_HEADER="$1" awk -v name="      - name: $REPORT_STEP" '$0 == name { printf "%s", ENVIRON["JOB_HEADER"] } { print }' "$CI_YML" > "$TEST_DIR/ci.yml"
-  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail 'the fixture changed nothing'
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail "fixture anchor not found: - name: $REPORT_STEP"
   return 0
 }
 
