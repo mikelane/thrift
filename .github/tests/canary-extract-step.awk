@@ -1,6 +1,8 @@
-# The awk program behind extract_step in canary-extract-lib.sh (run with
-# canary-yaml-key.awk). The step spec arrives in the
-# SPEC environment variable and the step's `- name:` line in the `want` variable.
+# The awk program behind extract_step in canary-extract-lib.sh. Run it after canary-yaml-key.awk.
+# Reads ci.yml. Prints the de-indented `run:` body of the step whose `- name:` line is `want`, and
+# prints nothing when no such step has a run block. Exits 3, with the reason on stderr, when the
+# step has a key the spec does not allow, a key with the wrong value, or lacks a required key.
+# The spec arrives in the SPEC environment variable, one entry per line (see extract_step).
 BEGIN {
   count = split(ENVIRON["SPEC"], entries, "\n")
   for (i = 1; i <= count; i++) {

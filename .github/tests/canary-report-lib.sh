@@ -131,8 +131,6 @@ make_repo() {
   for plugin in "$@"; do mkdir -p "$REPO_COPY/plugins/$plugin/.claude-plugin"; done
 }
 
-# run_check <script> [VAR=value ...] -- [argument ...]: the script runs from the repo root with a
-# caller environment that holds credentials, to show check.sh keeps them away from the engine.
 # write_stub_env [VAR=value ...]: the STUB_* settings the stubs read, beside each stub.
 write_stub_env() {
   local setting
@@ -143,6 +141,8 @@ write_stub_env() {
   cp "$REPO_COPY/bin/stub.env" "$REPO_COPY/node_modules/.bin/stub.env"
 }
 
+# run_check <script> [VAR=value ...] -- [argument ...]: the script runs from the repo root with a
+# caller environment that holds credentials, to show check.sh keeps them away from the engine.
 run_check() {
   local script="$1" settings=()
   shift
