@@ -168,4 +168,26 @@ test_harness_exits_2_when_the_report_job_gains_a_second_condition() {
   assert_out_has 'has "if" more than once'
 }
 
+test_harness_exits_2_when_the_report_job_loses_its_condition_to_a_following_job_with_an_underscore_name() {
+  replace_report_job_line '    if: ' ''
+  printf '  _next:\n%s\n' "$(grep -m1 '^    if: ' "$CI_YML")" >> "$TEST_DIR/ci.yml"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has no "if" key'
+}
+test_harness_exits_2_when_the_report_job_loses_its_condition_to_a_following_job_with_a_quoted_name() {
+  replace_report_job_line '    if: ' ''
+  printf '  "next":\n%s\n' "$(grep -m1 '^    if: ' "$CI_YML")" >> "$TEST_DIR/ci.yml"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+  assert_out_has 'has no "if" key'
+}
+
+test_harness_accepts_the_last_step_of_a_job_followed_by_a_job_with_an_underscore_name_and_deep_keys() {
+  cp "$CI_YML" "$TEST_DIR/ci.yml"
+  printf '  _next:\n    strategy:\n      matrix:\n        channel: x\n' >> "$TEST_DIR/ci.yml"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+
 run_tests "$@"

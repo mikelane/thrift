@@ -50,7 +50,7 @@ read_report_step_setting() {
   local ci_yml="$1" key="$2" value
   value=$(awk -v want="      - name: $REPORT_STEP" -v key="          $key: " '
     $0 == want { inside = 1; next }
-    inside && ($0 ~ /^      - / || $0 ~ /^  [A-Za-z]/) { exit }
+    inside && ($0 ~ /^      - / || $0 ~ /^([^ #]|  [^ #])/) { exit }
     inside && index($0, key) == 1 { print substr($0, length(key) + 1); exit }' "$ci_yml")
   [[ -n "$value" ]] || { echo "Could not read $key from the report step's env in $ci_yml. Restore the setting, or update $HARNESS_DIR/canary-extract-lib.sh to match." >&2; return 1; }
   printf '%s\n' "$value"
