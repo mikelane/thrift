@@ -1,7 +1,9 @@
 # The awk program behind extract_step in canary-extract-lib.sh. Run it after canary-yaml-key.awk.
 # Reads ci.yml. Prints the de-indented `run:` body of the step whose `- name:` line is `want`, and
 # prints nothing when no such step has a run block. Exits 3, with the reason on stderr, when the
-# step has a key the spec does not allow, a key with the wrong value, or lacks a required key.
+# step has a key the spec does not allow, a key with the wrong value, or lacks a required key, and
+# when a line at key indentation is not blank, not a comment, and not a plain `key:` yaml_key can
+# name (a quoted escape, a tab before the colon, `? key`), because it could be any key at all.
 # The spec arrives in the SPEC environment variable, one entry per line (see extract_step).
 BEGIN {
   count = split(ENVIRON["SPEC"], entries, "\n")
@@ -24,6 +26,9 @@ function check_key(key) {
   if (!(key in allowed)) problem = "has the key \"" key "\", which the harness does not model"
   else if ((key in value) && yaml_value($0, 8) != value[key]) problem = "has \"" key "\" set to something other than \"" value[key] "\""
 }
+function check_line() {
+  if (problem == "") problem = "has a line the harness cannot read as a plain key: " $0
+}
 state == 4 { next }
 state == 0 { if ($0 == want) state = 1; next }
 $0 ~ /^      - / || $0 ~ /^([^ #]|  [^ #])/ { state = 4; next }
@@ -32,6 +37,7 @@ state == 2 {
   if (substr($0, 1, 10) == "          ") { print substr($0, 11); next }
   state = 3
 }
+state >= 1 && $0 ~ /^        [^ #]/ && yaml_key($0, 8) == "" { check_line() }
 yaml_key($0, 8) != "" {
   check_key(yaml_key($0, 8))
   if (state == 1 && $0 == "        run: |") state = 2

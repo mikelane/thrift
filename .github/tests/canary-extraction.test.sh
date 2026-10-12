@@ -15,10 +15,14 @@ test_extraction_fails_when_the_step_is_renamed() {
   return 0
 }
 test_extraction_fails_when_the_step_name_appears_twice() {
-  { cat "$CI_YML"; printf '  decoy:\n    steps:\n      - name: %s\n        run: |\n          gh issue create\n' "$REPORT_STEP"; } > "$TEST_DIR/ci.yml"
+  split_before_report_step "      - name: $REPORT_STEP"$'\n        run: |\n          gh issue create\n'
   extract_report_step "$TEST_DIR/ci.yml" > "$OUTPUT" 2>&1 && fail 'extraction passed with the step name in two places'
   assert_out_has 'appears 2 times'
   return 0
+}
+test_extraction_ignores_the_report_step_name_in_another_job() {
+  { cat "$CI_YML"; printf '  decoy:\n    steps:\n      - name: %s\n        run: |\n          gh issue create\n' "$REPORT_STEP"; } > "$TEST_DIR/ci.yml"
+  extract_report_step "$TEST_DIR/ci.yml" > "$OUTPUT" 2>&1 || fail 'extraction failed because another job has a step of the same name'
 }
 test_extraction_fails_when_the_workflow_is_re_indented() {
   sed 's/^/  /' "$CI_YML" > "$TEST_DIR/ci.yml"
@@ -83,8 +87,8 @@ test_harness_exits_2_when_the_workflow_it_is_pointed_at_lost_a_step() {
 }
 test_report_job_checks_out_nothing_and_keeps_its_script_inline() {
   local job
-  job=$(awk '/^  report:/{f=1;next} f&&/^  [A-Za-z]/{exit} f' "$CI_YML")
-  [[ "$job" == *"- name: $REPORT_STEP"* ]] || { fail 'no report job holding the report step was found'; return; }
+  job=$(job_lines report "$CI_YML")
+  grep -qxF -- "      - name: $REPORT_STEP" <<< "$job" || { fail 'no report job holding the report step was found'; return; }
   [[ "$job" != *'actions/checkout'* ]] || fail 'the report job checks out the repository'
   [[ "$job" != *'scripts/'* ]] || fail 'the report job runs a script from the repository'
 }
@@ -188,6 +192,67 @@ test_harness_accepts_the_last_step_of_a_job_followed_by_a_job_with_an_underscore
   printf '  _next:\n    strategy:\n      matrix:\n        channel: x\n' >> "$TEST_DIR/ci.yml"
   run_harness_against "$TEST_DIR/ci.yml"
   assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+
+# ---------------------------------------------------------------------------------------------
+# The report step must sit in the report job, and every key line must be readable
+# ---------------------------------------------------------------------------------------------
+# add_raw_lines_after_report_step_name <text>: the text goes in byte for byte. awk -v and ENVIRON
+# both decode escapes such as f on macOS awk, so neither carries it.
+add_raw_lines_after_report_step_name() {
+  local at
+  at=$(grep -nxF -- "      - name: $REPORT_STEP" "$CI_YML" | cut -d: -f1)
+  { head -n "$at" "$CI_YML"; printf '%s\n' "$1"; tail -n "+$((at + 1))" "$CI_YML"; } > "$TEST_DIR/ci.yml"
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail 'the fixture changed nothing'
+  return 0
+}
+# split_before_report_step <text>: the text goes in just before the report step, so a job header in it
+# ends the report job there and the step and everything after it belong to the new job.
+split_before_report_step() {
+  JOB_HEADER="$1" awk -v name="      - name: $REPORT_STEP" '$0 == name { printf "%s", ENVIRON["JOB_HEADER"] } { print }' "$CI_YML" > "$TEST_DIR/ci.yml"
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && fail 'the fixture changed nothing'
+  return 0
+}
+test_harness_exits_2_when_the_report_step_gains_a_hex_escaped_if_key() {
+  add_raw_lines_after_report_step_name '        "\x69f": false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_harness_exits_2_when_the_report_step_gains_a_unicode_escaped_if_key() {
+  add_raw_lines_after_report_step_name '        "if": false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_harness_exits_2_when_the_report_step_gains_an_if_key_with_a_tab_before_the_colon() {
+  add_raw_lines_after_report_step_name "        if$(printf '\t'): false"
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_harness_exits_2_when_the_report_step_gains_an_explicit_if_key() {
+  add_raw_lines_after_report_step_name $'        ? if\n        : false'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_harness_accepts_a_comment_and_a_blank_line_at_the_report_step_key_indentation() {
+  add_raw_lines_after_report_step_name $'        # note\n        '
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 4 # extraction passed, and the filter matched no test
+}
+test_harness_exits_2_when_the_report_step_moves_to_a_disabled_job_with_an_underscore_name_after_report() {
+  split_before_report_step $'  _open-issues:\n    if: false\n    runs-on: ubuntu-latest\n    steps:\n'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_harness_exits_2_when_the_report_step_moves_to_a_disabled_job_and_a_comment_keeps_its_name_in_report() {
+  split_before_report_step "      # - name: $REPORT_STEP"$'\n      - run: true\n  open-issues:\n    if: false\n    runs-on: ubuntu-latest\n    steps:\n'
+  run_harness_against "$TEST_DIR/ci.yml"
+  assert_exit_code 2
+}
+test_report_job_check_fails_when_a_comment_is_the_only_mention_of_the_report_step() {
+  split_before_report_step "      # - name: $REPORT_STEP"$'\n      - run: true\n  open-issues:\n    steps:\n'
+  EXIT_CODE=0
+  CANARY_CI_YML="$TEST_DIR/ci.yml" "$BASH" "${BASH_SOURCE[0]}" keeps_its_script_inline > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code_nonzero
 }
 
 run_tests "$@"

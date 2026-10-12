@@ -27,9 +27,9 @@ source "$HARNESS_DIR/canary-extract-lib.sh"
 source "$HARNESS_DIR/canary-stubs-lib.sh"
 
 check_job_condition "$CI_YML" report "$REPORT_JOB_IF" || exit 2
-extract_or_die "$REPORT_STEP" "$REPORT_SPEC" 'gh issue create' "$WORK_DIR/report.sh"
-extract_or_die "$RECORD_STEP" "$RECORD_SPEC" 'claude-version' "$WORK_DIR/record.sh"
-extract_or_die "$CHECK_STEP" "$CHECK_SPEC" 'scripts/check.sh' "$WORK_DIR/check-step.sh"
+extract_or_die report "$REPORT_STEP" "$REPORT_SPEC" 'gh issue create' "$WORK_DIR/report.sh"
+extract_or_die check "$RECORD_STEP" "$RECORD_SPEC" 'claude-version' "$WORK_DIR/record.sh"
+extract_or_die check "$CHECK_STEP" "$CHECK_SPEC" 'scripts/check.sh' "$WORK_DIR/check-step.sh"
 MAX_ISSUES=$(read_report_step_setting "$CI_YML" MAX_ISSUES) || exit 2
 MAX_FENCE=$(read_report_step_setting "$CI_YML" MAX_FENCE) || exit 2
 
