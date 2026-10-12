@@ -34,16 +34,16 @@ function opens_scalar(line, indent,    value) {
 # Feed every line of a region to this, in order. Returns 1 for a line that continues the scalar of
 # the `key:` line at `indent` above it: not blank, not a comment, indented deeper than that key.
 # YAML reads such a line as part of the key's value, and the harness reads only the first line.
-function continues_scalar(line, indent,    line_indent, continues) {
+function continues_scalar(line, indent,    line_indent, does_continue) {
   if (line ~ /^ *$/ || line ~ /^ *#/) return 0
   line_indent = match(line, /[^ ]/) - 1
-  continues = scalar_is_open && line_indent > indent
-  scalar_is_open = !continues && opens_scalar(line, indent)
-  return continues
+  does_continue = is_scalar_open && line_indent > indent
+  is_scalar_open = !does_continue && opens_scalar(line, indent)
+  return does_continue
 }
 
 # Whether a line sits between the key lines of a region yet is indented less than any value of them
-# can be: not blank, not a comment, indented 1 to `floor - 1` spaces. A quoted value that continues
+# can be: not blank, not a comment, indented 1 to `floor - 1` spaces. A quoted value that does_continue
 # at that indent (`NOTE: "a` closed by a line at indent 3) is one string to libyaml, so the keys
 # the harness reads next to it may not be keys at all. Callers exempt the lines that are valid.
 function is_shallow_stray(line, floor,    line_indent) {

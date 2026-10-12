@@ -81,14 +81,14 @@ test_passing_test_lines_do_not_push_the_failing_test_out_of_the_tail() {
 test_untrusted_log_is_printed_between_stop_commands_markers() {
   printf 'boom\n::error::injected\n' > "$FAILURE_LOG_DIR/handoff.txt"
   run_report true
-  local start token end injected
-  start=$(grep -an '^::stop-commands::' "$OUTPUT" | head -n 1 | cut -d: -f1)
-  token=$(sed -n "${start:-0}p" "$OUTPUT" | sed 's/^::stop-commands:://')
-  [[ "$token" =~ ^[0-9a-f]{32}$ ]] || fail "the stop-commands token is not 32 hex characters: $token"
-  end=$(grep -anxF "::${token}::" "$OUTPUT" | head -n 1 | cut -d: -f1)
-  injected=$(grep -anxF '::error::injected' "$OUTPUT" | head -n 1 | cut -d: -f1)
-  [[ -n "$start" && -n "$end" && -n "$injected" ]] || { fail 'a marker or the injected line is missing'; return; }
-  { [[ "$start" -lt "$injected" ]] && [[ "$injected" -lt "$end" ]]; } || fail 'the log is not between the markers'
+  local start_line stop_token end_line injected_line
+  start_line=$(grep -an '^::stop-commands::' "$OUTPUT" | head -n 1 | cut -d: -f1)
+  stop_token=$(sed -n "${start_line:-0}p" "$OUTPUT" | sed 's/^::stop-commands:://')
+  [[ "$stop_token" =~ ^[0-9a-f]{32}$ ]] || fail "the stop-commands token is not 32 hex characters: $stop_token"
+  end_line=$(grep -anxF "::${stop_token}::" "$OUTPUT" | head -n 1 | cut -d: -f1)
+  injected_line=$(grep -anxF '::error::injected' "$OUTPUT" | head -n 1 | cut -d: -f1)
+  [[ -n "$start_line" && -n "$end_line" && -n "$injected_line" ]] || { fail 'a marker or the injected line is missing'; return; }
+  { [[ "$start_line" -lt "$injected_line" ]] && [[ "$injected_line" -lt "$end_line" ]]; } || fail 'the log is not between the markers'
 }
 test_live_run_prints_no_untrusted_body() {
   printf 'boom\n::error::injected\n' > "$FAILURE_LOG_DIR/handoff.txt"
@@ -107,7 +107,7 @@ test_live_run_prints_no_untrusted_body() {
 run_report_with_failing_grep() {
   mkdir -p "$TEST_DIR/bin"
   # shellcheck disable=SC2016 # the wrapper's $@ and $arg expand when the wrapper runs
-  printf '#!/usr/bin/env bash\nfor arg in "$@"; do [ "$arg" != "$GREP_FAIL_PATTERN" ] || { echo "grep: read error" >&2; exit 2; }; done\nexec %q "$@"\n' \
+  printf '#!/usr/bin/env bash\nfor arg in "$@"; do [[ "$arg" != "$GREP_FAIL_PATTERN" ]] || { echo "grep: read error" >&2; exit 2; }; done\nexec %q "$@"\n' \
     "$(command -v grep)" > "$TEST_DIR/bin/grep"
   chmod +x "$TEST_DIR/bin/grep"
   run_report "$2" PATH="$TEST_DIR/bin:$STUBS:$PATH" GREP_FAIL_PATTERN="$1"

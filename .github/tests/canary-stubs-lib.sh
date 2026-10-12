@@ -8,24 +8,24 @@ cat > "$STUBS/gh" <<'EOF'
 echo "gh $*" >> "$GH_CALLS"
 case "$1 $2" in
   "api "*)
-    [ -z "${GH_API_FAIL:-}" ] || exit 1
+    [[ -z "${GH_API_FAIL:-}" ]] || exit 1
     cat "$GH_PLUGINS"
     ;;
   "issue list")
     shift 2
-    limit=30 expr='.'
-    while [ "$#" -gt 0 ]; do
+    limit=30 jq_filter='.'
+    while [[ "$#" -gt 0 ]]; do
       case "$1" in
         --limit) limit=$2; shift ;;
-        --jq) expr=$2; shift ;;
+        --jq) jq_filter=$2; shift ;;
       esac
       shift
     done
-    [ -z "${GH_LIST_FAIL:-}" ] || exit 1
-    jq -R '{title: .}' "$GH_OPEN_TITLES" | jq -s ".[:$limit]" | jq -r "$expr"
+    [[ -z "${GH_LIST_FAIL:-}" ]] || exit 1
+    jq -R '{title: .}' "$GH_OPEN_TITLES" | jq -s --argjson limit "$limit" '.[:$limit]' | jq -r "$jq_filter"
     ;;
   "issue create")
-    if [ -f "${GH_FAIL_CREATE_TITLES:-/nonexistent}" ] && grep -qxF -- "$4" "$GH_FAIL_CREATE_TITLES"; then
+    if grep -qxF -- "$4" "$GH_FAIL_CREATE_TITLES"; then
       echo "stub gh: refusing to create $4" >&2
       exit 1
     fi
@@ -40,36 +40,37 @@ EOF
 write_claude_stub() {
 cat > "$STUBS/claude" <<'EOF'
 #!/usr/bin/env bash
-[ -f "$(dirname "$0")/stub.env" ] && . "$(dirname "$0")/stub.env"
+[[ -f "$(dirname "$0")/stub.env" ]] && . "$(dirname "$0")/stub.env"
 echo "claude $*" >> "$STUB_LOG"
 is_listed() { [[ " ${1:-} " == *" $2 "* ]]; }
-if [ "${1:-}" = --version ]; then echo "${STUB_VERSION:-2.1.300} (Claude Code)"; exit 0; fi
-if [ "${1:-}" = -p ]; then
-  dir=$4
-  name=$(basename "$dir")
+if [[ "${1:-}" = --version ]]; then echo "${STUB_VERSION:-2.1.300} (Claude Code)"; exit 0; fi
+if [[ "${1:-}" = -p ]]; then
+  plugin_dir=$4
+  plugin_name=$(basename "$plugin_dir")
   config_state=missing
-  [ -d "${CLAUDE_CONFIG_DIR:-/nonexistent}" ] && config_state=empty
-  [ -z "$(ls -A "${CLAUDE_CONFIG_DIR:-/nonexistent}" 2> /dev/null)" ] || config_state=not-empty
-  echo "GENENV plugin=$name api_key=${ANTHROPIC_API_KEY-unset} oauth=${CLAUDE_CODE_OAUTH_TOKEN-unset} config=${CLAUDE_CONFIG_DIR-unset} config_state=$config_state" >> "$STUB_LOG"
-  is_listed "${STUB_NO_TYPE_DECLARATIONS:-}" "$name" || {
-    mkdir -p "$dir/.claude-plugin/types/claude-code"
-    : > "$dir/.claude-plugin/types/claude-code/index.d.ts"
+  [[ -d "${CLAUDE_CONFIG_DIR:-/nonexistent}" ]] && config_state=empty
+  [[ -z "$(ls -A "${CLAUDE_CONFIG_DIR:-/nonexistent}" 2> /dev/null)" ]] || config_state=not-empty
+  echo "GENENV plugin=$plugin_name api_key=${ANTHROPIC_API_KEY-unset} oauth=${CLAUDE_CODE_OAUTH_TOKEN-unset} config=${CLAUDE_CONFIG_DIR-unset} config_state=$config_state" >> "$STUB_LOG"
+  is_listed "${STUB_NO_TYPE_DECLARATIONS:-}" "$plugin_name" || {
+    mkdir -p "$plugin_dir/.claude-plugin/types/claude-code"
+    : > "$plugin_dir/.claude-plugin/types/claude-code/index.d.ts"
   }
   echo "Not logged in"
   exit 1
 fi
-name=$(basename "$3")
-if [ "$2" = validate ]; then
-  is_listed "${STUB_VALIDATE_FAIL:-}" "$name" && { echo "validate refused $name"; exit 1; }
+plugin_name=$(basename "$3")
+if [[ "$2" = validate ]]; then
+  is_listed "${STUB_VALIDATE_FAIL:-}" "$plugin_name" && { echo "validate refused $plugin_name"; exit 1; }
   echo ok; exit 0
 fi
-if [ "$2" = test ]; then
-  marker=absent
-  [ ! -e "${CHECK_LOG_DIR:-/nonexistent}/checked" ] || marker=present
-  echo "MARKER plugin=$name checked=$marker" >> "$STUB_LOG"
-  is_listed "${STUB_TEST_FAIL:-}" "$name" && { echo "(fail) a test in $name"; exit 1; }
+if [[ "$2" = test ]]; then
+  marker_state=absent
+  [[ ! -e "${CHECK_LOG_DIR:-/nonexistent}/checked" ]] || marker_state=present
+  echo "MARKER plugin=$plugin_name checked=$marker_state" >> "$STUB_LOG"
+  is_listed "${STUB_TEST_FAIL:-}" "$plugin_name" && { echo "(fail) a test in $plugin_name"; exit 1; }
   echo "(pass) a test"; exit 0
 fi
+echo "stub claude: no case for the arguments: $*" >&2
 exit 2
 EOF
 }
@@ -77,10 +78,10 @@ EOF
 write_tsc_stub() {
 cat > "$STUBS/tsc" <<'EOF'
 #!/usr/bin/env bash
-[ -f "$(dirname "$0")/stub.env" ] && . "$(dirname "$0")/stub.env"
+[[ -f "$(dirname "$0")/stub.env" ]] && . "$(dirname "$0")/stub.env"
 echo "tsc $*" >> "$STUB_LOG"
-name=$(basename "$2")
-if [[ " ${STUB_TSC_FAIL:-} " == *" $name "* ]]; then
+plugin_name=$(basename "$2")
+if [[ " ${STUB_TSC_FAIL:-} " == *" $plugin_name "* ]]; then
   echo "$2/test/x.ts: error TS2578: Unused '@ts-expect-error' directive."
   exit 2
 fi

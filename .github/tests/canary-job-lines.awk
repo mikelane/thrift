@@ -8,9 +8,9 @@
 function is_key_line(line) {
   return line ~ /^([A-Za-z_][A-Za-z0-9_-]*|"[^"]+"|'[^']+') *:/ || line ~ /^  ([A-Za-z_][A-Za-z0-9_-]*|"[^"]+"|'[^']+') *:/
 }
-$0 == want_job { inside = 1; next }
-inside && $0 ~ /^([^ #]|  [^ #])/ {
+$0 == want_job { is_in_job = 1; next }
+is_in_job && $0 ~ /^([^ #]|  [^ #])/ {
   if (!is_key_line($0)) { print "has a line at indent 0 or 2 that is not a key line: " $0 > "/dev/stderr"; exit 3 }
   exit
 }
-inside
+is_in_job

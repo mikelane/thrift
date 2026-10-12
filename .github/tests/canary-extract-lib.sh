@@ -2,17 +2,25 @@
 # Sourced by canary-report-lib.sh. Pulls one step's `run:` out of a workflow file.
 # shellcheck disable=SC2034 # the step names and specs are read by the files that source this one
 
+# count_lines <grep arguments>: prints how many lines match. grep exits 1 when it counts none,
+# which is still a count; only 2 or more, a file it cannot read, makes this fail.
+count_lines() {
+  local grep_status=0
+  grep -c "$@" || grep_status=$?
+  [[ "$grep_status" -le 1 ]]
+}
+
 REPORT_STEP='Open an issue for each plugin the new build breaks'
 RECORD_STEP='Record the Claude Code version for the canary issue job'
 CHECK_STEP='Check every plugin with scripts/check.sh'
 
-# job_lines <job> <ci.yml>: the lines of one job, after its header. Every reader of a job goes
+# print_job_lines <job> <ci.yml>: the lines of one job, after its header. Every reader of a job goes
 # through this, so they agree on where the job ends (see canary-job-lines.awk).
-job_lines() {
-  local status=0
-  awk -v want_job="  $1:" -f "$HARNESS_DIR/canary-job-lines.awk" "$2" 2> "$WORK_DIR/job-lines.err" || status=$?
-  [[ "$status" == 0 ]] || echo "The job '$1' in $2 $(cat "$WORK_DIR/job-lines.err")" >&2
-  return "$status"
+print_job_lines() {
+  local awk_status=0
+  awk -v want_job="  $1:" -f "$HARNESS_DIR/canary-job-lines.awk" "$2" 2> "$WORK_DIR/job-lines.err" || awk_status=$?
+  [[ "$awk_status" == 0 ]] || echo "The job '$1' in $2 $(cat "$WORK_DIR/job-lines.err")" >&2
+  return "$awk_status"
 }
 
 # Prints the body of one step's `run:` from a job of a workflow file, de-indented. Exits 1, and says
@@ -27,20 +35,23 @@ job_lines() {
 #   +key=value required as well
 # Every key at the step's indentation, before or after `run`, must be listed.
 extract_step() {
-  local ci_yml="$1" job="$2" step_name="$3" spec="$4" script occurrences status=0
-  job_lines "$job" "$ci_yml" > "$WORK_DIR/job.yml" || return 1
-  occurrences=$(grep -cxF -- "      - name: $step_name" "$WORK_DIR/job.yml" || true)
+  local ci_yml="$1" job="$2" step_name="$3" spec="$4" script occurrences awk_status=0
+  print_job_lines "$job" "$ci_yml" > "$WORK_DIR/job.yml" || return 1
+  occurrences=$(count_lines -xF -- "      - name: $step_name" "$WORK_DIR/job.yml") || {
+    echo "Could not count the steps named '$step_name' in the job '$job' of $ci_yml: grep could not read $WORK_DIR/job.yml." >&2
+    return 1
+  }
   if [[ "$occurrences" -gt 1 ]]; then
     echo "The step '$step_name' appears $occurrences times in the job '$job' of $ci_yml, so the harness cannot tell which one runs. Give each step a unique name." >&2
     return 1
   fi
-  script=$(SPEC="$spec" awk -v want="      - name: $step_name" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-extract-step.awk" "$WORK_DIR/job.yml" 2> "$WORK_DIR/extract.err") || status=$?
-  if [[ "$status" == 3 ]]; then
+  script=$(SPEC="$spec" awk -v want="      - name: $step_name" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-extract-step.awk" "$WORK_DIR/job.yml" 2> "$WORK_DIR/extract.err") || awk_status=$?
+  if [[ "$awk_status" == 3 ]]; then
     echo "The step '$step_name' in the job '$job' of $ci_yml $(cat "$WORK_DIR/extract.err"). If the change is intended, update the step's key list in $HARNESS_DIR/canary-extract-lib.sh." >&2
     return 1
   fi
-  if [[ "$status" != 0 ]]; then
-    echo "Could not read the step '$step_name' from the job '$job' of $ci_yml: awk exited $status: $(cat "$WORK_DIR/extract.err")" >&2
+  if [[ "$awk_status" != 0 ]]; then
+    echo "Could not read the step '$step_name' from the job '$job' of $ci_yml: awk exited $awk_status: $(cat "$WORK_DIR/extract.err")" >&2
     return 1
   fi
   if [[ -z "$script" ]]; then
@@ -58,19 +69,20 @@ extract_report_step() { extract_step "$1" report "$REPORT_STEP" "$REPORT_SPEC"; 
 
 # Prints the value of one `KEY: value` setting of the report step's env.
 read_report_step_setting() {
-  local ci_yml="$1" key="$2" value
-  value=$(job_lines report "$ci_yml" | awk -v want="      - name: $REPORT_STEP" -v key="          $key: " '
-    $0 == want { inside = 1; next }
-    inside && $0 ~ /^      - / { exit }
-    inside && index($0, key) == 1 { print substr($0, length(key) + 1); exit }')
-  [[ -n "$value" ]] || { echo "Could not read $key from the report step's env in $ci_yml. Restore the setting, or update $HARNESS_DIR/canary-extract-lib.sh to match." >&2; return 1; }
-  printf '%s\n' "$value"
+  local ci_yml="$1" key="$2" setting_value
+  setting_value=$(print_job_lines report "$ci_yml" | awk -v want="      - name: $REPORT_STEP" -v key="          $key: " '
+    $0 == want { is_in_step = 1; next }
+    is_in_step && $0 ~ /^      - / { exit }
+    is_in_step && index($0, key) == 1 { print substr($0, length(key) + 1); exit }')
+  [[ -n "$setting_value" ]] || { echo "Could not read $key from the report step's env in $ci_yml. Restore the setting, or update $HARNESS_DIR/canary-extract-lib.sh to match." >&2; return 1; }
+  printf '%s\n' "$setting_value"
 }
 
+# extract_or_die <ci.yml> <job> <step> <spec> <must-contain> <target>: extract_step into target, and
+# exit 2 when it fails or the script lacks the text that shows it is the step the harness expects.
 extract_or_die() {
-  local job="$1" step_name="$2" spec="$3" must_contain="$4" target="$5"
-  # shellcheck disable=SC2153 # CI_YML is set by canary-report-lib.sh
-  extract_step "$CI_YML" "$job" "$step_name" "$spec" > "$target" || exit 2
+  local ci_yml="$1" job="$2" step_name="$3" spec="$4" must_contain="$5" target="$6"
+  extract_step "$ci_yml" "$job" "$step_name" "$spec" > "$target" || exit 2
   grep -qF -- "$must_contain" "$target" || {
     echo "The step '$step_name' no longer contains '$must_contain', so the harness would test the wrong script. If the step changed on purpose, update the expected text in $HARNESS_DIR/canary-extract-lib.sh." >&2
     exit 2
@@ -83,24 +95,24 @@ REPORT_JOB_IF=$'${{ !cancelled() && (github.event_name == \'schedule\' || github
 
 # read_job_key <job> <key> <ci.yml>: prints the value of each job-level `key:` of a job, one per line.
 read_job_key() {
-  local status=0
-  job_lines "$1" "$3" > "$WORK_DIR/job-keys.yml" || return 1
-  awk -v want_key="$2" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-job-keys.awk" "$WORK_DIR/job-keys.yml" 2> "$WORK_DIR/job-keys.err" || status=$?
-  [[ "$status" == 0 ]] || echo "The job '$1' in $3 $(cat "$WORK_DIR/job-keys.err")" >&2
-  return "$status"
+  local awk_status=0
+  print_job_lines "$1" "$3" > "$WORK_DIR/job-keys.yml" || return 1
+  awk -v want_key="$2" -f "$HARNESS_DIR/canary-yaml-key.awk" -f "$HARNESS_DIR/canary-job-keys.awk" "$WORK_DIR/job-keys.yml" 2> "$WORK_DIR/job-keys.err" || awk_status=$?
+  [[ "$awk_status" == 0 ]] || echo "The job '$1' in $3 $(cat "$WORK_DIR/job-keys.err")" >&2
+  return "$awk_status"
 }
 
 # Exits 1, and says why, unless the job has exactly one job-level `if:` with the expected value, so
 # a job that never runs, or runs on other events, fails the harness instead of passing it.
 check_job_condition() {
-  local ci_yml="$1" job="$2" expected="$3" values why
+  local ci_yml="$1" job="$2" expected="$3" if_values reason
   grep -qxF -- "  $job:" "$ci_yml" || { echo "No job named '$job' in $ci_yml, so the harness cannot check its condition." >&2; return 1; }
-  values=$(read_job_key "$job" if "$ci_yml") || return 1
-  if [[ -z "$values" ]]; then why='has no "if" key'
-  elif [[ "$values" == *$'\n'* ]]; then why='has "if" more than once'
-  elif [[ "$values" != "$expected" ]]; then why="has \"if\" set to something other than \"$expected\""
+  if_values=$(read_job_key "$job" if "$ci_yml") || return 1
+  if [[ -z "$if_values" ]]; then reason='has no "if" key'
+  elif [[ "$if_values" == *$'\n'* ]]; then reason='has "if" more than once'
+  elif [[ "$if_values" != "$expected" ]]; then reason="has \"if\" set to something other than \"$expected\""
   else return 0
   fi
-  echo "The job '$job' in $ci_yml $why. If the change is intended, update REPORT_JOB_IF in $HARNESS_DIR/canary-extract-lib.sh." >&2
+  echo "The job '$job' in $ci_yml $reason. If the change is intended, update REPORT_JOB_IF in $HARNESS_DIR/canary-extract-lib.sh." >&2
   return 1
 }

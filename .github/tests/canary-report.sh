@@ -12,6 +12,7 @@
 # canary-report-lib.sh for what a test file gets.
 #
 # Usage: .github/tests/canary-report.sh [name-fragment]   (runs the tests whose name contains it)
+# No -e: each test file's status is collected below, and a failing file must not stop the rest.
 set -uo pipefail
 unset CDPATH
 
@@ -24,23 +25,29 @@ test_files=("$HARNESS_DIR"/*.test.sh)
 output_copy=$(mktemp) || { echo 'mktemp failed, so the entry point has nowhere to keep test output.' >&2; exit 2; }
 trap 'rm -f "$output_copy"' EXIT
 
-overall=0 ran_any=0
+overall_status=0 did_any_file_run=0
 for test_file in "${test_files[@]}"; do
-  status=0
-  "$BASH" "$test_file" "$@" | tee "$output_copy" || status=$?
-  case "$status" in
+  file_status=0
+  "$BASH" "$test_file" "$@" | tee "$output_copy" || file_status=$?
+  case "$file_status" in
     0)
-      ran_any=1
+      did_any_file_run=1
       if ! grep -qE '^[0-9]+ of [1-9][0-9]* passed$' "$output_copy"; then
         echo "${test_file##*/} ran no tests: it printed no 'N of M passed' line. End it with: run_tests \"\$@\"" >&2
-        [[ "$overall" -ge 1 ]] || overall=1
+        [[ "$overall_status" -ge 1 ]] || overall_status=1
       fi ;;
-    4) [[ "$#" -gt 0 ]] || { ran_any=1; overall=4; } ;;  # 4 is "no test matches the fragment" only when there is a fragment
-    *) ran_any=1; [[ "$overall" -ge "$status" ]] || overall=$status ;;
+    4)  # 4 is "no test matches the fragment" only when there is a fragment
+      [[ "$#" -gt 0 ]] || {
+        echo "${test_file##*/} exited 4, which means no test matched, yet no name fragment was given. It defines no test_* function." >&2
+        did_any_file_run=1; overall_status=4
+      } ;;
+    *)
+      echo "${test_file##*/} failed with exit status $file_status. See its output above: 1 lists the failed tests, 2 means the harness could not set up." >&2
+      did_any_file_run=1; [[ "$overall_status" -ge "$file_status" ]] || overall_status=$file_status ;;
   esac
 done
-if [[ "$ran_any" == 0 ]]; then
+if [[ "$did_any_file_run" == 0 ]]; then
   echo "No tests ran. No test name contains '${1:-}'." >&2
   exit 1
 fi
-exit "$overall"
+exit "$overall_status"
