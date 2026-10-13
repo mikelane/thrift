@@ -249,13 +249,23 @@ test_a_job_after_report_leaves_the_fixtures_working() {
   run_tests_against_copy "$TEST_DIR/ci.yml" extraction_
   assert_exit_code 0
 }
+# edit_report_job_keys: writes the report job's `needs`, display name and timeout to new values, on
+# stdout. A `needs` block list loses its items too, so the job still reads as one valid key.
+edit_report_job_keys() {
+  awk '
+    /^  report:/ { in_report = 1 }
+    in_report && /^  [^ #]/ && !/^  report:/ { in_report = 0 }
+    in_report && is_list_item && /^      / { next }
+    { is_list_item = 0 }
+    in_report && /^    needs:/ { print "    needs: [check, canary-harness]"; is_list_item = 1; next }
+    in_report && /^    name:/ { print "    name: triage canary issues"; next }
+    in_report && /^    timeout-minutes:/ { print "    timeout-minutes: 7"; next }
+    { print }' "$CI_YML"
+}
 test_edits_to_report_job_lines_the_harness_does_not_pin_leave_the_fixtures_working() {
-  # `needs` as a list, a new display name and a new timeout are all valid edits to ci.yml.
-  sed -e 's/^    needs: check$/    needs: [check]/' -e 's/^    name: open canary issues$/    name: open the canary issues/' \
-    -e 's/^    timeout-minutes: 5$/    timeout-minutes: 7/' "$CI_YML" > "$TEST_DIR/ci.yml"
-  assert_file_has "$TEST_DIR/ci.yml" 'needs: [check]'
-  assert_file_has "$TEST_DIR/ci.yml" 'name: open the canary issues'
-  assert_file_has "$TEST_DIR/ci.yml" 'timeout-minutes: 7'
+  # `needs` in any form, a new display name and a new timeout are all valid edits to ci.yml.
+  edit_report_job_keys > "$TEST_DIR/ci.yml"
+  cmp -s "$CI_YML" "$TEST_DIR/ci.yml" && { fail 'the edits changed nothing'; return; }
   run_tests_against_copy "$TEST_DIR/ci.yml" exits_2
   assert_exit_code 0
   run_tests_against_copy "$TEST_DIR/ci.yml" accepts
