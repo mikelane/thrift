@@ -16,8 +16,8 @@ HELD_PROMPT='held while waiting'
 
 scenario_run() {
   handoff_prepare '{"compactBeforeClear": true, "handoffContextTokens": 20000}'
-  handoff_start a
-  live_start b --model haiku
+  handoff_start a --allowedTools "Bash(sleep *)"
+  handoff_start_peer b
   say_apple a
   wait_for 'the band to offer a handoff' pane_has a 'h: Hand off and clear'
   submit b 'Use ToolSearch to load the SendMessage tool, then reply with the word ready.'
@@ -33,7 +33,8 @@ scenario_run() {
   submit a "$HELD_PROMPT"
   wait_for 'the prompt to be held' log_has a 'held a prompt for the handoff'
   # Every evaluation logs a `none` record, so only the reason shows that the abandon has happened.
-  wait_for 'the handoff to stop with background_busy' record_has_reason background_busy
+  # A clear ends the wait too, so a plugin that clears instead of stopping is a FAIL, not a timeout.
+  wait_for 'the handoff to stop or clear' handoff_ended
 
   local old_id
   old_id=$(records_with none | jq -r '.session_id' | tail -n 1)
@@ -57,11 +58,12 @@ scenario_run() {
 }
 
 record_has_reason() { records_with none | jq -e --arg r "$1" 'select(.trigger_values.reason == $r or .reason == $r)' >/dev/null; }
+handoff_ended() { record_has_reason background_busy || record_exists cleared; }
 no_cleared_record() { [[ "$(record_count cleared)" == 0 ]]; }
 held_prompt_in_box() { records_with none | jq -e 'select(.trigger_values.held_restore == "in_box")' >/dev/null; }
 
 # Claude Code writes transcripts under its config directory, one file per session id.
-transcript_path() { find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" -name "$1.jsonl" 2>/dev/null | head -n 1; }
+transcript_path() { find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" -name "$1.jsonl" 2>/dev/null | head -n 1 || true; }
 transcript_is_compacted() {
   local path
   path=$(transcript_path "$1")
@@ -75,5 +77,5 @@ transcript_summary() {
     return
   fi
   printf '%s\n' "$path"
-  grep -oE '"compact_boundary"|"isCompactSummary":true' "$path" | sort | uniq -c
+  grep -oE '"compact_boundary"|"isCompactSummary":true' "$path" | sort | uniq -c || true
 }

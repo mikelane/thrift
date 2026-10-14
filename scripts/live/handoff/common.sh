@@ -35,10 +35,18 @@ replace_constant() {
   mv -- "$file.new" "$file"
 }
 
-# handoff_start <name>: a session with the prepared copy of the plugin loaded.
+# handoff_start <name> [claude-args...]: a session with the prepared copy of the plugin loaded.
 handoff_start() {
-  live_start "$1" --settings "$LIVE_RUN/settings.json" --plugin-dir "$LIVE_RUN/plugin"
-  wait_for "the handoff plugin to start in '$1'" log_has "$1" 'handoff@inline session\.start settled'
+  local name=$1
+  shift
+  live_start "$name" --settings "$LIVE_RUN/settings.json" --plugin-dir "$LIVE_RUN/plugin" "$@"
+  wait_for "the handoff plugin to start in '$name'" log_has "$name" 'handoff@inline session\.start settled'
+}
+
+# handoff_start_peer <name>: a second session with no plugin, on Haiku so its replies are quick. It
+# may use only the two tools it needs to send the other session a message.
+handoff_start_peer() {
+  live_start "$1" --model haiku --allowedTools "ToolSearch,SendMessage"
 }
 
 # say_apple <name>: one tiny turn, so the session has a reply to hand off (a handoff before the

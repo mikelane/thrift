@@ -75,11 +75,15 @@ if [[ ! -d "$plugin_dir/.claude-plugin" ]]; then
   exit 2
 fi
 
-# The sessions start in an empty scratch directory inside the checkout (gitignored), so the model
-# has no repository to wander into and Claude Code's folder trust for the checkout covers it.
-# Override it with LIVE_CWD.
-LIVE_CWD=${LIVE_CWD:-$repo_root/.live/cwd}
-mkdir -p -- "$LIVE_CWD"
+# The sessions start in an empty scratch directory outside any git work tree, so the model finds
+# no repository, CLAUDE.md or project memory to act on. Claude Code asks once whether to trust
+# it; the harness stops and says so, because that is the owner's decision. Override it with
+# LIVE_CWD.
+LIVE_CWD=${LIVE_CWD:-${XDG_CACHE_HOME:-$HOME/.cache}/thrift-live/cwd}
+mkdir -p -- "$LIVE_CWD" || {
+  echo "ERROR: cannot make the working directory $LIVE_CWD" >&2
+  exit 2
+}
 # shellcheck disable=SC2034 # LIVE_PLUGIN and LIVE_PLUGIN_SOURCE are read by <plugin>/common.sh
 LIVE_PLUGIN=$plugin
 # shellcheck disable=SC2034

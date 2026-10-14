@@ -11,7 +11,7 @@
 scenario_run() {
   handoff_prepare '{"compactBeforeClear": true}'
   handoff_start a
-  live_start b --model haiku
+  handoff_start_peer b
   say_apple a
   # Loading the SendMessage tool is a model round trip of its own; doing it now keeps the real
   # send short enough to land inside the compaction.

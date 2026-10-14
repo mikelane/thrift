@@ -41,14 +41,26 @@ Every wait is on a condition (pane text, a debug-log line, a decision record) wi
 - **The plugin.** A scenario runs a copy of the plugin made in the run directory. The copy differs
   from the source in a few constants named in `handoff/common.sh` (the tested-through release, and
   the context-size minimum). The repository is not edited.
-- **Working directory.** Sessions start in `.live/cwd` under the repository (gitignored), an empty
-  directory. Claude Code keeps per-directory answers in `~/.claude.json`. The harness answers only
-  the external-CLAUDE.md-imports dialog, with its default (no). It stops with instructions on any
-  other dialog, such as the workspace trust prompt: run `claude` in `.live/cwd` once and answer it.
+- **Working directory.** Sessions start in `~/.cache/thrift-live/cwd` (override with `LIVE_CWD`), an
+  empty directory outside any git work tree, so the model finds no repository, CLAUDE.md or project
+  memory there. Claude Code asks once whether to trust a new directory. The harness stops on that
+  dialog and says so, because trusting a folder is the owner's decision: run `claude` in that
+  directory once and answer it. The harness answers only the external-CLAUDE.md-imports dialog,
+  with its default (no).
+- **What a session can do.** Every session runs with `--permission-mode dontAsk`, which denies any
+  tool the scenario did not allow with `--allowedTools` (the first session may run `Bash(sleep *)` in
+  `busy-abandon`; the peer may use `ToolSearch` and `SendMessage`), and with an appended system
+  prompt saying it is a test harness session that must do only what the typed prompt says. It also
+  sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`; both names are in
+  the 2.1.299 binary, but their effect was not verified separately. `--setting-sources project`
+  already kept the owner's user settings out: in a `claude -p` probe from an empty directory the
+  model reported it had been given no CLAUDE.md or memory contents. Limits: a session still has the
+  owner's login, so it can make model calls and, through `SendMessage`, reach other sessions of the
+  owner's by name; the system prompt is advice to the model, not enforcement.
 - **Transcripts and history.** Real sessions write transcripts under `~/.claude/projects/` and
   append every prompt they receive to `~/.claude/history.jsonl`, as any session does. The harness
   has no switch for either; the prompts are one-word test prompts. `~/.claude.json` also gains an
-  entry for `.live/cwd` and Claude Code's usual per-session counters.
+  entry for the working directory and Claude Code's usual per-session counters.
 - **Processes.** On exit the harness kills only its own tmux sessions, each by exact name
   (`live-<pid>-<label>`), and never the tmux server. Interrupting it with Ctrl-C, closing the
   terminal (SIGHUP) or SIGTERM runs the same cleanup. A `kill -9` cannot: list leftovers with

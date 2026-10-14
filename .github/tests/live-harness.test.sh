@@ -17,12 +17,12 @@ write_live_stubs() {
   chmod +x "$TEST_DIR/bin/tmux" "$TEST_DIR/bin/claude"
 }
 
-# run_live <bash-snippet>: the snippet runs under `bash -e` with lib.sh sourced.
+# run_live <bash-snippet>: the snippet runs under `set -euo pipefail` with lib.sh sourced.
 run_live() {
   write_live_stubs
   EXIT_CODE=0
   env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
-    "$BASH" --noprofile --norc -e -c 'source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+    "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
 }
 
 assert_tmux_called() { assert_file_has "$TMUX_LOG" "$1"; }
