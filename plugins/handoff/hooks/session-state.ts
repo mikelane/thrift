@@ -15,7 +15,7 @@ export type ButtonPress = { offer: Offer; button: Button }
 // the joined text. A group with no composer prompt in it has none.
 // author is required so that who wrote the words is never a default: the plugin's own words (the handoff note) keep the
 // plugin's frame whatever person origin they borrow for the box, and only a person's are read as the person's.
-export type HeldPromptAuthor = 'person' | 'plugin'
+type HeldPromptAuthor = 'person' | 'plugin'
 export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind']; author: HeldPromptAuthor; boxText?: string }
 
 // One origin's held prompts, joined into a single text.

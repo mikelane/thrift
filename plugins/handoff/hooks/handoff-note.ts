@@ -71,8 +71,10 @@ export const joinPrompts = (handoff: string, heldPrompts: string | undefined): s
   heldPrompts ? `${handoff}${PROMPT_SEPARATOR}${heldPrompts}` : handoff
 
 // A group is the composer's only while every prompt in it is; one remote prompt keeps the whole group out of the box, because
-// the box is where the person at this terminal reviews what they typed. A group is a person's only while every prompt in it
-// comes from a person: one prompt from another sender (a finished task) takes the group's origin, whatever order they arrived in.
+// the box is where the person at this terminal reviews what they typed.
+// SAFETY: held prompts always come from a person. Only person origins reach holdForHandoff (prompt.submit goes through
+// decidePrompt), and a scheduled trigger forms its own group through isUnattended. So the non-person clause below guards a mix
+// that no held path builds: a group stays a person's only while every prompt in it is, whatever order they arrived in.
 const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['origin']): HeldPrompt['origin'] =>
   isComposerOrigin(groupSoFar) || (isPersonOrigin(groupSoFar) && !isPersonOrigin(joining)) ? joining : groupSoFar
 

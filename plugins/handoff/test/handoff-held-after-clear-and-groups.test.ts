@@ -135,12 +135,12 @@ describe('boxText on a group', () => {
     expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('boxText')
   })
 
-  test('It does not let a bridge prompt make a later task notification speak for the person', () => {
+  test('It keeps a group from speaking for the person when a task notification joins a bridge prompt, a guard for a mix no held path builds', () => {
     const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
-    expect(speaksForPerson(groupHeldPrompts(prompts)[0]!)).toBe(false)
+    expect(groupHeldPrompts(prompts).map(speaksForPerson)).toEqual([false])
   })
 
-  test('It does not let a task notification join a group that a bridge prompt began as a person', () => {
+  test('It gives a group the task-notification origin when one joins a bridge prompt, a guard for a mix no held path builds', () => {
     const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
     expect(groupHeldPrompts(prompts)[0]?.origin).toBe('task-notification')
   })

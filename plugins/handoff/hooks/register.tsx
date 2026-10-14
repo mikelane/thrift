@@ -549,11 +549,11 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
-  const note = {
+  const note: HeldPrompt = {
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
-    author: 'plugin' as const,
+    author: 'plugin',
     ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
