@@ -71,8 +71,10 @@ export const joinPrompts = (handoff: string, heldPrompts: string | undefined): s
   heldPrompts ? `${handoff}${PROMPT_SEPARATOR}${heldPrompts}` : handoff
 
 // A group is the composer's only while every prompt in it is; one remote prompt keeps the whole group out of the box, because
-// the box is where the person at this terminal reviews what they typed.
-const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['origin']): HeldPrompt['origin'] => (isComposerOrigin(groupSoFar) ? joining : groupSoFar)
+// the box is where the person at this terminal reviews what they typed. A group is a person's only while every prompt in it
+// comes from a person: one prompt from another sender (a finished task) takes the group's origin, whatever order they arrived in.
+const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['origin']): HeldPrompt['origin'] =>
+  isComposerOrigin(groupSoFar) || (isPersonOrigin(groupSoFar) && !isPersonOrigin(joining)) ? joining : groupSoFar
 
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {

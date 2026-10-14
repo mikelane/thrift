@@ -134,6 +134,21 @@ describe('boxText on a group', () => {
     const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
     expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('boxText')
   })
+
+  test('It does not let a bridge prompt make a later task notification speak for the person', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
+    expect(speaksForPerson(groupHeldPrompts(prompts)[0]!)).toBe(false)
+  })
+
+  test('It does not let a task notification join a group that a bridge prompt began as a person', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
+    expect(groupHeldPrompts(prompts)[0]?.origin).toBe('task-notification')
+  })
+
+  test('It keeps a person origin when person origins join in groupHeldPrompts', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
+    expect(groupHeldPrompts(prompts)[0]?.origin).toBe('bridge')
+  })
 })
 
 describe('groupJoiningNote and groupsLeftToSend', () => {
