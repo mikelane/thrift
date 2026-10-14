@@ -283,7 +283,9 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
 ### When something fails
 
 - **The fork returns no answer, or anything throws before the clear.** Nothing is cleared. A toast
-  and a transcript line say no handoff was written and the session is unchanged. A held prompt goes back in the box
+  and a transcript line say no handoff was written and the session is unchanged. When the session
+  has no reply from Claude yet (before its first response, or right after `/clear`), they say there
+  is nothing to hand off yet and to send a prompt first. A held prompt goes back in the box
   when someone is at the prompt. When nobody is, or the box will not take it, the prompt is
   submitted in the unchanged session.
 - **`/clear` throws after the fork succeeded.** The session is unchanged, or compacted but not
@@ -351,6 +353,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
+| `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when the session had no reply from Claude to fork (before its first response, or right after `/clear`). Absent for every other reason the fork wrote no note |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 | `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear`) or `person` (you typed `/clear` before the handoff's own clear, so the note went into the fresh session you made and no second clear ran) |
 | `trigger_values.compacted_before_clear` | Present, as `true`, only on the record that ends a handoff (a `cleared` record, or the `none` record of an abandon) when `compactBeforeClear` was on and the compaction before the clear worked. It tells a `background_busy`, `clear_failed`, or `session_ended` record that left the session compacted from one that left it unchanged. A vetoed or failed compaction writes its own `none` record and leaves this off. A compaction in act mode outside a handoff writes a `compacted` record instead |

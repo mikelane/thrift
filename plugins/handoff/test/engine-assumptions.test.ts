@@ -56,7 +56,8 @@ test('It counts the main model as one call beside each advisor call', async ($, 
 })
 
 // Assumption: $.model.fork answers { isAnswered: false, reason: 'nothing-to-fork' } right after a
-// /clear and before the first response, and the plugin treats any isAnswered: false as no handoff.
+// /clear and before the first response, and the plugin treats any isAnswered: false as no handoff
+// (nothing-to-fork also gets the "send a prompt first" message and a fork_reason on the record).
 // Last confirmed live: never. Declared on ModelForkResult in 2.1.295.
 test('It writes no handoff when the fork has nothing to fork', async ($, on) => {
   const world = install($, on)
