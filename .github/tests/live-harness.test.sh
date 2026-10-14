@@ -156,4 +156,58 @@ test_handoff_prepare_is_an_error_when_a_constant_it_patches_is_gone() {
   assert_out_has "no line starting 'const MIN_THRESHOLD = '"
 }
 
+test_live_sh_exits_2_when_it_cannot_make_its_working_directory() {
+  write_live_stubs
+  EXIT_CODE=0
+  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_CWD=/dev/null/cwd \
+    "$BASH" "$LIVE_DIR/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 2
+}
+
+test_busy_abandon_is_a_fail_when_the_old_transcript_has_no_compaction() {
+  run_live 'source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
+    set -uo pipefail
+    CLAUDE_CONFIG_DIR=$HOME/.claude
+    live_init
+    mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
+    echo "{\"type\":\"user\"}" > "$CLAUDE_CONFIG_DIR/projects/p/old.jsonl"
+    transcript_summary old
+    check "compacted" "no marker" transcript_is_compacted old
+    live_verdict s'
+  assert_exit_code 1
+  assert_out_has 'FAIL  compacted'
+}
+
+# Every engine-facing helper is a no-op, so only the scenario's own control flow runs: the plugin
+# cleared instead of abandoning, which is the misbehavior the scenario's checks exist to report.
+test_busy_abandon_is_a_fail_when_the_handoff_clears_instead_of_stopping() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
+    live_init
+    handoff_prepare() { :; }; handoff_start() { :; }; live_start() { :; }; say_apple() { :; }
+    submit() { :; }; type_text() { :; }; press() { :; }; pane_has() { :; }; log_has() { :; }
+    turns_done_above() { :; }; show_pane() { :; }; show_box() { :; }; show_log() { :; }; box_text() { :; }
+    printf "%s\n" "{\"action\":\"cleared\",\"session_id\":\"old\",\"trigger_values\":{}}" > "$LIVE_DECISIONS"
+    LIVE_TIMEOUT=1
+    scenario_run
+    live_verdict s'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the handoff did not clear'
+}
+
+test_box_is_empty_fails_when_the_screen_shows_no_prompt_box() {
+  run_live 'source "$LIVE_DIR/handoff/scenarios/held-prompt-box.sh"
+    live_init
+    pane() { printf "%s\n" "Do you want to proceed?" "> 1. Yes" "  2. No"; }
+    check "box empty" "no box" box_is_empty a
+    live_verdict s'
+  assert_exit_code 1
+  assert_out_has 'FAIL  box empty'
+}
+
+test_a_kept_run_directory_stays_inside_the_test_tmpdir() {
+  run_live 'live_init; echo "RUN=$LIVE_RUN"; false'
+  assert_exit_code 2
+  assert_out_has "RUN=$TEST_DIR/tmp/"
+}
+
 run_tests "$@"
