@@ -602,7 +602,7 @@ const continueInFreshSession = async (
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
   // A person's prompt follows the note. If the note never entered the fresh session, it is held back instead: in the box or the
   // transcript, after the note, rather than running in a session that knows nothing of the work.
-  const isNoteMissing = !settledHandoff.isUnattended && (noteDelivery === 'in_box' || noteDelivery === 'not_carried')
+  const isNoteMissing = noteDelivery === 'in_box' || noteDelivery === 'not_carried'
   // A note left in the box is read first, so a prompt that also lands there goes after it.
   const placement = noteDelivery === 'in_box' ? 'after_draft' : 'before_draft'
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: isNoteMissing })

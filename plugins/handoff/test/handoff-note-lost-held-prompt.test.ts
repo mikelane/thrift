@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { entered, submitPerson, writingTheNote, type World } from './helpers'
+import { unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
 
 // The note goes first and the person's prompts follow it (#55). A note that did not enter the fresh session leaves the
@@ -116,5 +117,33 @@ describe('where a held prompt goes when the note did not enter the fresh session
     noteRefusedApart(world)
     await finishNote()
     expect(world.box.text.split('\n').filter(line => line === 'next thing')).toHaveLength(1)
+  })
+})
+
+describe('held person prompts when a scheduled handoff note did not enter the fresh session', () => {
+  const ASK = { options: { handoffMode: 'ask' } } as const
+
+  test('It holds a person prompt back in the prompt box when the scheduled note and its group were refused', ASK, async ($, on) => {
+    const { world, finishNote } = await unattendedHandoffWriting($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    await submitPerson($, 'person says')
+    world.submitHooks = [undefined, () => {
+      world.submitDropped = false
+    }]
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:composer:start on ENG-1'], 'person says'])
+  })
+
+  test('It holds a bridge prompt back in the transcript when the scheduled note was refused', ASK, async ($, on) => {
+    const { world, finishNote } = await unattendedHandoffWriting($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    world.submitHooks = [undefined, () => {
+      world.submitDropped = false
+    }]
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:composer:start on ENG-1'], ''])
   })
 })
