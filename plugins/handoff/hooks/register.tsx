@@ -52,6 +52,7 @@ import {
   groupsLeftToSend,
   withoutPrompt,
   boxCopiesOf,
+  boxCopyOf,
   type Carried,
   type NoteDelivery,
 } from './handoff-note'
@@ -307,10 +308,11 @@ const withoutKeptCopy = (draft: string, { lastText }: BoxPrompt): string =>
 // Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
 // that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
 const clearSentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
-  if (!canUseBox(prompt)) return
+  const copies = boxCopiesOf(prompt)
+  if (copies.length === 0) return
   try {
     const draft = (await $.prompt.read()).text
-    const remainingDraft = boxCopiesOf(prompt).map(copy => withoutPrompt(draft, copy)).find(remaining => remaining !== null)
+    const remainingDraft = copies.map(copy => withoutPrompt(draft, copy)).find(remaining => remaining !== null)
     if (remainingDraft === undefined) return
     const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
     if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
@@ -365,7 +367,9 @@ const restorePrompt = async (
   placement: BoxPlacement = 'before_draft',
 ): Promise<Carried> => {
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
-  return submitOrKeepInTranscript($, state, prompt)
+  const carried = await submitOrKeepInTranscript($, state, prompt)
+  if (carried === 'submitted') await clearSentPromptFromBox($, prompt)
+  return carried
 }
 
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
@@ -527,11 +531,12 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
+  const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
   const note = {
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
-    ...(sameOriginGroup === undefined ? {} : { lastText: sameOriginGroup.lastText ?? sameOriginGroup.text }),
+    ...(boxCopy === undefined ? {} : { lastText: boxCopy }),
   }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
 }

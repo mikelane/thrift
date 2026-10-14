@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { boxCopiesOf } from '../hooks/handoff-note'
+import { boxCopiesOf, boxCopyOf } from '../hooks/handoff-note'
 import { entered, submitPerson, writingTheNote } from './helpers'
 
 const fills = (effects: string[]) => effects.filter(effect => effect.startsWith('fill:'))
@@ -56,6 +56,21 @@ describe('the prompt box after a held prompt is delivered', () => {
     world.box = { text: 'next thing\nmy draft', cursor: 18 }
     await finishNote()
     expect(world.box.text).toBe('my draft')
+  })
+
+  test('It takes the composer prompt out of the box when a bridge prompt was held beside it', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'my prompt')
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:my prompt\n\nfrom phone'], ''])
+  })
+
+  test('It takes a multi-line composer prompt out of the box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'line one\nline two')
+    await finishNote()
+    expect(world.box.text).toBe('')
   })
 
   test('It leaves the box alone after a held bridge prompt is sent', async ($, on) => {
@@ -117,12 +132,55 @@ describe('the prompt box when a held group goes back to it', () => {
   })
 })
 
+describe('the prompt box when a group with a remote prompt in it is sent back', () => {
+  test('It takes the composer prompt out of the box when an abandoned handoff sends the group back', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'my prompt')
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    await failNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:my prompt\n\nfrom phone'], ''])
+  })
+
+  test('It leaves a draft alone that matches a bridge prompt sent on its own', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    await submitPerson($, 'again', { kind: 'bridge' })
+    world.box = { text: 'again', cursor: 5 }
+    await finishNote()
+    expect(world.box.text).toBe('again')
+  })
+})
+
 describe('boxCopiesOf', () => {
   test('It returns the text alone for a prompt without a last prompt', () => {
-    expect(boxCopiesOf({ text: 'a' })).toEqual(['a'])
+    expect(boxCopiesOf({ text: 'a', origin: 'composer' })).toEqual(['a'])
   })
 
   test('It returns the joined text and the last prompt for a group', () => {
-    expect(boxCopiesOf({ text: 'a\n\nb', lastText: 'b' })).toEqual(['a\n\nb', 'b'])
+    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'composer', lastText: 'b' })).toEqual(['a\n\nb', 'b'])
+  })
+})
+
+describe('boxCopiesOf for a prompt from elsewhere', () => {
+  test('It returns nothing for a bridge prompt without a composer prompt in it', () => {
+    expect(boxCopiesOf({ text: 'a', origin: 'bridge' })).toEqual([])
+  })
+
+  test('It returns only the last composer prompt for a group that holds a bridge prompt', () => {
+    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'bridge', lastText: 'a' })).toEqual(['a'])
+  })
+})
+
+describe('boxCopyOf', () => {
+  test('It returns the text of a composer prompt that has no last prompt', () => {
+    expect(boxCopyOf({ text: 'a', origin: 'composer' })).toBe('a')
+  })
+
+  test('It returns the last prompt of a group', () => {
+    expect(boxCopyOf({ text: 'a\n\nb', origin: 'composer', lastText: 'b' })).toBe('b')
+  })
+
+  test('It returns nothing for a prompt from elsewhere', () => {
+    expect(boxCopyOf({ text: 'a', origin: 'bridge' })).toBeUndefined()
   })
 })

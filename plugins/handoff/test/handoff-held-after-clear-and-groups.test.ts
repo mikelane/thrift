@@ -83,7 +83,7 @@ describe('groupHeldPrompts', () => {
         { text: 'u2', isUnattended: true, origin: 'scheduled-trigger' },
       ]),
     ).toEqual([
-      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger', lastText: 'u2' },
+      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger' },
       { text: 'p1', isUnattended: false, origin: 'composer' },
     ])
   })
@@ -97,6 +97,21 @@ describe('lastText on a group', () => {
   test('It sets lastText to the last prompt of a group of several', () => {
     const prompts = [personGroup, { ...personGroup, text: 'and then' }, { ...personGroup, text: 'finally, this' }]
     expect(groupHeldPrompts(prompts)[0]?.lastText).toBe('finally, this')
+  })
+
+  test('It keeps the composer prompt as lastText when a bridge prompt joins after it', () => {
+    const prompts = [personGroup, { ...personGroup, text: 'from phone', origin: 'bridge' as const }]
+    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe(personGroup.text)
+  })
+
+  test('It sets lastText to a composer prompt that joins a bridge prompt', () => {
+    const prompts = [{ ...personGroup, text: 'from phone', origin: 'bridge' as const }, personGroup]
+    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe(personGroup.text)
+  })
+
+  test('It leaves lastText off a group with no composer prompt in it', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
+    expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('lastText')
   })
 })
 

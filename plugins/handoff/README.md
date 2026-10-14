@@ -114,7 +114,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       Claude Code leaves the text of a prompt it dropped in the prompt box. Once a prompt typed at this
       terminal has been submitted in the fresh session, the plugin takes that text out of the box so
       Enter does not send it a second time. Only the lines that match the submitted prompt (a group's
-      last prompt, if it held several) are removed; any other draft in the box is left alone.
+      last prompt typed at this terminal, if it held several, even when a bridge or SDK prompt joined it)
+      are removed; any other draft in the box is left alone. A group put back by an abandoned handoff
+      and submitted rather than boxed is cleaned up the same way.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.
