@@ -87,6 +87,22 @@ describe('where a held prompt goes when the note did not enter the fresh session
     expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nlate`])
   })
 
+  test('It still submits a scheduled prompt that arrives mid-delivery, framed, when the note could only go in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    world.submitHooks = [
+      () => {
+        void submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job'], NOTE_MESSAGE])
+  })
+
   test('It leaves one box copy of the held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'next thing')

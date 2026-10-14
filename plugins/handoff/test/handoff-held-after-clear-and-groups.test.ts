@@ -39,6 +39,19 @@ describe('prompts that arrive after the clear', () => {
     expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'])
   })
 
+  test('It drops a repeat of the carried prompt that arrives after the note was submitted and before the prompt follows it', ASK, async ($, on) => {
+    const { world, fork } = await heldBeforeTheHandoff($, on)
+    world.appendDenied = true
+    const outcome = repeatOnSubmitAfter($, world, 1)
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    expect(outcome.repeat).not.toBeNull()
+    expect([dropOf(await outcome.repeat), entered(world).filter(line => line.endsWith('now ENG-2'))]).toEqual([
+      REPEAT_NOT_ADDED,
+      ['entered:plugin+asUser:now ENG-2'],
+    ])
+  })
+
   test('It lets a repeat of the carried prompt through once the handoff has finished', ASK, async ($, on) => {
     const { world, finishNote } = await heldBeforeTheHandoff($, on)
     await finishNote()
