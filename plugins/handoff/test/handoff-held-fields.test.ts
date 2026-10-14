@@ -6,6 +6,7 @@ import { heldGroupFields, type DecisionAction } from '../hooks/decision-record'
 import type { HeldPromptGroup } from '../hooks/session-state'
 import {
   answered,
+  entered,
   growTo200k,
   holdFork,
   install,
@@ -241,14 +242,14 @@ describe('held_other_delivery on a cleared record', () => {
       world.submitDropped = true
     }]
     expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values.held_other_delivery).toBe('not_carried')
-    expect(enteredTexts(world)).toEqual([SECRET_PROMPT])
+    expect(entered(world)).toEqual([`entered:plugin+asUser:${SECRET_PROMPT}`])
   })
 
   test('It records held_other_delivery submitted when the note was submitted apart from the only held person group', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person'])
     world.appendDenied = true
     expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'submitted' })
-    expect(enteredTexts(world)).toEqual([NOTE_MESSAGE, SECRET_PROMPT])
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, `entered:plugin+asUser:${SECRET_PROMPT}`])
   })
 
   test('It records the worst delivery of the groups that did not ride with the note', async ($, on) => {

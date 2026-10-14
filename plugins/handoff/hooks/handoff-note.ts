@@ -1,6 +1,6 @@
 import type { ForkReason } from './fork-outcome'
 import { isComposerOrigin, isPersonOrigin } from './prompt-plan'
-import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
+import { isGroupOfOrigin, type BoxPlacement, type HeldPrompt, type HeldPromptGroup } from './session-state'
 
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
 Cover, under short headings:
@@ -107,6 +107,21 @@ export const groupsLeftToSend = (
   noteDelivery: NoteDelivery,
 ): HeldPromptGroup[] =>
   noteDelivery === 'appended' ? [...groups] : groups.filter(group => group !== groupJoiningNote(groups, handoffIsUnattended))
+
+// A note sent as a prompt may have taken the scheduled group along; the carried prompt is released with that group, as with any other.
+export const noteTookGroupAlong = (
+  groups: readonly HeldPromptGroup[],
+  handoffIsUnattended: boolean,
+  noteDelivery: NoteDelivery,
+): boolean => noteDelivery !== 'appended' && groupJoiningNote(groups, handoffIsUnattended) !== undefined
+
+// A person's prompt follows the note. If the note never entered the fresh session, it is held back instead: in the box or the
+// transcript, after the note, rather than running in a session that knows nothing of the work. A note left in the box is read
+// first, so a prompt that also lands there goes after it.
+export const deliveryAfterNote = (noteDelivery: NoteDelivery): { holdBackPerson: boolean; placement: BoxPlacement } => ({
+  holdBackPerson: noteDelivery === 'in_box' || noteDelivery === 'not_carried',
+  placement: noteDelivery === 'in_box' ? 'after_draft' : 'before_draft',
+})
 
 // The text the engine left in the box for a group: the last prompt typed at the composer, which a remote prompt joined
 // after it does not replace. A group with no composer prompt left nothing there.

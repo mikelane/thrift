@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend, speaksForPerson } from '../hooks/handoff-note'
+import {
+  deliveryAfterNote,
+  groupHeldPrompts,
+  groupJoiningNote,
+  groupsLeftToSend,
+  noteTookGroupAlong,
+  speaksForPerson,
+} from '../hooks/handoff-note'
 import { answered, dropOf, entered, submitPerson, writingTheNote } from './helpers'
 import {
   ASK,
@@ -144,6 +151,38 @@ describe('groupJoiningNote and groupsLeftToSend', () => {
 
   test('It leaves no groups to send in groupsLeftToSend for no groups', () => {
     expect(groupsLeftToSend([], false, 'submitted')).toEqual([])
+  })
+})
+
+describe('noteTookGroupAlong', () => {
+  test('It returns false from noteTookGroupAlong when the note was appended', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], true, 'appended')).toBe(false)
+  })
+
+  test('It returns true from noteTookGroupAlong when an unattended note was submitted with the scheduled group', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], true, 'submitted')).toBe(true)
+  })
+
+  test('It returns false from noteTookGroupAlong when an attended note was submitted apart from the person group', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], false, 'submitted')).toBe(false)
+  })
+})
+
+describe('deliveryAfterNote', () => {
+  test('It sends person prompts before the draft in deliveryAfterNote when the note was appended', () => {
+    expect(deliveryAfterNote('appended')).toEqual({ holdBackPerson: false, placement: 'before_draft' })
+  })
+
+  test('It sends person prompts before the draft in deliveryAfterNote when the note was submitted', () => {
+    expect(deliveryAfterNote('submitted')).toEqual({ holdBackPerson: false, placement: 'before_draft' })
+  })
+
+  test('It holds person prompts back after the draft in deliveryAfterNote when the note was left in the box', () => {
+    expect(deliveryAfterNote('in_box')).toEqual({ holdBackPerson: true, placement: 'after_draft' })
+  })
+
+  test('It holds person prompts back before the draft in deliveryAfterNote when the note was not carried', () => {
+    expect(deliveryAfterNote('not_carried')).toEqual({ holdBackPerson: true, placement: 'before_draft' })
   })
 })
 
