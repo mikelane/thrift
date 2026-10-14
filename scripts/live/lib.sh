@@ -37,7 +37,7 @@ LIVE_WAITING=''
 live_cleanup() {
   local status=$? failed_command=$BASH_COMMAND
   set +e
-  trap '' INT TERM HUP PIPE
+  trap '' INT TERM HUP PIPE QUIT
   local error_message='' interrupt_message='' screens='' session
   if [[ "$status" -lt 128 && "$LIVE_VERDICT_REACHED" != 1 && "$LIVE_ABORTED" != 1 ]]; then
     error_message="ERROR: the harness stopped on a command that failed before it reached a verdict (status $status): ${failed_command%%$'\n'*}"
@@ -103,6 +103,7 @@ live_init() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   trap 'exit 131' QUIT
+  trap 'exit 141' PIPE
   LIVE_RUN=$(mktemp -d "${TMPDIR:-/tmp}/live.XXXXXX")
   mkdir -p -- "$LIVE_RUN/thrift"
   LIVE_THRIFT_HOME="$LIVE_RUN/thrift"
@@ -276,16 +277,22 @@ check() {
   fi
 }
 
+live_verdict_unwritable() {
+  live_say 'ERROR: could not write the verdict (is the reader of stdout gone?)'
+  LIVE_ABORTED=1
+  exit 2
+}
+
 # The verdict counts as reached only once its line is written: a verdict that cannot be printed (the
 # reader of stdout is gone) is an ERROR, never a PASS or a FAIL nobody saw.
 live_verdict() {
   local scenario=$1
-  printf '\n' || exit 2
+  printf '\n' || live_verdict_unwritable
   if ((LIVE_FAILED > 0)); then
-    printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED" || exit 2
+    printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED" || live_verdict_unwritable
     LIVE_VERDICT_REACHED=1
     return 1
   fi
-  printf 'PASS %s (%d checks)\n' "$scenario" "$LIVE_CHECKED" || exit 2
+  printf 'PASS %s (%d checks)\n' "$scenario" "$LIVE_CHECKED" || live_verdict_unwritable
   LIVE_VERDICT_REACHED=1
 }
