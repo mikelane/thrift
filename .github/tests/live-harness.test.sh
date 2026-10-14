@@ -347,6 +347,28 @@ test_a_verdict_that_cannot_be_printed_is_not_a_fail_when_every_check_passed() {
   [[ "$EXIT_CODE" -ne 1 ]] || fail "exit 1 (FAIL) with every check passing; output: $(cat "$OUTPUT")"
 }
 
+# In a terminal SIGPIPE has its default action. `live.sh ... | grep -q PASS` (or `| head`) closes the
+# pipe at its first match, the next line the harness prints kills it, and bash runs no EXIT trap for
+# a signal it does not catch: the claude sessions keep running. perl restores the default the test
+# runner may have inherited as ignored, which bash cannot undo itself.
+test_a_closed_stdout_pipe_still_kills_the_sessions() {
+  write_live_stubs
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
+    perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV or die' "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"
+      live_init; LIVE_SESSIONS=(live-11-a); exec > >(:); sleep 1; check x detail true; live_verdict s' > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_tmux_called 'kill-session -t =live-11-a'
+}
+
+# A second Ctrl-\ while the cleanup shows the panes of an interrupted wait.
+test_a_second_quit_during_cleanup_still_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-12-a); LIVE_NAMES=(a); LIVE_WAITING="a thing"
+    pane() { kill -QUIT $$; echo screen; }
+    kill -QUIT $$; sleep 5 & wait $!'
+  assert_exit_code 131
+  assert_tmux_called 'kill-session -t =live-12-a'
+}
+
 test_a_run_directory_is_kept_after_a_pass_when_keep_is_set() {
   run_live 'LIVE_KEEP=1; live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
   assert_exit_code 0
