@@ -40,7 +40,11 @@ scenario_run() {
   show_records cleared
   show_pane a 'end of the run'
 
-  if [[ ! "$arrived_ts" > "$note_done_ts" || ! "$arrived_ts" < "$compacted_ts" ]]; then
+  local name
+  for name in note_done_ts compacted_ts arrived_ts queued_ts peer_ts cleared_ts; do
+    [[ -n "${!name}" ]] || live_abort "no timestamp for $name; the debug log or the cleared record lacks the line it comes from"
+  done
+  if ! ts_before "$note_done_ts" "$arrived_ts" || ! ts_before "$arrived_ts" "$compacted_ts"; then
     live_abort 'the peer message did not arrive inside the compaction window, so the run proves nothing; run it again'
   fi
 
@@ -51,5 +55,5 @@ scenario_run() {
 
 peer_turn_outside_gap() {
   local queued=$1 peer=$2 cleared=$3
-  ! [[ "$peer" > "$queued" && "$peer" < "$cleared" ]]
+  ! { ts_before "$queued" "$peer" && ts_before "$peer" "$cleared"; }
 }

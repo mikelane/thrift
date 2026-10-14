@@ -20,7 +20,8 @@ scripts/live/live.sh handoff held-prompt-origin --keep  # keep the run directory
 Needs `tmux`, `claude` (logged in), and `jq`. Runs on bash 3.2 and newer.
 
 Exit status: `0` PASS, `1` FAIL (the plugin misbehaved), `2` ERROR (the harness could not reach the
-state it needed: a timeout, a missing tool, a missed timing window). A FAIL or ERROR keeps the run
+state it needed: a timeout, a missing tool, a missed timing window, or any command of the harness
+that failed before a verdict). A FAIL or ERROR keeps the run
 directory and prints its path: `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`,
 and the plugin copy.
 
@@ -44,7 +45,15 @@ Every wait is on a condition (pane text, a debug-log line, a decision record) wi
   directory. Claude Code keeps per-directory answers in `~/.claude.json`. The harness answers only
   the external-CLAUDE.md-imports dialog, with its default (no). It stops with instructions on any
   other dialog, such as the workspace trust prompt: run `claude` in `.live/cwd` once and answer it.
-- **Transcripts.** Real sessions write transcripts under `~/.claude/projects/`, as any session does.
+- **Transcripts and history.** Real sessions write transcripts under `~/.claude/projects/` and
+  append every prompt they receive to `~/.claude/history.jsonl`, as any session does. The harness
+  has no switch for either; the prompts are one-word test prompts. `~/.claude.json` also gains an
+  entry for `.live/cwd` and Claude Code's usual per-session counters.
+- **Processes.** On exit the harness kills only its own tmux sessions, each by exact name
+  (`live-<pid>-<label>`), and never the tmux server. Interrupting it with Ctrl-C, closing the
+  terminal (SIGHUP) or SIGTERM runs the same cleanup. A `kill -9` cannot: list leftovers with
+  `tmux ls` and remove them by name. Background work a scenario starts inside a session (the `sleep 90` of `busy-abandon`) is not
+  tracked by the harness and may outlive it: `pgrep -fl 'sleep 90'` finds one.
 
 ## Scenarios
 

@@ -32,7 +32,8 @@ scenario_run() {
   wait_for 'the handoff to wait for the running turn' pane_has a 'continues when the current turn ends'
   submit a "$HELD_PROMPT"
   wait_for 'the prompt to be held' log_has a 'held a prompt for the handoff'
-  wait_for 'the handoff to stop' record_exists none
+  # Every evaluation logs a `none` record, so only the reason shows that the abandon has happened.
+  wait_for 'the handoff to stop with background_busy' record_has_reason background_busy
 
   local old_id
   old_id=$(records_with none | jq -r '.session_id' | tail -n 1)

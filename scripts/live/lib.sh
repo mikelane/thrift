@@ -15,15 +15,23 @@ LIVE_SESSIONS=()
 LIVE_FAILED=0
 LIVE_CHECKED=0
 LIVE_KEEP=${LIVE_KEEP:-0}
+LIVE_VERDICT_REACHED=0
 
 # --- lifecycle -----------------------------------------------------------------------------------
 
+# Kills only this run's own sessions, each by exact name: a bare `-t name` also matches by prefix.
+# An exit status of 1 means FAIL, and only live_verdict may produce it. Any other command that failed
+# under `set -e` before the verdict was reached is the harness breaking, which is an ERROR (2).
 live_cleanup() {
   local status=$?
   local session
   for session in ${LIVE_SESSIONS[@]+"${LIVE_SESSIONS[@]}"}; do
-    tmux kill-session -t "$session" 2>/dev/null || true
+    tmux kill-session -t "=$session" 2>/dev/null || true
   done
+  if [[ "$status" -eq 1 && "$LIVE_VERDICT_REACHED" != 1 ]]; then
+    echo "ERROR: the harness stopped on a command that failed before it reached a verdict" >&2
+    status=2
+  fi
   if [[ -n "$LIVE_RUN" ]]; then
     if [[ "$LIVE_KEEP" == 1 || "$status" -ne 0 ]]; then
       echo "run directory kept: $LIVE_RUN" >&2
@@ -31,7 +39,7 @@ live_cleanup() {
       rm -rf -- "$LIVE_RUN"
     fi
   fi
-  return "$status"
+  exit "$status"
 }
 
 live_abort() {
@@ -54,9 +62,12 @@ live_require() {
 # live_init <plugin-dir>: makes the run directory and, per run, a throwaway copy of the plugin.
 live_init() {
   LIVE_NAMES=()
+  [[ "$LIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_TIMEOUT must be a whole number of seconds, not '$LIVE_TIMEOUT'"
   LIVE_RUN=$(mktemp -d)
   trap live_cleanup EXIT
-  trap 'exit 130' INT TERM
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   mkdir -p -- "$LIVE_RUN/thrift"
   LIVE_THRIFT_HOME="$LIVE_RUN/thrift"
   LIVE_DECISIONS="$LIVE_THRIFT_HOME/decisions.jsonl"
@@ -112,7 +123,7 @@ live_start() {
 start_dialogs_cleared() {
   local name=$1
   local screen
-  tmux has-session -t "$(session_of "$name")" 2>/dev/null \
+  tmux has-session -t "=$(session_of "$name")" 2>/dev/null \
     || live_abort "the claude session '$name' exited at start-up. Check that claude is logged in, and see $(debug_log_of "$name")"
   screen=$(pane "$name") || return 1
   if grep -q 'Allow external CLAUDE.md file imports' <<<"$screen"; then
@@ -164,12 +175,19 @@ submit() {
 pane_has() { pane "$1" | grep -qE -- "$2"; }
 pane_count() { pane "$1" | grep -cE -- "$2" || true; }
 log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
-log_count() { grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null || true; }
+# grep -c prints nothing when the file does not exist yet, which would break the arithmetic callers.
+log_count() { local count; count=$(grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null) || true; echo "${count:-0}"; }
 log_has_more_than() { (($(log_count "$1" "$2") > $3)); }
 # The timestamp / line number of the first debug-log line after line <from> matching an extended
 # regex. The pattern travels in the environment because awk -v would eat its backslashes.
 log_ts() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print $1; exit }' "$(debug_log_of "$1")"; }
 log_line() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print NR; exit }' "$(debug_log_of "$1")"; }
+# ts_before <a> <b>: succeeds when timestamp a is strictly earlier than b. Both must be non-empty ISO
+# timestamps of one width. awk compares bytes under LC_ALL=C; the shell's `<` follows the locale.
+ts_before() {
+  [[ -n "$1" && -n "$2" ]] || return 1
+  LC_ALL=C awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'
+}
 log_line_text() { sed -n "${2}p" "$(debug_log_of "$1")" | cut -c1-200; }
 turn_origins() { sed -n 's/.*cc_turn_origin=\([a-z_-]*\).*/\1/p' "$(debug_log_of "$1")"; }
 
@@ -204,6 +222,7 @@ check() {
 
 live_verdict() {
   local scenario=$1
+  LIVE_VERDICT_REACHED=1
   printf '\n'
   if ((LIVE_FAILED > 0)); then
     printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED"

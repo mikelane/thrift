@@ -45,7 +45,7 @@ while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --plugin-dir)
       [[ "$#" -ge 2 ]] || { usage; exit 2; }
-      plugin_dir=$(cd "$2" && pwd)
+      plugin_dir=$(cd -- "$2" 2>/dev/null && pwd) || { echo "--plugin-dir $2 is not a directory." >&2; exit 2; }
       shift 2
       ;;
     --keep)

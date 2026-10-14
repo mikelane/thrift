@@ -18,14 +18,21 @@ handoff_prepare() {
   cp -R -- "$LIVE_PLUGIN_SOURCE/hooks" "$copy/hooks"
   jq '.userConfig.handoffContextTokens.min = 1000' "$LIVE_PLUGIN_SOURCE/.claude-plugin/plugin.json" \
     >"$copy/.claude-plugin/plugin.json"
-  sed "s/^export const TESTED_THROUGH = .*/export const TESTED_THROUGH = '$LIVE_ENGINE_VERSION'/" \
-    "$copy/hooks/engine-version.ts" >"$copy/hooks/engine-version.ts.new"
-  mv -- "$copy/hooks/engine-version.ts.new" "$copy/hooks/engine-version.ts"
-  sed 's/^const MIN_THRESHOLD = .*/const MIN_THRESHOLD = 1_000/' "$copy/hooks/signals.ts" >"$copy/hooks/signals.ts.new"
-  mv -- "$copy/hooks/signals.ts.new" "$copy/hooks/signals.ts"
+  [[ "$LIVE_ENGINE_VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]] || live_abort "unexpected claude version '$LIVE_ENGINE_VERSION'"
+  replace_constant "$copy/hooks/engine-version.ts" 'export const TESTED_THROUGH = ' "'$LIVE_ENGINE_VERSION'"
+  replace_constant "$copy/hooks/signals.ts" 'const MIN_THRESHOLD = ' '1_000'
   jq -n --argjson options "$options" \
     '{pluginConfigs: {"handoff@inline": {options: ({handoffMode: "ask"} + $options)}}}' \
     >"$LIVE_RUN/settings.json"
+}
+
+# replace_constant <file> <declaration-prefix> <value>: rewrites the line that starts with the prefix.
+# A run on an unpatched copy would sit in `off` mode and hide the band, so a miss is an ERROR.
+replace_constant() {
+  local file=$1 prefix=$2 value=$3
+  grep -q "^$prefix" "$file" || live_abort "no line starting '$prefix' in ${file#"$LIVE_RUN"/}; the plugin changed, update handoff/common.sh"
+  sed "s/^$prefix.*/$prefix$value/" "$file" >"$file.new"
+  mv -- "$file.new" "$file"
 }
 
 # handoff_start <name>: a session with the prepared copy of the plugin loaded.
