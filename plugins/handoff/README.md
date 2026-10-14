@@ -121,6 +121,11 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       goes for every way the plugin sends one again: after the clear, a prompt that arrived while the
       delivery ran, Hand off and send it, Send here, and the restore after an abandoned handoff. The
       plugin's own note and a scheduled prompt keep the plugin's name in front.
+      A person's prompt follows the note, so it is not submitted when the note did not enter the
+      fresh session as a message (it could only go in the prompt box, or only in the transcript). It is
+      held back after the note instead: in the prompt box if it was typed at this terminal, otherwise
+      in the transcript. That includes a prompt that arrives while the delivery runs. Scheduled prompts
+      are still submitted.
       A prompt that arrives while this step runs is held too. It is delivered after everything above,
       one prompt at a time in the order it arrived, the same way: submitted, then put in the prompt box
       if it was typed at this terminal, then written to the transcript. A prompt from the bridge, the SDK,
@@ -324,7 +329,9 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
   a prompt, joined to any held scheduled prompt of a scheduled handoff. Held prompts from a person
-  follow it as separate prompts, so the model reads them as the person's own words.
+  follow it as separate prompts, so the model reads them as the person's own words. If that submit
+  is refused too, the note goes in the prompt box and the person's prompts are held back after it
+  rather than run in a session that has no note.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
   the prompt, it goes back in the box, after the handoff note when the note is in the box too. A box that
   already holds it as a whole line is left alone.

@@ -85,7 +85,7 @@ describe('holding prompts while the note is written', () => {
     expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:next thing'])
   })
 
-  test('It still submits the held prompt as the person when the note submitted apart from it is refused', async ($, on) => {
+  test('It holds the person prompt back in the box after the note when the note submitted apart from it is refused', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     await submitPerson($, 'next thing')
@@ -98,7 +98,7 @@ describe('holding prompts while the note is written', () => {
       },
     ]
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:next thing'], NOTE_MESSAGE])
+    expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nnext thing`])
   })
 
   test('It logs a held prompt to debug with the count and no text', async ($, on) => {

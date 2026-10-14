@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend } from '../hooks/handoff-note'
+import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend, speaksForPerson } from '../hooks/handoff-note'
 import { answered, dropOf, entered, submitPerson, writingTheNote } from './helpers'
 import {
   ASK,
@@ -49,17 +49,17 @@ describe('prompts that arrive after the clear', () => {
     expect(dropOf(await outcome.repeat)).toBe(HELD_FOR_HANDOFF)
   })
 
-  test('It sends a carried prompt the person re-sends from the box after the scheduled group, once the note was refused', ASK, async ($, on) => {
+  test('It holds back a carried prompt the person re-sends from the box, but sends the scheduled group, once the note was refused', ASK, async ($, on) => {
     const { world, fork } = await carriedPlusScheduled($, on)
     world.appendDenied = true
     world.submitDropped = true
-    const outcome = repeatOnSubmitAfter($, world, 2)
+    const outcome = repeatOnSubmitAfter($, world, 1)
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
     expect(outcome.repeat).not.toBeNull()
     expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
       HELD_FOR_HANDOFF,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:plugin+asUser:now ENG-2'],
+      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job'],
     ])
   })
 })
@@ -144,5 +144,27 @@ describe('groupJoiningNote and groupsLeftToSend', () => {
 
   test('It leaves no groups to send in groupsLeftToSend for no groups', () => {
     expect(groupsLeftToSend([], false, 'submitted')).toEqual([])
+  })
+})
+
+describe('speaksForPerson', () => {
+  test('It returns true from speaksForPerson for an attended composer prompt', () => {
+    expect(speaksForPerson(personGroup)).toBe(true)
+  })
+
+  test('It returns false from speaksForPerson for a scheduled prompt', () => {
+    expect(speaksForPerson(scheduledGroup)).toBe(false)
+  })
+
+  test('It returns false from speaksForPerson for the plugin note, whatever person origin it borrows', () => {
+    expect(speaksForPerson({ ...personGroup, isPluginAuthored: true })).toBe(false)
+  })
+
+  test('It returns true from speaksForPerson for a bridge prompt', () => {
+    expect(speaksForPerson({ ...personGroup, origin: 'bridge' })).toBe(true)
+  })
+
+  test('It returns false from speaksForPerson for an origin that is not a person', () => {
+    expect(speaksForPerson({ ...personGroup, origin: 'task-notification' })).toBe(false)
   })
 })

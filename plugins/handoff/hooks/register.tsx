@@ -51,6 +51,7 @@ import {
   groupHeldPrompts,
   holdsPrompt,
   joinPrompts,
+  speaksForPerson,
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
@@ -332,10 +333,6 @@ const canUseBox = (prompt: HeldPrompt): boolean => isComposerOrigin(prompt.origi
 const keepInTranscript = ($: EngineInterface, prompt: HeldPrompt, notice?: string) =>
   $.ui.log(`${notice ?? (canUseBox(prompt) ? UNSENT_PROMPT : UNSENT_OTHER_PROMPT)}\n${prompt.text}`)
 
-// A person's prompt is read by the model as the person's own words, not as a message from this plugin. A scheduled prompt
-// keeps the plugin's frame: nobody typed it. The plugin's own handoff note is not the person's either, so its callers say so.
-const speaksForPerson = (prompt: HeldPrompt): boolean => !prompt.isUnattended && isPersonOrigin(prompt.origin)
-
 // The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
 // plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
 // the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
@@ -510,15 +507,16 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type SendOptions = { placement?: BoxPlacement; notice?: string | undefined; asUser?: boolean }
+// holdBack keeps a prompt out of the fresh session: a person's prompt must not run ahead of a note that never entered it.
+type SendOptions = { placement?: BoxPlacement; notice?: string | undefined; holdBack?: boolean }
 
 const sendOrKeepInBox = async (
   $: EngineInterface,
   state: SessionState,
   prompt: HeldPrompt,
-  { placement = 'before_draft', notice, asUser = speaksForPerson(prompt) }: SendOptions = {},
+  { placement = 'before_draft', notice, holdBack = false }: SendOptions = {},
 ): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not send the prompt', asUser)) {
+  if (!holdBack && (await submitEntered($, state, prompt, 'could not send the prompt', speaksForPerson(prompt)))) {
     await emptySentPromptFromBox($, prompt)
     return 'submitted'
   }
@@ -550,9 +548,10 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
+    isPluginAuthored: true as const,
     ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
-  return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined), asUser: false })
+  return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
 }
 
 // A note sent as a prompt may have taken the scheduled group along; the carried prompt is released with that group, as with any other.
@@ -564,21 +563,21 @@ const sendHeldGroups = async (
   state: SessionState,
   groups: readonly HeldPromptGroup[],
   handoffIsUnattended: boolean,
-  placement: BoxPlacement = 'before_draft',
+  { placement, holdBackPersonGroups }: { placement: BoxPlacement; holdBackPersonGroups: boolean },
 ): Promise<Carried[]> => {
   const deliveries: Carried[] = []
   for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, state, group, { placement }))
+    deliveries.push(await sendOrKeepInBox($, state, group, { placement, holdBack: holdBackPersonGroups && speaksForPerson(group) }))
     releaseCarriedGroup(state, group, handoffIsUnattended)
   }
   return deliveries
 }
 
-const sendLateArrivals = ($: EngineInterface, state: SessionState): Promise<LateArrivals> =>
+const sendLateArrivals = ($: EngineInterface, state: SessionState, holdBackPersonPrompts: boolean): Promise<LateArrivals> =>
   forEachLateArrival(state, async prompt => {
     // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
     await inspectPrompt($, state, prompt.text)
-    return sendOrKeepInBox($, state, prompt, { placement: 'after_draft' })
+    return sendOrKeepInBox($, state, prompt, { placement: 'after_draft', holdBack: holdBackPersonPrompts && speaksForPerson(prompt) })
   })
 
 const continueInFreshSession = async (
@@ -601,9 +600,13 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
+  // A person's prompt follows the note. If the note never entered the fresh session, it is held back instead: in the box or the
+  // transcript, after the note, rather than running in a session that knows nothing of the work.
+  const isNoteMissing = !settledHandoff.isUnattended && (noteDelivery === 'in_box' || noteDelivery === 'not_carried')
   // A note left in the box is read first, so a prompt that also lands there goes after it.
-  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, noteDelivery === 'in_box' ? 'after_draft' : 'before_draft')
-  const late = await sendLateArrivals($, state)
+  const placement = noteDelivery === 'in_box' ? 'after_draft' : 'before_draft'
+  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: isNoteMissing })
+  const late = await sendLateArrivals($, state, isNoteMissing)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',

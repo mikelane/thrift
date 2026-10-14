@@ -1,0 +1,120 @@
+import { describe, expect, test } from 'claude-code/testing'
+
+import { entered, submitPerson, writingTheNote, type World } from './helpers'
+import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
+
+// The note goes first and the person's prompts follow it (#55). A note that did not enter the fresh session leaves the
+// prompts nothing to follow: run now, they would start a session that knows nothing of the work, ahead of the note.
+describe('held person prompts when the note did not enter the fresh session', () => {
+  test('It runs no held prompt ahead of a note that could only go in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    await submitPerson($, 'next thing')
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+    await finishNote()
+    expect(entered(world)).toEqual([])
+  })
+
+  test('It runs no held bridge prompt ahead of a note that could only go in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+    await finishNote()
+    expect(entered(world)).toEqual([])
+  })
+
+  test('It runs no held prompt in the fresh session when the note was only kept in the transcript', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    await submitPerson($, 'next thing')
+    await world.clock.settle()
+    world.fillRefusal = 'dialog'
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+    await finishNote()
+    expect(entered(world)).toEqual([])
+  })
+})
+
+describe('where a held prompt goes when the note did not enter the fresh session', () => {
+  const noteRefusedApart = (world: World) => {
+    world.appendDenied = true
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+  }
+
+  test('It puts the note, then the held prompt, in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    noteRefusedApart(world)
+    await finishNote()
+    expect(world.box.text).toBe(`${NOTE_MESSAGE}\nnext thing`)
+  })
+
+  test('It keeps a held bridge prompt out of the box and in the transcript', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    noteRefusedApart(world)
+    await finishNote()
+    expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:A prompt could not be sent'))]).toEqual([
+      NOTE_MESSAGE,
+      ['log:A prompt could not be sent, so here it is:\nfrom phone'],
+    ])
+  })
+
+  test('It still submits a held scheduled prompt, framed, when the note could only go in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    noteRefusedApart(world)
+    await finishNote()
+    expect(entered(world)).toEqual(['entered:plugin:nightly job'])
+  })
+
+  test('It holds back a person prompt that arrives mid-delivery when the note could only go in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    world.submitHooks = [
+      () => {
+        void submitPerson($, 'late')
+      },
+    ]
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nlate`])
+  })
+
+  test('It leaves one box copy of the held prompt', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    noteRefusedApart(world)
+    await finishNote()
+    expect(world.box.text.split('\n').filter(line => line === 'next thing')).toHaveLength(1)
+  })
+})

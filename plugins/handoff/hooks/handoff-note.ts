@@ -1,5 +1,5 @@
 import type { ForkReason } from './fork-outcome'
-import { isComposerOrigin } from './prompt-plan'
+import { isComposerOrigin, isPersonOrigin } from './prompt-plan'
 import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
 
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
@@ -119,6 +119,11 @@ export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'boxTex
   ...(isComposerOrigin(prompt.origin) ? [prompt.text] : []),
   ...(prompt.boxText === undefined ? [] : [prompt.boxText]),
 ]
+
+// A person's prompt is read by the model as the person's own words, not as a message from this plugin. A scheduled prompt and
+// the plugin's own note keep the plugin's frame: nobody typed them.
+export const speaksForPerson = (prompt: Pick<HeldPrompt, 'isUnattended' | 'origin' | 'isPluginAuthored'>): boolean =>
+  prompt.isPluginAuthored !== true && !prompt.isUnattended && isPersonOrigin(prompt.origin)
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

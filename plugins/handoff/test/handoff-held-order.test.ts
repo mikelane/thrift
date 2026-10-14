@@ -93,7 +93,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:held one', 'entered:plugin+asUser:late'])
   })
 
-  test('It sends a prompt that arrives mid-delivery once the refused note and held prompt went in the box', async ($, on) => {
+  test('It holds a prompt that arrives mid-delivery in the box after the refused note and held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     world.submitDropped = true
@@ -103,7 +103,7 @@ describe('prompts that arrive while the handoff delivers', () => {
       world.submitDropped = false
     })
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'], NOTE_MESSAGE])
+    expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nheld one\nlate`])
   })
 
   test('It lets a prompt through once the delivery has finished', async ($, on) => {
