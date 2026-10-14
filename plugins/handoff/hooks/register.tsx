@@ -555,6 +555,10 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined), asUser: false })
 }
 
+// A note sent as a prompt may have taken the scheduled group along; the carried prompt is released with that group, as with any other.
+const noteTookGroupAlong = (settledHandoff: SettledHandoff, noteDelivery: NoteDelivery): boolean =>
+  noteDelivery !== 'appended' && groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended) !== undefined
+
 const sendHeldGroups = async (
   $: EngineInterface,
   state: SessionState,
@@ -593,8 +597,7 @@ const continueInFreshSession = async (
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
   const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
-  // A note sent as a prompt may have taken the scheduled group along; it is released with that group, as any other is.
-  if (noteDelivery !== 'appended' && groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended) !== undefined) releaseCarried(state)
+  if (noteTookGroupAlong(settledHandoff, noteDelivery)) releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
