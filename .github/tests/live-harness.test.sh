@@ -210,4 +210,25 @@ test_a_kept_run_directory_stays_inside_the_test_tmpdir() {
   assert_out_has "RUN=$TEST_DIR/tmp/"
 }
 
+test_live_start_sets_the_permission_mode_instead_of_inheriting_the_owners() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
+  assert_tmux_called 'new-session'
+  assert_tmux_called '--permission-mode'
+}
+
+test_live_sh_starts_sessions_outside_any_git_work_tree() {
+  write_live_stubs
+  local repo=$TEST_DIR/repo cwd
+  mkdir -p "$repo/scripts"
+  cp -R "$LIVE_DIR" "$repo/scripts/live"
+  make_plugin_fixture "$repo/plugins/handoff"
+  git -C "$repo" init -q
+  EXIT_CODE=0
+  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    "$BASH" "$repo/scripts/live/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  cwd=$(sed -n 's/^new-session .* -c \([^ ]*\) .*/\1/p' "$TMUX_LOG")
+  [[ -n "$cwd" ]] || fail 'tmux new-session was not called'
+  ! git -C "$cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $cwd"
+}
+
 run_tests "$@"
