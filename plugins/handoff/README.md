@@ -229,8 +229,8 @@ Special cases:
     says it is held.
   - Grouped by sender: prompts from the same kind of sender (a person, or a scheduled trigger) are
     joined with a blank line, in the order they arrived, and sent as one. Each kind follows its own
-    rule if delivery fails. When the note has to be sent as a prompt, it carries the prompts of the
-    handoff's own kind and the others follow it.
+    rule if delivery fails. When the note has to be sent as a prompt, a scheduled handoff's note
+    carries the scheduled prompts, and every person's prompt follows it as a prompt of its own.
   - Repeats of the carried prompt: a prompt is dropped as a duplicate only when its text matches the
     prompt the handoff is already carrying (say, "Hand off and send it" sent again). The drop says
     the repeat was not added. Every other prompt is kept, so two identical prompts sent on purpose

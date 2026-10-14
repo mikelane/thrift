@@ -69,7 +69,7 @@ const usedState = () => {
   state.backoffFrom = 180_000
   state.pending = 'handoff'
   state.heldPrompt = 'now ENG-2'
-  beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false, origin: 'composer' })
+  beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false, origin: 'composer', author: 'person' })
   state.hasBand = true
   state.isTurnRunning = true
   state.isPressRunning = true
@@ -115,7 +115,7 @@ test('It leaves the prompts a handoff holds and carries alone in resetForNewSess
   resetForNewSession(state)
   expect(state.handoffHold).toEqual({
     phase: 'holding',
-    heldPrompts: [{ text: 'now ENG-2', isUnattended: false, origin: 'composer' }],
+    heldPrompts: [{ text: 'now ENG-2', isUnattended: false, origin: 'composer', author: 'person' }],
     promptCarriedByHandoff: 'now ENG-2',
   })
 })

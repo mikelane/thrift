@@ -142,6 +142,9 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. H
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
+// Held back by design, not by a failed send: none was tried, because the note did not enter the fresh session.
+const HELD_BACK_PROMPT = 'Your prompt was held back after the handoff note, so read the note first. Here it is:'
+const HELD_BACK_OTHER_PROMPT = 'A prompt was held back after the handoff note, so read the note first. Here it is:'
 const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be sent, so here they are:'
 
 // /handoff is registered only when a person is at the prompt, so only then is it there to mention.
@@ -325,7 +328,7 @@ const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): P
   }
 }
 
-const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer' })
+const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer', author: 'person' })
 
 // Only a prompt typed at this terminal is offered to the box. The sender of any other prompt is somewhere else, and filling
 // the box could displace the draft of the person who is here.
@@ -523,7 +526,7 @@ const sendOrKeepInBox = async (
     return 'submitted'
   }
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
-  keepInTranscript($, prompt, notice)
+  keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
   return 'not_carried'
 }
 
@@ -550,7 +553,7 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
-    isPluginAuthored: true as const,
+    author: 'plugin' as const,
     ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
@@ -799,7 +802,7 @@ const scheduleHandoff = (
     state,
     request.heldPrompt === undefined
       ? null
-      : { text: request.heldPrompt, isUnattended: request.isUnattended, origin: request.heldPromptOrigin ?? 'composer' },
+      : { text: request.heldPrompt, isUnattended: request.isUnattended, origin: request.heldPromptOrigin ?? 'composer', author: 'person' },
   )
   $.clock.after(0, () => {
     void logFailure($, runHandoff($, state, request, beforeRun))
@@ -914,7 +917,7 @@ const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
 }
 
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
-  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind })
+  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind, author: 'person' })
   debug($, `held a prompt for the handoff (${heldCount} held)`)
   // Claude Code leaves a dropped prompt's text in the box, so the next prompt would be typed after it and held as
   // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the

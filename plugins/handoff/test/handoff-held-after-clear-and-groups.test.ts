@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import type { HeldPrompt } from '../hooks/session-state'
 import {
   deliveryAfterNote,
   groupHeldPrompts,
@@ -90,21 +91,21 @@ describe('groupHeldPrompts', () => {
   })
 
   test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
-    expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer' }, { text: 'a', isUnattended: false, origin: 'composer' }])).toEqual([
-      { text: 'a\n\na', isUnattended: false, origin: 'composer', boxText: 'a' },
+    expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer', author: 'person' }, { text: 'a', isUnattended: false, origin: 'composer', author: 'person' }])).toEqual([
+      { text: 'a\n\na', isUnattended: false, origin: 'composer', author: 'person', boxText: 'a' },
     ])
   })
 
   test('It keeps one group per origin, ordered by first arrival, in groupHeldPrompts', () => {
     expect(
       groupHeldPrompts([
-        { text: 'u1', isUnattended: true, origin: 'scheduled-trigger' },
-        { text: 'p1', isUnattended: false, origin: 'composer' },
-        { text: 'u2', isUnattended: true, origin: 'scheduled-trigger' },
+        { text: 'u1', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+        { text: 'p1', isUnattended: false, origin: 'composer', author: 'person' },
+        { text: 'u2', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
       ]),
     ).toEqual([
-      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger' },
-      { text: 'p1', isUnattended: false, origin: 'composer' },
+      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+      { text: 'p1', isUnattended: false, origin: 'composer', author: 'person' },
     ])
   })
 })
@@ -209,7 +210,7 @@ describe('speaksForPerson', () => {
   })
 
   test('It returns false from speaksForPerson for the plugin note, whatever person origin it borrows', () => {
-    expect(speaksForPerson({ ...personGroup, isPluginAuthored: true })).toBe(false)
+    expect(speaksForPerson({ ...personGroup, author: 'plugin' })).toBe(false)
   })
 
   test('It returns true from speaksForPerson for a bridge prompt', () => {
@@ -218,5 +219,13 @@ describe('speaksForPerson', () => {
 
   test('It returns false from speaksForPerson for an origin that is not a person', () => {
     expect(speaksForPerson({ ...personGroup, origin: 'task-notification' })).toBe(false)
+  })
+})
+
+describe('who wrote a held prompt', () => {
+  test('It fails to compile a held prompt built without an author', () => {
+    // @ts-expect-error author is required, so omitting it cannot mean the person's voice
+    const unattributed: HeldPrompt = { text: 'x', isUnattended: false, origin: 'composer' }
+    expect(speaksForPerson({ ...unattributed, author: 'plugin' })).toBe(false)
   })
 })

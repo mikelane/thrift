@@ -135,8 +135,8 @@ describe('a held remote prompt that cannot be resubmitted', () => {
 })
 
 describe('groupHeldPrompts origin', () => {
-  const typed = { text: 'a', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
-  const remote = { text: 'b', isUnattended: false, origin: 'bridge' } satisfies HeldPrompt
+  const typed = { text: 'a', isUnattended: false, origin: 'composer', author: 'person' } satisfies HeldPrompt
+  const remote = { text: 'b', isUnattended: false, origin: 'bridge', author: 'person' } satisfies HeldPrompt
 
   test('It keeps the composer as the origin of a group of composer prompts', () => {
     expect(groupHeldPrompts([typed, typed]).map(group => group.origin)).toEqual(['composer'])
@@ -175,7 +175,7 @@ describe('the transcript wording for a note that could be neither sent nor put i
     expect(logs(world)).toEqual([
       `log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`,
       NOTE_NOT_ADDED,
-      'log:Your prompt could not be sent or put in the prompt box. Here it is:\nheld one',
+      'log:Your prompt was held back after the handoff note, so read the note first. Here it is:\nheld one',
     ])
   })
 
@@ -187,7 +187,7 @@ describe('the transcript wording for a note that could be neither sent nor put i
     expect(logs(world)).toEqual([
       `log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`,
       NOTE_NOT_ADDED,
-      'log:A prompt could not be sent, so here it is:\nheld one',
+      'log:A prompt was held back after the handoff note, so read the note first. Here it is:\nheld one',
     ])
   })
 })

@@ -77,16 +77,17 @@ const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['orig
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
   const groups: HeldPromptGroup[] = []
-  for (const { text, isUnattended, origin } of prompts) {
+  for (const { text, isUnattended, origin, author } of prompts) {
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
-    if (group === undefined) groups.push({ text, isUnattended, origin })
+    if (group === undefined) groups.push({ text, isUnattended, origin, author })
     else {
       const boxCopy = isComposerOrigin(origin) ? text : boxCopyOf(group)
       groups[index] = {
         text: `${group.text}${PROMPT_SEPARATOR}${text}`,
         isUnattended,
         origin: groupOrigin(group.origin, origin),
+        author: group.author === 'plugin' || author === 'plugin' ? 'plugin' : 'person',
         ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
       }
     }
@@ -137,8 +138,8 @@ export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'boxTex
 
 // A person's prompt is read by the model as the person's own words, not as a message from this plugin. A scheduled prompt and
 // the plugin's own note keep the plugin's frame: nobody typed them.
-export const speaksForPerson = (prompt: Pick<HeldPrompt, 'isUnattended' | 'origin' | 'isPluginAuthored'>): boolean =>
-  prompt.isPluginAuthored !== true && !prompt.isUnattended && isPersonOrigin(prompt.origin)
+export const speaksForPerson = (prompt: Pick<HeldPrompt, 'isUnattended' | 'origin' | 'author'>): boolean =>
+  prompt.author === 'person' && !prompt.isUnattended && isPersonOrigin(prompt.origin)
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

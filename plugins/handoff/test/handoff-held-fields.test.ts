@@ -26,9 +26,9 @@ const SECRET_PROMPT = 'zebra-quartz-7731 rotate the staging credentials'
 type HeldKind = 'person' | 'person again' | 'scheduled'
 
 const GROUP_OF: Record<HeldKind, HeldPromptGroup> = {
-  person: { text: SECRET_PROMPT, isUnattended: false, origin: 'composer' },
-  'person again': { text: `${SECRET_PROMPT} again`, isUnattended: false, origin: 'composer' },
-  scheduled: { text: `${SECRET_PROMPT} nightly`, isUnattended: true, origin: 'scheduled-trigger' },
+  person: { text: SECRET_PROMPT, isUnattended: false, origin: 'composer', author: 'person' },
+  'person again': { text: `${SECRET_PROMPT} again`, isUnattended: false, origin: 'composer', author: 'person' },
+  scheduled: { text: `${SECRET_PROMPT} nightly`, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
 }
 
 const SUBMISSIONS: Record<HeldKind, ($: Engine) => Promise<unknown>> = {
@@ -71,11 +71,11 @@ const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
 }
 
 const groupCases = [
-  { name: 'nothing was held', held: [], groupCount: 0, isUnattended: false, origin: 'composer' },
-  { name: 'a person group was held', held: ['person'], groupCount: 1, isUnattended: false, origin: 'composer' },
-  { name: 'a scheduled group was held', held: ['scheduled'], groupCount: 1, isUnattended: true, origin: 'scheduled-trigger' },
-  { name: 'a person and a scheduled group were held', held: ['person', 'scheduled'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger' },
-  { name: 'a scheduled and a person group were held', held: ['scheduled', 'person'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger' },
+  { name: 'nothing was held', held: [], groupCount: 0, isUnattended: false, origin: 'composer', author: 'person' },
+  { name: 'a person group was held', held: ['person'], groupCount: 1, isUnattended: false, origin: 'composer', author: 'person' },
+  { name: 'a scheduled group was held', held: ['scheduled'], groupCount: 1, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+  { name: 'a person and a scheduled group were held', held: ['person', 'scheduled'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+  { name: 'a scheduled and a person group were held', held: ['scheduled', 'person'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
 ] as const
 
 describe('heldGroupFields', () => {

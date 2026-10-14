@@ -60,9 +60,20 @@ describe('where a held prompt goes when the note did not enter the fresh session
     await submitPerson($, 'from phone', { kind: 'bridge' })
     noteRefusedApart(world)
     await finishNote()
-    expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:A prompt could not be sent'))]).toEqual([
+    expect([world.box.text, world.effects.filter(effect => effect.startsWith('log:A prompt was held back after the handoff note, so read the note first. Here it is:'))]).toEqual([
       NOTE_MESSAGE,
-      ['log:A prompt could not be sent, so here it is:\nfrom phone'],
+      ['log:A prompt was held back after the handoff note, so read the note first. Here it is:\nfrom phone'],
+    ])
+  })
+
+  test('It says a composer prompt was held back, not that it could not be sent, when the box refuses it', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    noteRefusedApart(world)
+    world.fillRefusal = 'dialog'
+    await finishNote()
+    expect(world.effects.filter(effect => effect.includes('next thing') && effect.startsWith('log:'))).toEqual([
+      'log:Your prompt was held back after the handoff note, so read the note first. Here it is:\nnext thing',
     ])
   })
 
@@ -140,7 +151,7 @@ describe('what the record and the transcript say about a held-back prompt', () =
     expect(lines(world).map(line => line.split('\n')[0])).toEqual([
       'log:The handoff note could not be sent or put in the prompt box. Here it is:',
       'log:The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-session',
-      'log:A prompt could not be sent, so here it is:',
+      'log:A prompt was held back after the handoff note, so read the note first. Here it is:',
     ])
   })
 
@@ -163,7 +174,7 @@ describe('what the record and the transcript say about a held-back prompt', () =
       },
     ]
     await finishNote()
-    expect(lines(world).filter(line => line.includes('late phone'))).toEqual(['log:A prompt could not be sent, so here it is:\nlate phone'])
+    expect(lines(world).filter(line => line.includes('late phone'))).toEqual(['log:A prompt was held back after the handoff note, so read the note first. Here it is:\nlate phone'])
   })
 })
 
