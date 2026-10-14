@@ -17,3 +17,15 @@ test('It holds a prompt typed during an act-mode handoff as typed, not after the
   expect(entered(world)).toContain('entered:plugin:now ENG-2\n\ntwo')
 })
 
+// A bridge prompt was never typed in this terminal's box, so a line there that matches it is the person's own draft.
+test('It leaves the box alone when an act-mode handoff carries a bridge prompt', ACT, async ($, on) => {
+  const world = await ready($, on)
+  const fork = holdFork(world)
+  world.box = { text: 'now ENG-2', cursor: 9 }
+  await submitPerson($, 'now ENG-2', { kind: 'bridge' })
+  await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2')
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+})
+
