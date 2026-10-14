@@ -102,6 +102,7 @@ live_init() {
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  trap 'exit 131' QUIT
   LIVE_RUN=$(mktemp -d "${TMPDIR:-/tmp}/live.XXXXXX")
   mkdir -p -- "$LIVE_RUN/thrift"
   LIVE_THRIFT_HOME="$LIVE_RUN/thrift"
@@ -153,9 +154,10 @@ live_start() {
     "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     claude --name "$session" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@")
+  # Recorded before the call: a Ctrl-C during it must still find the session the server made.
+  LIVE_SESSIONS+=("$session")
   tmux new-session -d -s "$session" -x 120 -y 40 -c "$LIVE_CWD" "$claude_command" \
     || live_abort "tmux could not start session '$session'"
-  LIVE_SESSIONS+=("$session")
   LIVE_NAMES+=("$name")
   wait_for "'$name' to show its prompt" start_dialogs_cleared "$name"
 }
@@ -274,13 +276,16 @@ check() {
   fi
 }
 
+# The verdict counts as reached only once its line is written: a verdict that cannot be printed (the
+# reader of stdout is gone) is an ERROR, never a PASS or a FAIL nobody saw.
 live_verdict() {
   local scenario=$1
-  LIVE_VERDICT_REACHED=1
-  printf '\n'
+  printf '\n' || exit 2
   if ((LIVE_FAILED > 0)); then
-    printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED"
+    printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED" || exit 2
+    LIVE_VERDICT_REACHED=1
     return 1
   fi
-  printf 'PASS %s (%d checks)\n' "$scenario" "$LIVE_CHECKED"
+  printf 'PASS %s (%d checks)\n' "$scenario" "$LIVE_CHECKED" || exit 2
+  LIVE_VERDICT_REACHED=1
 }
