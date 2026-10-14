@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { compacted, dropOf, entered, install, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
+import { compacted, dropOf, emptyBox, entered, install, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
 import { NOTE_MESSAGE, HELD_FOR_HANDOFF, IMAGE } from './handoff-held-prompts-fixtures'
 
 const REFUSED_DURING_HANDOFF =
@@ -61,7 +61,9 @@ describe('holding prompts while the note is written', () => {
   test('It sends several held prompts once, joined in the order they arrived', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'first')
+    await world.clock.settle()
     await submitPerson($, 'second')
+    await world.clock.settle()
     await submitPerson($, 'third')
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:first\n\nsecond\n\nthird'])
@@ -153,6 +155,8 @@ describe('refusing a prompt with attachments or context', () => {
   test('It holds a text prompt next to a refused one', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'look', { attachments: IMAGE })
+    await world.clock.settle()
+    emptyBox(world)
     await submitPerson($, 'plain')
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:plain'])

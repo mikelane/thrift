@@ -94,6 +94,7 @@ import {
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
+  isCollectingHeldPrompts,
   takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type BoxPlacement,
@@ -895,6 +896,15 @@ const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
   const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind })
   debug($, `held a prompt for the handoff (${heldCount} held)`)
+  // Claude Code leaves a dropped prompt's text in the box, so the next prompt would be typed after it and held as
+  // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the
+  // text back after the hook returns. Only while prompts are still collected: once the handoff took them, a restore may have
+  // put the text back, and the delivery and restore paths deal with what the engine left.
+  if (isComposerOrigin(e.origin.kind)) {
+    $.clock.after(0, () => {
+      if (isCollectingHeldPrompts(state)) void logFailure($, emptyBoxIfHolding($, e.text))
+    })
+  }
   return { drop: HELD_FOR_HANDOFF }
 }
 

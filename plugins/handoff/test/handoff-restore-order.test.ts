@@ -309,8 +309,8 @@ describe('the box placement of a prompt refused during a handoff', () => {
   test('It runs a prompt with an attachment and leaves the draft alone once the handoff has finished', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()
-    world.box = { text: 'draft', cursor: 5 }
     const result = await submitPerson($, 'with image', { attachments: IMAGE })
+    world.box = { text: 'draft', cursor: 5 }
     await world.clock.settle()
     expect([dropOf(result), entered(world), world.box.text]).toEqual([undefined, ['entered:composer:with image'], 'draft'])
   })

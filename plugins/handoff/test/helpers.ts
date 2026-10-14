@@ -211,22 +211,32 @@ const typedAfter = (held: string, text: string): string => {
   return `\n${held}\n`.includes(`\n${text}\n`) ? held : `${held}\n${text}`
 }
 
-// Live behavior (Claude Code 2.1.299): a prompt typed at the composer and then dropped stays in the prompt box. The person
-// clears it before typing the next prompt, unless the prompt arrives while the plugin is busy putting text in the box.
+// What the engine submits when a person types `text` at the composer: the whole box, so text a dropped prompt left behind is
+// the start of the next prompt (Claude Code 2.1.299: `one`, then `onetwo`, then `onetwothree`).
+const submittedFromBox = (held: string, text: string): string => {
+  const isEnterOnBox = held === '' || text.startsWith(held) || `\n${held}\n`.includes(`\n${text}\n`)
+  return isEnterOnBox ? text : `${held}${text}`
+}
+
+// Live behavior (Claude Code 2.1.299): a prompt typed at the composer and then dropped stays in the prompt box, and the person
+// does not clear it. A prompt typed after the last one is typed after what stayed (a test lets the clock run between prompts
+// when the person takes a moment); one that arrives while the plugin is busy putting text in the box is shown after it.
 export const submitPerson = async ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) => {
-  const afterBox = installedWorld?.isRunningSubmitHook === true
+  const world = installedWorld
+  const isArrivalMidSubmit = world?.isRunningSubmitHook === true
+  const isTypedAtComposer = world !== undefined && kind === 'composer'
+  const submitted = isTypedAtComposer && !isArrivalMidSubmit ? submittedFromBox(world.box.text, text) : text
   const result = await $.prompt.submit({
-    text,
+    text: submitted,
     wait: false,
     origin: { kind },
     ...(turnId ? { turnId } : {}),
     ...(context ? { context } : {}),
     ...(attachments ? { attachments } : {}),
   })
-  if (installedWorld !== undefined && kind === 'composer' && dropOf(result) !== undefined) {
-    const { text: held } = installedWorld.box
-    const boxed = afterBox ? typedAfter(held, text) : text
-    installedWorld.box = { text: boxed, cursor: boxed.length }
+  if (isTypedAtComposer && dropOf(result) !== undefined) {
+    const boxed = isArrivalMidSubmit ? typedAfter(world.box.text, text) : submitted
+    world.box = { text: boxed, cursor: boxed.length }
   }
   return result
 }

@@ -51,6 +51,7 @@ test('It drops only one of two prompts that name new work at once', ACT, async (
 test('It holds a second prompt and sends it once with the first while a handoff is scheduled', ACT, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
+  emptyBox(world)
   const second = await submitPerson($, 'also ENG-3')
   expect(dropOf(second)).toBe("A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript.")
   await world.clock.settle()

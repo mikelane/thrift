@@ -141,6 +141,9 @@ export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null
   }
 }
 
+// True only while prompts are still being collected, before the handoff takes them to deliver or put back.
+export const isCollectingHeldPrompts = (state: SessionState): boolean => state.handoffHold.phase === 'holding'
+
 export const isHoldingForHandoff = (state: SessionState): boolean =>
   state.handoffHold.phase === 'holding' || state.handoffHold.phase === 'sending'
 
