@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 import {
   bash,
   completeTurn,
+  emptyBox,
   growTo200k,
   install,
   lastRecord,
@@ -43,6 +44,7 @@ test('It puts a held prompt back when the session id cannot be read', ACT, async
   const world = await ready($, on)
   world.sessionIdDenials = 1
   await submitPerson($, 'now ENG-2')
+  emptyBox(world)
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
 })

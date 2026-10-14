@@ -55,7 +55,9 @@ const defaultWorld = (clock: MockClock): World => ({
   agentListThrows: false,
   onAgentList: undefined,
   box: { text: '', cursor: 0 },
+  isRunningSubmitHook: false,
   fillRefusal: undefined,
+  isFillRefusedOverText: false,
   fork: async () => answered('The handoff note.'),
   compact: async () => compacted(48_000),
   clearThrows: false,
@@ -79,6 +81,9 @@ const defaultWorld = (clock: MockClock): World => ({
   appended: [],
 })
 
+// The world of the latest install, so submitPerson can leave a dropped prompt's text in its prompt box.
+let installedWorld: World | undefined
+
 export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
   mock.env(on, {
@@ -95,6 +100,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   installTurnMocks(on, world)
   installStateMocks(on, world)
   installToolMocks(on, world)
+  installedWorld = world
   return world
 }
 
@@ -199,8 +205,17 @@ type PersonPrompt = {
   attachments?: readonly { type: 'image'; mediaType: string }[]
 }
 
-export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) =>
-  $.prompt.submit({
+// Typed after what the box holds, unless the box already shows the prompt: pressing Enter on it again adds nothing.
+const typedAfter = (held: string, text: string): string => {
+  if (held === '') return text
+  return `\n${held}\n`.includes(`\n${text}\n`) ? held : `${held}\n${text}`
+}
+
+// Live behavior (Claude Code 2.1.299): a prompt typed at the composer and then dropped stays in the prompt box. The person
+// clears it before typing the next prompt, unless the prompt arrives while the plugin is busy putting text in the box.
+export const submitPerson = async ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) => {
+  const afterBox = installedWorld?.isRunningSubmitHook === true
+  const result = await $.prompt.submit({
     text,
     wait: false,
     origin: { kind },
@@ -208,6 +223,18 @@ export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnI
     ...(context ? { context } : {}),
     ...(attachments ? { attachments } : {}),
   })
+  if (installedWorld !== undefined && kind === 'composer' && dropOf(result) !== undefined) {
+    const { text: held } = installedWorld.box
+    const boxed = afterBox ? typedAfter(held, text) : text
+    installedWorld.box = { text: boxed, cursor: boxed.length }
+  }
+  return result
+}
+
+// The person erases the dropped prompt's text the engine kept, so a restore has an empty box to fill.
+export const emptyBox = (world: World) => {
+  world.box = { text: '', cursor: 0 }
+}
 
 export const dropOf = (result: unknown): string | undefined =>
   typeof result === 'object' && result !== null && 'drop' in result && typeof result.drop === 'string' ? result.drop : undefined

@@ -74,7 +74,7 @@ export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGrou
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
     if (group === undefined) groups.push({ text, isUnattended, origin })
-    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended, origin: groupOrigin(group.origin, origin) }
+    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended, origin: groupOrigin(group.origin, origin), lastText: text }
   }
   return groups
 }
@@ -90,6 +90,11 @@ export const groupsLeftToSend = (
   noteDelivery: NoteDelivery,
 ): HeldPromptGroup[] =>
   noteDelivery === 'appended' ? [...groups] : groups.filter(group => !isGroupOfOrigin(group, handoffIsUnattended))
+
+// What the prompt box can still hold of a prompt that was dropped and then sent on: the engine leaves the dropped text in it,
+// which for a group is its last prompt.
+export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'lastText'>): string[] =>
+  prompt.lastText === undefined ? [prompt.text] : [prompt.text, prompt.lastText]
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

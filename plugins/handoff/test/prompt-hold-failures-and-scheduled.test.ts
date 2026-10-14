@@ -1,12 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bash, completeTurn, dropOf, entered, lastRecord, mountBand, submitPerson } from './helpers'
+import { bash, completeTurn, dropOf, emptyBox, entered, lastRecord, mountBand, submitPerson } from './helpers'
 import { ASK, ACT, NOTE_HEADING, ready } from './prompt-hold-fixtures'
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
   const world = await ready($, on)
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2')
+  emptyBox(world)
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
@@ -26,6 +27,7 @@ test('It puts the prompt back in the box when /clear throws', ACT, async ($, on)
   const world = await ready($, on)
   world.clearThrows = true
   await submitPerson($, 'now ENG-2')
+  emptyBox(world)
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
 })
@@ -145,8 +147,8 @@ test('It does not refill the box when Send here was pressed before the refill ra
 
 test('It takes the held prompt out of a box that also holds a draft when Send here is pressed', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.box = { text: 'draft', cursor: 5 }
   await submitPerson($, 'now ENG-2')
+  world.box = { text: 'draft', cursor: 5 }
   await world.clock.settle()
   const band = await mountBand($)
   await band.press({ key: 'send-here' })
@@ -156,8 +158,8 @@ test('It takes the held prompt out of a box that also holds a draft when Send he
 
 test('It takes the held prompt out of a box that also holds a draft when Hand off and send it is pressed', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.box = { text: 'draft', cursor: 5 }
   await submitPerson($, 'now ENG-2')
+  world.box = { text: 'draft', cursor: 5 }
   await world.clock.settle()
   const band = await mountBand($)
   await band.press({ key: 'handoff-send' })

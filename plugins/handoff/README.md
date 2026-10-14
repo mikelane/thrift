@@ -111,6 +111,10 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       or a scheduled trigger is never put in the box: its sender is not at the terminal, and filling the
       box could displace the draft of the person who is. It never enters ahead of the note or the held
       prompts, but one of them left in the prompt box waits for Enter, so a later prompt can run first.
+      Claude Code leaves the text of a prompt it dropped in the prompt box. Once a prompt typed at this
+      terminal has been submitted in the fresh session, the plugin takes that text out of the box so
+      Enter does not send it a second time. Only the lines that match the submitted prompt (a group's
+      last prompt, if it held several) are removed; any other draft in the box is left alone.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.
@@ -418,6 +422,7 @@ terminal and have not been watched yet:
 - Whether the appended note shows in the fresh session's transcript, or only in its context. If it
   does not show, a "note loaded" line would be needed; none is written yet.
 - That a held prompt refills the box, and what the box does across a `/clear`.
+- That a held prompt typed at this terminal leaves the box empty once the fresh session has it, and that a draft typed meanwhile survives (#56).
 - That a background shell turns a handoff into a compact.
 
 ## Development

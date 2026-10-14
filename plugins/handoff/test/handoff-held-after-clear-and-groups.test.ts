@@ -71,7 +71,7 @@ describe('groupHeldPrompts', () => {
 
   test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
     expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer' }, { text: 'a', isUnattended: false, origin: 'composer' }])).toEqual([
-      { text: 'a\n\na', isUnattended: false, origin: 'composer' },
+      { text: 'a\n\na', isUnattended: false, origin: 'composer', lastText: 'a' },
     ])
   })
 
@@ -83,9 +83,20 @@ describe('groupHeldPrompts', () => {
         { text: 'u2', isUnattended: true, origin: 'scheduled-trigger' },
       ]),
     ).toEqual([
-      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger' },
+      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger', lastText: 'u2' },
       { text: 'p1', isUnattended: false, origin: 'composer' },
     ])
+  })
+})
+
+describe('lastText on a group', () => {
+  test('It leaves lastText off a group of one prompt', () => {
+    expect(groupHeldPrompts([personGroup])[0]).not.toHaveProperty('lastText')
+  })
+
+  test('It sets lastText to the last prompt of a group of several', () => {
+    const prompts = [personGroup, { ...personGroup, text: 'and then' }, { ...personGroup, text: 'finally, this' }]
+    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe('finally, this')
   })
 })
 

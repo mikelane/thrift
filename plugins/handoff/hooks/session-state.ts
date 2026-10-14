@@ -11,7 +11,8 @@ type Settings = {
 export type ButtonPress = { offer: Offer; button: Button }
 
 // origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
-export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind'] }
+// lastText is set on a group of several prompts: the prompt box holds only the last prompt a person sent, not the joined text.
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind']; lastText?: string }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt

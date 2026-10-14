@@ -22,7 +22,7 @@ const expectOneEndRecord = (world: World, reason: DecisionReason) => {
     action: 'none',
     trigger_values: { reason, held_groups: 1, held_unattended: false, handoff_unattended: false, held_restore: 'in_box' },
   })
-  expect(world.effects).toContain('fill:next thing')
+  expect(world.box.text).toBe('next thing')
   expect(JSON.stringify(ends[0])).not.toContain('next thing')
 }
 

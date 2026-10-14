@@ -114,9 +114,9 @@ describe('a held remote prompt that cannot be resubmitted', () => {
     await submitPerson($, 'from far away', { kind: 'bridge' })
     world.submitDropped = true
     await finishNote()
-    expect([entered(world), world.box.text, logs(world)]).toEqual([
+    expect([entered(world), world.effects.filter(effect => effect.startsWith('fill:')), logs(world)]).toEqual([
       [],
-      '',
+      [],
       [HANDED_OFF, 'log:A prompt could not be sent, so here it is:\ntyped here\n\nfrom far away'],
     ])
   })
@@ -299,8 +299,8 @@ describe('the box placement of a prompt refused during a handoff', () => {
 
   test('It puts a person prompt refused while the note is written in front of the draft', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
-    world.box = { text: 'draft', cursor: 5 }
     const refused = await submitPerson($, 'with image', { attachments: IMAGE })
+    world.box = { text: 'draft', cursor: 5 }
     await world.clock.settle()
     await finishNote()
     expect([dropOf(refused), entered(world), world.box.text]).toEqual([REFUSED_DURING_HANDOFF, [], 'with image\ndraft'])
