@@ -165,9 +165,10 @@ pane_count() { pane "$1" | grep -cE -- "$2" || true; }
 log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
 log_count() { grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null || true; }
 log_has_more_than() { (($(log_count "$1" "$2") > $3)); }
-# The timestamp of the first debug-log line matching the pattern after line <from>.
-log_ts() { awk -v from="${3:-0}" -v re="$2" 'NR > from && $0 ~ re { print $1; exit }' "$(debug_log_of "$1")"; }
-log_line() { awk -v from="${3:-0}" -v re="$2" 'NR > from && $0 ~ re { print NR; exit }' "$(debug_log_of "$1")"; }
+# The timestamp / line number of the first debug-log line after line <from> matching an extended
+# regex. The pattern travels in the environment because awk -v would eat its backslashes.
+log_ts() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print $1; exit }' "$(debug_log_of "$1")"; }
+log_line() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print NR; exit }' "$(debug_log_of "$1")"; }
 log_line_text() { sed -n "${2}p" "$(debug_log_of "$1")" | cut -c1-200; }
 turn_origins() { sed -n 's/.*cc_turn_origin=\([a-z_-]*\).*/\1/p' "$(debug_log_of "$1")"; }
 
