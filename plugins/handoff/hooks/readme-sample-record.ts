@@ -37,6 +37,7 @@ const isSampleRecord = (value: unknown): value is SampleRecord => {
     isOptional(values.note, 'string') &&
     isOptional(values.cleared_by, 'string') &&
     (values.compacted_before_clear === undefined || values.compacted_before_clear === true) &&
+    (values.late_turn === undefined || values.late_turn === true) &&
     isOptional(values.held_groups, 'number') &&
     isOptional(values.held_unattended, 'boolean') &&
     isOptional(values.handoff_unattended, 'boolean') &&
@@ -72,6 +73,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
     note: values.note,
     clearedBy: values.cleared_by,
     compactedBeforeClear: values.compacted_before_clear,
+    lateTurn: values.late_turn,
     heldFields: hasHeldFields
       ? {
           held_groups: values.held_groups ?? 0,

@@ -208,3 +208,49 @@ test('It stores zero from noteCacheReads when the turn reported no cache reads',
   noteCacheReads(state, undefined)
   expect(state.cacheReadTokens).toBe(0)
 })
+
+test('It marks a turn that starts after beginOwnClear as late in startMainTurn', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  startMainTurn(state, '')
+  expect(state.hasLateTurn).toBe(true)
+})
+
+test('It leaves a turn that starts before beginOwnClear unmarked as late in startMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state, '')
+  expect(state.hasLateTurn).toBe(false)
+})
+
+test('It leaves a turn that starts after the own clear ended the session unmarked as late in startMainTurn', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  startMainTurn(state, '')
+  expect(state.hasLateTurn).toBe(false)
+})
+
+test('It keeps the clear queued when a session end arrives before the own clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  beginOwnClear(state)
+  startMainTurn(state, '')
+  expect(state.hasLateTurn).toBe(true)
+})
+
+test('It forgets a late turn from beginOwnClear when the next clear is queued', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  startMainTurn(state, '')
+  beginOwnClear(state)
+  expect(state.hasLateTurn).toBe(false)
+})
+
+test('It clears the queued-clear and late-turn marks from endHandoff', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  startMainTurn(state, '')
+  endHandoff(state)
+  expect(state).toMatchObject({ isOwnClearQueued: false, hasLateTurn: false })
+})

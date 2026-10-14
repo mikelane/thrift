@@ -538,7 +538,9 @@ const continueInFreshSession = async (
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
   await registerHandoffCommand($)
-  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote))
+  // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
+  const hasLateTurn = state.hasLateTurn
+  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
   // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
   if (noteDelivery !== 'appended') releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
@@ -553,6 +555,7 @@ const continueInFreshSession = async (
     note: noteDelivery,
     clearedBy,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
+    lateTurn: hasLateTurn,
     heldFields: {
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
