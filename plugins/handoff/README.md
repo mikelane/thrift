@@ -111,15 +111,18 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       or a scheduled trigger is never put in the box: its sender is not at the terminal, and filling the
       box could displace the draft of the person who is. It never enters ahead of the note or the held
       prompts, but one of them left in the prompt box waits for Enter, so a later prompt can run first.
-      While prompts are being held, the plugin also takes each prompt typed at this terminal out of the
-      box as it holds it. Otherwise the next prompt would be typed after the leftover text and held as
-      "onetwo".
-      Claude Code leaves the text of a prompt it dropped in the prompt box. Once a prompt typed at this
-      terminal has been submitted in the fresh session, the plugin takes that text out of the box so
-      Enter does not send it a second time. Only the lines that match the submitted prompt (a group's
-      last prompt typed at this terminal, if it held several, even when a bridge or SDK prompt joined it)
-      are removed; any other draft in the box is left alone. A group put back by an abandoned handoff
-      and submitted rather than boxed is cleaned up the same way.
+      Claude Code leaves the text of a prompt it dropped in the prompt box, so the plugin takes that
+      text back out of the box for every prompt typed at this terminal:
+      - As each prompt is held. Otherwise the next prompt is typed after the leftover text: `one`
+        then `two` would be held as `one` and `onetwo`.
+      - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
+      - After a held prompt has been submitted in the fresh session, so Enter does not send it a
+        second time. A group put back by an abandoned handoff and submitted rather than boxed is
+        cleaned up the same way.
+
+      Only the lines that match the prompt are removed: for a group, its last prompt typed at this
+      terminal, even when a bridge or SDK prompt joined it. Any other text in the box is kept. A draft
+      line that is word for word the same as the prompt just sent is removed too.
 
 Every step that runs a command, a compaction, or a prompt submission is scheduled through the
 clock, because Claude Code refuses them inside a hook that the turn is waiting on.

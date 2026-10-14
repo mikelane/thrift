@@ -119,3 +119,7 @@ export const withoutPrompt = (draft: string, prompt: string): string | null => {
   if (promptStart === -1) return null
   return `${padded.slice(0, promptStart)}${padded.slice(promptStart + prompt.length + 1)}`.slice(1, -1)
 }
+
+// The draft without the copy of a group's last prompt the engine kept in the box. A draft that no longer holds it is left as is.
+export const withoutBoxCopy = (draft: string, { boxText }: Pick<HeldPrompt, 'boxText'>): string =>
+  boxText === undefined ? draft : (withoutPrompt(draft, boxText) ?? draft)

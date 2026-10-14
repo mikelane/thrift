@@ -53,6 +53,7 @@ import {
   withoutPrompt,
   boxCopiesOf,
   boxCopyOf,
+  withoutBoxCopy,
   type Carried,
   type NoteDelivery,
 } from './handoff-note'
@@ -292,7 +293,7 @@ const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPl
   try {
     const draft = (await $.prompt.read()).text
     if (holdsPrompt(draft, prompt.text)) return true
-    const otherDraft = withoutKeptCopy(draft, prompt)
+    const otherDraft = withoutBoxCopy(draft, prompt)
     const withDraft = placement === 'before_draft' ? `${prompt.text}\n${otherDraft}` : `${otherDraft}\n${prompt.text}`
     const filled = await $.prompt.fill({ text: otherDraft === '' ? prompt.text : withDraft, mode: 'replace' })
     if (!filled.isFilled) debug($, `the prompt box refused the prompt: ${filled.refusal ?? 'refused by a hook'}`)
@@ -303,12 +304,9 @@ const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPl
   }
 }
 
-const withoutKeptCopy = (draft: string, { boxText }: BoxPrompt): string =>
-  boxText === undefined ? draft : (withoutPrompt(draft, boxText) ?? draft)
-
 // Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
 // that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
-const clearSentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
+const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
   const copies = boxCopiesOf(prompt)
   if (copies.length === 0) return
   try {
@@ -369,7 +367,7 @@ const restorePrompt = async (
 ): Promise<Carried> => {
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
   const carried = await submitOrKeepInTranscript($, state, prompt)
-  if (carried === 'submitted') await clearSentPromptFromBox($, prompt)
+  if (carried === 'submitted') await emptySentPromptFromBox($, prompt)
   return carried
 }
 
@@ -507,7 +505,7 @@ const sendOrKeepInBox = async (
   { placement = 'before_draft', notice }: SendOptions = {},
 ): Promise<Carried> => {
   if (await submitEntered($, state, prompt, 'could not send the prompt')) {
-    await clearSentPromptFromBox($, prompt)
+    await emptySentPromptFromBox($, prompt)
     return 'submitted'
   }
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'

@@ -24,8 +24,8 @@ test('It leaves the box alone when an act-mode handoff carries a bridge prompt',
   world.box = { text: 'now ENG-2', cursor: 9 }
   await submitPerson($, 'now ENG-2', { kind: 'bridge' })
   await world.clock.settle()
-  expect(world.box.text).toBe('now ENG-2')
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
+  expect(world.box.text).toBe('now ENG-2')
 })
 

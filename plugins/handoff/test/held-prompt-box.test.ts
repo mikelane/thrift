@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { boxCopiesOf, boxCopyOf } from '../hooks/handoff-note'
+import { boxCopiesOf, boxCopyOf, withoutBoxCopy } from '../hooks/handoff-note'
+import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
 import { entered, submitPerson, writingTheNote, type World } from './helpers'
 
 // The hold-time clear did not run, so the text Claude Code left in the box is still there when the handoff delivers or restores.
@@ -39,7 +40,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await submitPerson($, 'second')
     await leftInBox(world, 'second')
     await finishNote()
-    expect([entered(world).length, world.box.text]).toEqual([1, ''])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${NOTE_MESSAGE}\n\nfirst\n\nsecond`], ''])
   })
 
   test('It leaves the box empty after a prompt that arrived during the delivery is sent', async ($, on) => {
@@ -190,6 +191,20 @@ describe('boxCopiesOf for a prompt from elsewhere', () => {
   })
 })
 
+describe('withoutBoxCopy', () => {
+  test('It returns the draft unchanged for a prompt with no kept copy', () => {
+    expect(withoutBoxCopy('b\nmy draft', {})).toBe('b\nmy draft')
+  })
+
+  test('It returns the draft without the kept copy when the draft holds it', () => {
+    expect(withoutBoxCopy('b\nmy draft', { boxText: 'b' })).toBe('my draft')
+  })
+
+  test('It returns the draft unchanged when the draft no longer holds the kept copy', () => {
+    expect(withoutBoxCopy('my draft', { boxText: 'b' })).toBe('my draft')
+  })
+})
+
 describe('boxCopyOf', () => {
   test('It returns the text of a composer prompt that has no last prompt', () => {
     expect(boxCopyOf({ text: 'a', origin: 'composer' })).toBe('a')
@@ -207,10 +222,12 @@ describe('boxCopyOf', () => {
 describe('the prompt box while prompts are held', () => {
   test('It holds each of several prompts as typed, not with the earlier ones in front', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
-    for (const word of ['one', 'two', 'three']) {
-      await submitPerson($, word)
-      await world.clock.settle()
-    }
+    await submitPerson($, 'one')
+    await world.clock.settle()
+    await submitPerson($, 'two')
+    await world.clock.settle()
+    await submitPerson($, 'three')
+    await world.clock.settle()
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:one\n\ntwo\n\nthree'])
   })

@@ -206,22 +206,26 @@ type PersonPrompt = {
 }
 
 // Typed after what the box holds, unless the box already shows the prompt: pressing Enter on it again adds nothing.
-const typedAfter = (held: string, text: string): string => {
-  if (held === '') return text
-  return `\n${held}\n`.includes(`\n${text}\n`) ? held : `${held}\n${text}`
+const typedAfter = (boxText: string, text: string): string => {
+  if (boxText === '') return text
+  return `\n${boxText}\n`.includes(`\n${text}\n`) ? boxText : `${boxText}\n${text}`
 }
 
 // What the engine submits when a person types `text` at the composer: the whole box, so text a dropped prompt left behind is
 // the start of the next prompt (Claude Code 2.1.299: `one`, then `onetwo`, then `onetwothree`).
-const submittedFromBox = (held: string, text: string): string => {
-  const isEnterOnBox = held === '' || text.startsWith(held) || `\n${held}\n`.includes(`\n${text}\n`)
-  return isEnterOnBox ? text : `${held}${text}`
+const submittedFromBox = (boxText: string, text: string): string => {
+  const isEnterOnBox = boxText === '' || text.startsWith(boxText) || `\n${boxText}\n`.includes(`\n${text}\n`)
+  return isEnterOnBox ? text : `${boxText}${text}`
 }
 
 // Live behavior (Claude Code 2.1.299): a prompt typed at the composer and then dropped stays in the prompt box, and the person
 // does not clear it. A prompt typed after the last one is typed after what stayed (a test lets the clock run between prompts
 // when the person takes a moment); one that arrives while the plugin is busy putting text in the box is shown after it.
-export const submitPerson = async ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) => {
+export const submitPerson = async (
+  $: Engine,
+  text: string,
+  { kind = 'composer', turnId, context, attachments }: PersonPrompt = {},
+): ReturnType<Engine['prompt']['submit']> => {
   const world = installedWorld
   const isArrivalMidSubmit = world?.isRunningSubmitHook === true
   const isTypedAtComposer = world !== undefined && kind === 'composer'
