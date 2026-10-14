@@ -281,7 +281,7 @@ const registerHandoffCommand = async ($: EngineInterface) => {
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
-type BoxPrompt = Pick<HeldPrompt, 'text' | 'lastText'>
+type BoxPrompt = Pick<HeldPrompt, 'text' | 'boxText'>
 
 // A prompt the box already holds as whole lines is not added again, so an identical prompt sent twice shows once; the box
 // is for the person to review and send, and a second copy of a line they can see would only be noise to delete.
@@ -302,8 +302,8 @@ const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPl
   }
 }
 
-const withoutKeptCopy = (draft: string, { lastText }: BoxPrompt): string =>
-  lastText === undefined ? draft : (withoutPrompt(draft, lastText) ?? draft)
+const withoutKeptCopy = (draft: string, { boxText }: BoxPrompt): string =>
+  boxText === undefined ? draft : (withoutPrompt(draft, boxText) ?? draft)
 
 // Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
 // that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
@@ -536,7 +536,7 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
-    ...(boxCopy === undefined ? {} : { lastText: boxCopy }),
+    ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
 }

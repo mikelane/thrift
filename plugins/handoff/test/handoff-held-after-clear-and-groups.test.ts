@@ -71,7 +71,7 @@ describe('groupHeldPrompts', () => {
 
   test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
     expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer' }, { text: 'a', isUnattended: false, origin: 'composer' }])).toEqual([
-      { text: 'a\n\na', isUnattended: false, origin: 'composer', lastText: 'a' },
+      { text: 'a\n\na', isUnattended: false, origin: 'composer', boxText: 'a' },
     ])
   })
 
@@ -89,29 +89,29 @@ describe('groupHeldPrompts', () => {
   })
 })
 
-describe('lastText on a group', () => {
-  test('It leaves lastText off a group of one prompt', () => {
-    expect(groupHeldPrompts([personGroup])[0]).not.toHaveProperty('lastText')
+describe('boxText on a group', () => {
+  test('It leaves boxText off a group of one prompt', () => {
+    expect(groupHeldPrompts([personGroup])[0]).not.toHaveProperty('boxText')
   })
 
-  test('It sets lastText to the last prompt of a group of several', () => {
+  test('It sets boxText to the last prompt of a group of several', () => {
     const prompts = [personGroup, { ...personGroup, text: 'and then' }, { ...personGroup, text: 'finally, this' }]
-    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe('finally, this')
+    expect(groupHeldPrompts(prompts)[0]?.boxText).toBe('finally, this')
   })
 
-  test('It keeps the composer prompt as lastText when a bridge prompt joins after it', () => {
+  test('It keeps the composer prompt as boxText when a bridge prompt joins after it', () => {
     const prompts = [personGroup, { ...personGroup, text: 'from phone', origin: 'bridge' as const }]
-    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe(personGroup.text)
+    expect(groupHeldPrompts(prompts)[0]?.boxText).toBe(personGroup.text)
   })
 
-  test('It sets lastText to a composer prompt that joins a bridge prompt', () => {
+  test('It sets boxText to a composer prompt that joins a bridge prompt', () => {
     const prompts = [{ ...personGroup, text: 'from phone', origin: 'bridge' as const }, personGroup]
-    expect(groupHeldPrompts(prompts)[0]?.lastText).toBe(personGroup.text)
+    expect(groupHeldPrompts(prompts)[0]?.boxText).toBe(personGroup.text)
   })
 
-  test('It leaves lastText off a group with no composer prompt in it', () => {
+  test('It leaves boxText off a group with no composer prompt in it', () => {
     const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
-    expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('lastText')
+    expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('boxText')
   })
 })
 

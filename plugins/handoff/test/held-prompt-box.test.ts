@@ -157,7 +157,7 @@ describe('boxCopiesOf', () => {
   })
 
   test('It returns the joined text and the last prompt for a group', () => {
-    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'composer', lastText: 'b' })).toEqual(['a\n\nb', 'b'])
+    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'composer', boxText: 'b' })).toEqual(['a\n\nb', 'b'])
   })
 })
 
@@ -167,7 +167,7 @@ describe('boxCopiesOf for a prompt from elsewhere', () => {
   })
 
   test('It returns only the last composer prompt for a group that holds a bridge prompt', () => {
-    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'bridge', lastText: 'a' })).toEqual(['a'])
+    expect(boxCopiesOf({ text: 'a\n\nb', origin: 'bridge', boxText: 'a' })).toEqual(['a'])
   })
 })
 
@@ -177,7 +177,7 @@ describe('boxCopyOf', () => {
   })
 
   test('It returns the last prompt of a group', () => {
-    expect(boxCopyOf({ text: 'a\n\nb', origin: 'composer', lastText: 'b' })).toBe('b')
+    expect(boxCopyOf({ text: 'a\n\nb', origin: 'composer', boxText: 'b' })).toBe('b')
   })
 
   test('It returns nothing for a prompt from elsewhere', () => {

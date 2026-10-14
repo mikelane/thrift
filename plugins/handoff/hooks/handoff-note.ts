@@ -80,7 +80,7 @@ export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGrou
         text: `${group.text}${PROMPT_SEPARATOR}${text}`,
         isUnattended,
         origin: groupOrigin(group.origin, origin),
-        ...(boxCopy === undefined ? {} : { lastText: boxCopy }),
+        ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
       }
     }
   }
@@ -101,14 +101,14 @@ export const groupsLeftToSend = (
 
 // The text the engine left in the box for a group: the last prompt typed at the composer, which a remote prompt joined
 // after it does not replace. A group with no composer prompt left nothing there.
-export const boxCopyOf = (group: Pick<HeldPrompt, 'text' | 'origin' | 'lastText'>): string | undefined =>
-  group.lastText ?? (isComposerOrigin(group.origin) ? group.text : undefined)
+export const boxCopyOf = (group: Pick<HeldPrompt, 'text' | 'origin' | 'boxText'>): string | undefined =>
+  group.boxText ?? (isComposerOrigin(group.origin) ? group.text : undefined)
 
 // What the prompt box can still hold of a prompt that was dropped and then sent on: the engine leaves the dropped text in it,
 // which for a group is its last composer prompt. The joined text is a copy only for a prompt sent from the composer.
-export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'lastText'>): string[] => [
+export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'boxText'>): string[] => [
   ...(isComposerOrigin(prompt.origin) ? [prompt.text] : []),
-  ...(prompt.lastText === undefined ? [] : [prompt.lastText]),
+  ...(prompt.boxText === undefined ? [] : [prompt.boxText]),
 ]
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
