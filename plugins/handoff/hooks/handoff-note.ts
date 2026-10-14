@@ -1,3 +1,4 @@
+import type { ForkReason } from './fork-outcome'
 import { isComposerOrigin } from './prompt-plan'
 import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
 
@@ -33,6 +34,12 @@ export const sessionEndedMessage = (hasCompacted: boolean, oldSessionId: string)
   const message = 'The session ended before the handoff could clear, so it stopped. No note was carried over.'
   return hasCompacted ? `${message} The previous session was compacted. To reopen it: ${resumeCommand(oldSessionId)}` : message
 }
+
+export const NO_HANDOFF_MESSAGE = 'No handoff was written. This session is unchanged.'
+
+export const NO_REPLY_MESSAGE = "Nothing to hand off yet: Claude hasn't finished a reply in this session. Type /handoff again once it has."
+
+export const noHandoffMessage = (forkReason: ForkReason | undefined): string => (forkReason === 'nothing-to-fork' ? NO_REPLY_MESSAGE : NO_HANDOFF_MESSAGE)
 
 export const clearFailedMessage = (hasCompacted: boolean): string =>
   `The handoff was written but /clear failed. ${sessionLeftLine(hasCompacted)} Type /handoff to try again.`

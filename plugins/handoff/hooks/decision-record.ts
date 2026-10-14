@@ -1,4 +1,5 @@
 import type { DecisionReason } from './decision-reasons'
+import type { ForkReason } from './fork-outcome'
 import type { NoteDelivery } from './handoff-note'
 import type { GroupDelivery } from './held-delivery'
 import type { HeldPrompt, HeldPromptGroup, SessionState } from './session-state'
@@ -20,6 +21,7 @@ export type TriggerValues = {
   setting: Mode
   cache_read_tokens: number
   reason?: DecisionReason
+  fork_reason?: ForkReason
   note?: NoteDelivery
   held_groups?: number
   held_unattended?: boolean
@@ -61,6 +63,7 @@ export type Trigger = {
 export type Evaluation = Trigger & {
   action: DecisionAction
   reason?: DecisionReason
+  forkReason?: ForkReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
   compactedBeforeClear?: boolean
@@ -127,7 +130,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   return decisionRecord({
     now,
@@ -144,6 +147,7 @@ export const recordFromEvaluation = (
       setting: state.setting,
       cache_read_tokens: cacheReadTokens,
       ...(reason ? { reason } : {}),
+      ...(forkReason ? { fork_reason: forkReason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
       ...compactedFields,
