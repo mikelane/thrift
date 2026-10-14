@@ -55,7 +55,9 @@ const defaultWorld = (clock: MockClock): World => ({
   agentListThrows: false,
   onAgentList: undefined,
   box: { text: '', cursor: 0 },
+  isRunningSubmitHook: false,
   fillRefusal: undefined,
+  isFillRefusedOverText: false,
   fork: async () => answered('The handoff note.'),
   compact: async () => compacted(48_000),
   clearThrows: false,
@@ -79,6 +81,9 @@ const defaultWorld = (clock: MockClock): World => ({
   appended: [],
 })
 
+// The world of the latest install, so submitPerson can leave a dropped prompt's text in its prompt box.
+let installedWorld: World | undefined
+
 export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
   mock.env(on, {
@@ -95,6 +100,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   installTurnMocks(on, world)
   installStateMocks(on, world)
   installToolMocks(on, world)
+  installedWorld = world
   return world
 }
 
@@ -199,15 +205,45 @@ type PersonPrompt = {
   attachments?: readonly { type: 'image'; mediaType: string }[]
 }
 
-export const submitPerson = ($: Engine, text: string, { kind = 'composer', turnId, context, attachments }: PersonPrompt = {}) =>
-  $.prompt.submit({
-    text,
+// Typed after what the box holds, unless the box already shows the prompt: pressing Enter on it again adds nothing.
+const typedAfter = (boxText: string, text: string): string => {
+  if (boxText === '') return text
+  return `\n${boxText}\n`.includes(`\n${text}\n`) ? boxText : `${boxText}\n${text}`
+}
+
+// What the engine submits when a person types `text` at the composer: the whole box, so text a dropped prompt left behind is
+// the start of the next prompt (Claude Code 2.1.299: `one`, then `onetwo`, then `onetwothree`).
+const submittedFromBox = (boxText: string, text: string): string => {
+  const isEnterOnBox = boxText === '' || text.startsWith(boxText) || `\n${boxText}\n`.includes(`\n${text}\n`)
+  return isEnterOnBox ? text : `${boxText}${text}`
+}
+
+// Live behavior (Claude Code 2.1.299): a prompt typed at the composer and then dropped stays in the prompt box, and the person
+// does not clear it. A prompt typed after the last one is typed after what stayed (a test lets the clock run between prompts
+// when the person takes a moment); one that arrives while the plugin is busy putting text in the box is shown after it.
+export const submitPerson = async (
+  $: Engine,
+  text: string,
+  { kind = 'composer', turnId, context, attachments }: PersonPrompt = {},
+): ReturnType<Engine['prompt']['submit']> => {
+  const world = installedWorld
+  const isArrivalMidSubmit = world?.isRunningSubmitHook === true
+  const isTypedAtComposer = world !== undefined && kind === 'composer'
+  const submitted = isTypedAtComposer && !isArrivalMidSubmit ? submittedFromBox(world.box.text, text) : text
+  const result = await $.prompt.submit({
+    text: submitted,
     wait: false,
     origin: { kind },
     ...(turnId ? { turnId } : {}),
     ...(context ? { context } : {}),
     ...(attachments ? { attachments } : {}),
   })
+  if (isTypedAtComposer && dropOf(result) !== undefined) {
+    const boxed = isArrivalMidSubmit ? typedAfter(world.box.text, text) : submitted
+    world.box = { text: boxed, cursor: boxed.length }
+  }
+  return result
+}
 
 export const dropOf = (result: unknown): string | undefined =>
   typeof result === 'object' && result !== null && 'drop' in result && typeof result.drop === 'string' ? result.drop : undefined

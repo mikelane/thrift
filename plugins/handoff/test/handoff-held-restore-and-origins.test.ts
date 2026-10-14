@@ -39,6 +39,7 @@ describe('abandoning a handoff and restoring held prompts', () => {
   test('It puts every held prompt back in the box in order when the handoff fails', async ($, on) => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'first')
+    await world.clock.settle()
     await submitPerson($, 'second')
     await failNote()
     expect(world.box.text).toBe('first\n\nsecond')
@@ -148,6 +149,7 @@ describe('mixed origins and the carried prompt', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'person one')
     await submitPerson($, 'nightly one', { kind: 'scheduled-trigger' })
+    await world.clock.settle()
     await submitPerson($, 'person two')
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:person one\n\nperson two', 'entered:plugin:nightly one'])

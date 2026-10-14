@@ -61,7 +61,9 @@ describe('holding prompts while the note is written', () => {
   test('It sends several held prompts once, joined in the order they arrived', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'first')
+    await world.clock.settle()
     await submitPerson($, 'second')
+    await world.clock.settle()
     await submitPerson($, 'third')
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:first\n\nsecond\n\nthird'])
@@ -152,8 +154,9 @@ describe('refusing a prompt with attachments or context', () => {
 
   test('It holds a text prompt next to a refused one', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'look', { attachments: IMAGE })
     await submitPerson($, 'plain')
+    await world.clock.settle()
+    await submitPerson($, 'look', { attachments: IMAGE })
     await finishNote()
     expect(entered(world)).toEqual(['entered:plugin:plain'])
   })

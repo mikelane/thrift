@@ -11,7 +11,9 @@ type Settings = {
 export type ButtonPress = { offer: Offer; button: Button }
 
 // origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
-export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind'] }
+// boxText is the text the engine left in the box for a group of several prompts: the last one typed at the composer, not
+// the joined text. A group with no composer prompt in it has none.
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind']; boxText?: string }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt
@@ -142,6 +144,9 @@ export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null
     promptCarriedByHandoff: carried === null ? null : carried.text,
   }
 }
+
+// True only while prompts are still being collected, before the handoff takes them to deliver or put back.
+export const isCollectingHeldPrompts = (state: SessionState): boolean => state.handoffHold.phase === 'holding'
 
 export const isHoldingForHandoff = (state: SessionState): boolean =>
   state.handoffHold.phase === 'holding' || state.handoffHold.phase === 'sending'

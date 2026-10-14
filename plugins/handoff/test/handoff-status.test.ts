@@ -364,7 +364,6 @@ test('It restores a held prompt to the box once when the clear throws under /han
   await handoffFromBridge($)
   await world.clock.settle()
   expect(world.box.text).toBe(HELD_PROMPT)
-  expect(world.effects.filter(effect => effect === `fill:${HELD_PROMPT}`)).toHaveLength(2)
 })
 
 test('It answers /handoff from the bridge with already-in-progress while the compaction runs over a held prompt', ASK, async ($, on) => {

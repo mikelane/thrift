@@ -54,6 +54,9 @@ import {
   groupJoiningNote,
   groupsLeftToSend,
   withoutPrompt,
+  boxCopiesOf,
+  boxCopyOf,
+  withoutBoxCopy,
   type Carried,
   type NoteDelivery,
 } from './handoff-note'
@@ -95,6 +98,7 @@ import {
   resetForNewSession,
   startMainTurn,
   takeHeldPrompts,
+  isCollectingHeldPrompts,
   takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type BoxPlacement,
@@ -282,19 +286,40 @@ const registerHandoffCommand = async ($: EngineInterface) => {
 const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
   work.catch(error => debug($, `background work failed: ${String(error)}`))
 
+type BoxPrompt = Pick<HeldPrompt, 'text' | 'boxText'>
+
 // A prompt the box already holds as whole lines is not added again, so an identical prompt sent twice shows once; the box
 // is for the person to review and send, and a second copy of a line they can see would only be noise to delete.
-const refillBox = async ($: EngineInterface, text: string, placement: BoxPlacement = 'before_draft'): Promise<boolean> => {
+// The engine keeps a dropped prompt's text in the box, which for a group is its last prompt: that copy is replaced by the
+// group's text, not left beside it.
+const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPlacement = 'before_draft'): Promise<boolean> => {
   try {
     const draft = (await $.prompt.read()).text
-    if (holdsPrompt(draft, text)) return true
-    const withDraft = placement === 'before_draft' ? `${text}\n${draft}` : `${draft}\n${text}`
-    const filled = await $.prompt.fill({ text: draft === '' ? text : withDraft, mode: 'replace' })
+    if (holdsPrompt(draft, prompt.text)) return true
+    const otherDraft = withoutBoxCopy(draft, prompt)
+    const withDraft = placement === 'before_draft' ? `${prompt.text}\n${otherDraft}` : `${otherDraft}\n${prompt.text}`
+    const filled = await $.prompt.fill({ text: otherDraft === '' ? prompt.text : withDraft, mode: 'replace' })
     if (!filled.isFilled) debug($, `the prompt box refused the prompt: ${filled.refusal ?? 'refused by a hook'}`)
     return filled.isFilled
   } catch (error) {
     debug($, `could not refill the prompt box: ${String(error)}`)
     return false
+  }
+}
+
+// Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
+// that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
+const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
+  const copies = boxCopiesOf(prompt)
+  if (copies.length === 0) return
+  try {
+    const draft = (await $.prompt.read()).text
+    const remainingDraft = copies.map(copy => withoutPrompt(draft, copy)).find(remaining => remaining !== null)
+    if (remainingDraft === undefined) return
+    const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
+    if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
+  } catch (error) {
+    debug($, `could not empty the prompt box: ${String(error)}`)
   }
 }
 
@@ -343,8 +368,10 @@ const restorePrompt = async (
   prompt: HeldPrompt,
   placement: BoxPlacement = 'before_draft',
 ): Promise<Carried> => {
-  if (canUseBox(prompt) && (await refillBox($, prompt.text, placement))) return 'in_box'
-  return submitOrKeepInTranscript($, state, prompt)
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
+  const carried = await submitOrKeepInTranscript($, state, prompt)
+  if (carried === 'submitted') await emptySentPromptFromBox($, prompt)
+  return carried
 }
 
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
@@ -487,8 +514,11 @@ const sendOrKeepInBox = async (
   prompt: HeldPrompt,
   { placement = 'before_draft', notice }: SendOptions = {},
 ): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not send the prompt')) return 'submitted'
-  if (canUseBox(prompt) && (await refillBox($, prompt.text, placement))) return 'in_box'
+  if (await submitEntered($, state, prompt, 'could not send the prompt')) {
+    await emptySentPromptFromBox($, prompt)
+    return 'submitted'
+  }
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
   keepInTranscript($, prompt, notice)
   return 'not_carried'
 }
@@ -510,7 +540,13 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
-  const note = { text: joinPrompts(message, sameOriginGroup?.text), isUnattended: settledHandoff.isUnattended, origin }
+  const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
+  const note = {
+    text: joinPrompts(message, sameOriginGroup?.text),
+    isUnattended: settledHandoff.isUnattended,
+    origin,
+    ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
+  }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
 }
 
@@ -816,7 +852,9 @@ const inspectPrompt = async ($: EngineInterface, state: SessionState, text: stri
 const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
   try {
     const remainingDraft = withoutPrompt((await $.prompt.read()).text, text)
-    if (remainingDraft !== null) await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
+    if (remainingDraft === null) return
+    const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
+    if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
@@ -824,7 +862,7 @@ const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
 
 const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {
   if (state.heldPrompt !== text) return
-  if (await refillBox($, text)) return
+  if (await refillBox($, { text })) return
   if (state.heldPrompt !== text) return
   state.heldPrompt = null
   await takeDownBand($, state)
@@ -843,7 +881,7 @@ const holdPrompt = async ($: EngineInterface, state: SessionState, text: string,
 // -- Prompts held while a handoff is pending. Kept together so the whole rule can move out of this file as one piece.
 
 const returnToBox = async ($: EngineInterface, text: string, placement: BoxPlacement): Promise<void> => {
-  if (!(await refillBox($, text, placement))) keepInTranscript($, composerPrompt(text))
+  if (!(await refillBox($, { text }, placement))) keepInTranscript($, composerPrompt(text))
 }
 
 // An attachment or context can't be resent, so the prompt is handed back instead. A person at this terminal gets it in the
@@ -871,6 +909,17 @@ const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
   const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind })
   debug($, `held a prompt for the handoff (${heldCount} held)`)
+  // Claude Code leaves a dropped prompt's text in the box, so the next prompt would be typed after it and held as
+  // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the
+  // text back after the hook returns. Only while prompts are still collected: once the handoff took them, a restore may have
+  // put the text back, and the delivery and restore paths deal with what the engine left.
+  // SAFETY: a handoff that ends and a second one that starts inside this one tick would let the clear run in the second hold.
+  // Both need several engine round trips, so a real session cannot produce it, and no code guards it.
+  if (isComposerOrigin(e.origin.kind)) {
+    $.clock.after(0, () => {
+      if (isCollectingHeldPrompts(state)) void logFailure($, emptyBoxIfHolding($, e.text))
+    })
+  }
   return { drop: HELD_FOR_HANDOFF }
 }
 
@@ -922,7 +971,9 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   })
   const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {
-    const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, heldPromptOrigin: e.origin.kind, isUnattended })
+    // Claude Code leaves the dropped text in the box; the handoff sends the prompt itself, so that copy is taken out first.
+    const emptyBox = isComposerOrigin(e.origin.kind) ? () => emptyBoxIfHolding($, e.text) : undefined
+    const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, heldPromptOrigin: e.origin.kind, isUnattended }, emptyBox)
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
   }
   if (action === 'hold') return holdPrompt($, state, e.text, trigger)

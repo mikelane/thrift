@@ -32,7 +32,11 @@ export type World = {
   // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
   onAgentList: (() => Promise<void>) | undefined
   box: Box
+  // True while a submitHooks callback runs: a prompt that arrives then is typed after what the plugin just put in the box.
+  isRunningSubmitHook: boolean
   fillRefusal: 'no_composer' | 'dialog' | undefined
+  // The box shows its text, but a dialog is up: a fill is refused while a read still answers.
+  isFillRefusedOverText: boolean
   fork: () => Promise<ModelForkResult>
   compact: () => Promise<SessionCompactResult>
   clearThrows: boolean
@@ -118,15 +122,22 @@ export const installModelMocks = (on: On, world: World) => {
 }
 
 export const installPromptMocks = (on: On, world: World) => {
-  on('prompt.read', () => (world.boxReadDenied ? { deny: 'no box' } : ok(world.box)))
+  // A session with no composer, or one the plugin may not fill, shows no text to read.
+  on('prompt.read', () => {
+    if (world.boxReadDenied) return { deny: 'no box' }
+    return ok(world.fillRefusal === undefined ? world.box : { text: '', cursor: 0 })
+  })
   on('prompt.fill', (_$, e) => {
+    if (world.isFillRefusedOverText) return { isFilled: false, refusal: 'dialog' }
     if (world.fillRefusal !== undefined) return { isFilled: false, refusal: world.fillRefusal }
     world.effects.push(`fill:${e.text}`)
     world.box = { text: e.text, cursor: e.text.length }
     return { isFilled: true }
   })
   on('prompt.submit', (_$, e) => {
+    world.isRunningSubmitHook = true
     world.submitHooks.shift()?.()
+    world.isRunningSubmitHook = false
     if (world.submitThrows) throw new Error('submit refused')
     if (world.submitDropped) return { drop: 'refused by another hook' }
     world.effects.push(`entered:${e.origin.kind}:${e.text}`)

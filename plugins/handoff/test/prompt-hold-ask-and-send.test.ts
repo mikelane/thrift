@@ -61,12 +61,11 @@ test('It still hands a bridge prompt that names new work off first in act mode',
   await world.clock.settle()
 })
 
-test('It refills the box with the held prompt once the clock fires', ASK, async ($, on) => {
+test('It leaves one copy of the held prompt in the box when the engine kept its text', ASK, async ($, on) => {
   const world = await ready($, on)
   await submitPerson($, 'now ENG-2')
-  expect(world.effects).not.toContain('fill:now ENG-2')
   await world.clock.settle()
-  expect(world.effects).toContain('fill:now ENG-2')
+  expect([world.box.text, world.effects.filter(effect => effect.startsWith('fill:'))]).toEqual(['now ENG-2', []])
 })
 
 test('It logs an advised record for a held prompt at the prompt point', ASK, async ($, on) => {
@@ -161,8 +160,8 @@ test('It hands off and sends the held prompt in the fresh session when Hand off 
 
 test('It refills the box with a draft the person typed after the prompt was held', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.box = { text: 'draft', cursor: 5 }
   await submitPerson($, 'now ENG-2')
+  world.box = { text: 'draft', cursor: 5 }
   await world.clock.settle()
   expect(world.box.text).toBe('now ENG-2\ndraft')
 })

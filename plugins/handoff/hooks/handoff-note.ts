@@ -81,7 +81,15 @@ export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGrou
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
     if (group === undefined) groups.push({ text, isUnattended, origin })
-    else groups[index] = { text: `${group.text}${PROMPT_SEPARATOR}${text}`, isUnattended, origin: groupOrigin(group.origin, origin) }
+    else {
+      const boxCopy = isComposerOrigin(origin) ? text : boxCopyOf(group)
+      groups[index] = {
+        text: `${group.text}${PROMPT_SEPARATOR}${text}`,
+        isUnattended,
+        origin: groupOrigin(group.origin, origin),
+        ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
+      }
+    }
   }
   return groups
 }
@@ -98,6 +106,18 @@ export const groupsLeftToSend = (
 ): HeldPromptGroup[] =>
   noteDelivery === 'appended' ? [...groups] : groups.filter(group => !isGroupOfOrigin(group, handoffIsUnattended))
 
+// The text the engine left in the box for a group: the last prompt typed at the composer, which a remote prompt joined
+// after it does not replace. A group with no composer prompt left nothing there.
+export const boxCopyOf = (group: Pick<HeldPrompt, 'text' | 'origin' | 'boxText'>): string | undefined =>
+  group.boxText ?? (isComposerOrigin(group.origin) ? group.text : undefined)
+
+// What the prompt box can still hold of a prompt that was dropped and then sent on: the engine leaves the dropped text in it,
+// which for a group is its last composer prompt. The joined text is a copy only for a prompt sent from the composer.
+export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'boxText'>): string[] => [
+  ...(isComposerOrigin(prompt.origin) ? [prompt.text] : []),
+  ...(prompt.boxText === undefined ? [] : [prompt.boxText]),
+]
+
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 
 export const withoutPrompt = (draft: string, prompt: string): string | null => {
@@ -106,3 +126,7 @@ export const withoutPrompt = (draft: string, prompt: string): string | null => {
   if (promptStart === -1) return null
   return `${padded.slice(0, promptStart)}${padded.slice(promptStart + prompt.length + 1)}`.slice(1, -1)
 }
+
+// The draft without the copy of a group's last prompt the engine kept in the box. A draft that no longer holds it is left as is.
+export const withoutBoxCopy = (draft: string, { boxText }: Pick<HeldPrompt, 'boxText'>): string =>
+  boxText === undefined ? draft : (withoutPrompt(draft, boxText) ?? draft)
