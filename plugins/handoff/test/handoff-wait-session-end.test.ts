@@ -87,7 +87,7 @@ test('It sends a held prompt into the session the person cleared to', async ($, 
   await submitPerson($, 'next thing')
   await runCommand($, 'clear')
   await world.clock.settle()
-  expect(world.effects).toContain('entered:plugin:next thing')
+  expect(world.effects).toContain('entered:plugin+asUser:next thing')
 })
 
 test('It runs no second clear after the person typed /clear while the note is written', async ($, on) => {

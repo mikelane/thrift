@@ -108,12 +108,19 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       this session. To reopen the full previous conversation: `claude --resume <id>`". Claude Code puts
       the plugin's name in front of its toasts and transcript lines, so the plugin's own strings
       carry no `handoff:` prefix.
-   8. Deliver any held prompts in the fresh session. If the note was not appended, held prompts of
-      the handoff's own origin ride with it. Every other held group is sent on its own: submitted
-      first, then put in the prompt box if it was typed at this terminal, then written to the transcript. The
+   8. Deliver any held prompts in the fresh session. If the note was not appended, it is submitted
+      as a prompt. A scheduled handoff's note rides with the held scheduled prompts, and both go under
+      the plugin's name. An attended handoff's note goes alone, and the held prompts follow it. Every
+      held group that did not ride with the note is sent on its own: submitted first, then put in the
+      prompt box if it was typed at this terminal, then written to the transcript. The
       `cleared` record's `held_other_delivery` field says how those groups went. This holds whether
       the handoff was started by handing it off first or by running `/handoff` while the prompt was
       held.
+      A held prompt from a person (this terminal, the bridge, or the SDK) is submitted as their own
+      words, so the model reads it bare, with no "The handoff plugin sent a message" in front. That
+      goes for every way the plugin sends one again: after the clear, a prompt that arrived while the
+      delivery ran, Hand off and send it, Send here, and the restore after an abandoned handoff. The
+      plugin's own note and a scheduled prompt keep the plugin's name in front.
       A prompt that arrives while this step runs is held too. It is delivered after everything above,
       one prompt at a time in the order it arrived, the same way: submitted, then put in the prompt box
       if it was typed at this terminal, then written to the transcript. A prompt from the bridge, the SDK,
@@ -194,6 +201,7 @@ Special cases:
   the end of the turn it started.
   A scheduled prompt a handoff held and sends again, in the fresh session or back in this one, is
   still treated this way: `prompt.submit` takes no origin, so the plugin marks the turn itself.
+  It is also submitted under the plugin's name, not as a person's words, because nobody typed it.
 - **Non-interactive runs.** Under `claude -p` or the SDK the plugin only logs. The process can exit
   before a handoff ends, and a held prompt would be lost.
 - **Prompts never held.** A prompt that carries context or attachments (only its text can be
@@ -315,9 +323,10 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   line say which and that typing `/handoff` tries again. The prompt is handled the same way. A
   scheduled prompt still runs.
 - **The append is refused after the clear.** The handoff exists nowhere else, so it is submitted as
-  a prompt, joined to any held prompt.
+  a prompt, joined to any held scheduled prompt of a scheduled handoff. Held prompts from a person
+  follow it as separate prompts, so the model reads them as the person's own words.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
-  the prompt, it goes back in the box (joined to the handoff if the append was refused). A box that
+  the prompt, it goes back in the box. A box that
   already holds it as a whole line is left alone.
 - **Prompt text in the engine's debug log.** A prompt or note kept in the transcript, and a refused
   remote prompt, are written with `$.ui.log`. The engine also copies every `$.ui.log` line, up to

@@ -94,17 +94,19 @@ export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGrou
   return groups
 }
 
-// The note rides with the group that shares the handoff's own origin.
+// Only a scheduled handoff's note rides with the scheduled group, and both go under the plugin's frame. The attended group is
+// the person's own words and is sent apart from the note, so the model reads it bare.
 export const groupJoiningNote = (groups: readonly HeldPromptGroup[], handoffIsUnattended: boolean): HeldPromptGroup | undefined =>
-  groups.find(group => isGroupOfOrigin(group, handoffIsUnattended))
+  handoffIsUnattended ? groups.find(group => isGroupOfOrigin(group, true)) : undefined
 
-// A note that was appended to the session leaves every group to send; a note that was sent as a prompt already carried its group.
+// A note that was appended to the session leaves every group to send; a note that was sent as a prompt already carried the group
+// that joined it, and only that one.
 export const groupsLeftToSend = (
   groups: readonly HeldPromptGroup[],
   handoffIsUnattended: boolean,
   noteDelivery: NoteDelivery,
 ): HeldPromptGroup[] =>
-  noteDelivery === 'appended' ? [...groups] : groups.filter(group => !isGroupOfOrigin(group, handoffIsUnattended))
+  noteDelivery === 'appended' ? [...groups] : groups.filter(group => group !== groupJoiningNote(groups, handoffIsUnattended))
 
 // The text the engine left in the box for a group: the last prompt typed at the composer, which a remote prompt joined
 // after it does not replace. A group with no composer prompt left nothing there.

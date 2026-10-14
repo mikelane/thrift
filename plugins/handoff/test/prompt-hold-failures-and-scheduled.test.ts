@@ -19,7 +19,7 @@ test('It submits the prompt in the unchanged session when the fork fails and nob
   world.fillRefusal = 'no_composer'
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(entered(world)).toContain('entered:plugin:now ENG-2')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2')
 })
 
 test('It puts the prompt back in the box when /clear throws', ACT, async ($, on) => {
@@ -30,12 +30,12 @@ test('It puts the prompt back in the box when /clear throws', ACT, async ($, on)
   expect(world.effects).toContain('fill:now ENG-2')
 })
 
-test('It submits the handoff joined to the held prompt when the append is refused', ACT, async ($, on) => {
+test('It submits the handoff, then the held prompt as the person, when the append is refused', ACT, async ($, on) => {
   const world = await ready($, on)
   world.appendDenied = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(entered(world)).toContain(`entered:plugin:${NOTE_HEADING}\n\nnow ENG-2`)
+  expect(entered(world).slice(-2)).toEqual([`entered:plugin:${NOTE_HEADING}`, 'entered:plugin+asUser:now ENG-2'])
 })
 
 test('It drops only one of two prompts that name new work at once', ACT, async ($, on) => {
@@ -56,7 +56,7 @@ test('It holds a second prompt and sends it once with the first while the handof
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
-  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso ENG-3'])
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2\n\nalso ENG-3'])
 })
 
 test('It does not drop a prompt that carries attachments in act mode', ACT, async ($, on) => {
@@ -142,7 +142,7 @@ test('It does not refill the box when Send here was pressed before the refill ra
   const band = await mountBand($)
   await band.press({ key: 'send-here' })
   await world.clock.settle()
-  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+  expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'])
   expect(world.box.text).toBe('')
 })
 

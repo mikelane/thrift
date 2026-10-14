@@ -140,7 +140,7 @@ export const installPromptMocks = (on: On, world: World) => {
     world.isRunningSubmitHook = false
     if (world.submitThrows) throw new Error('submit refused')
     if (world.submitDropped) return { drop: 'refused by another hook' }
-    world.effects.push(`entered:${e.origin.kind}:${e.text}`)
+    world.effects.push(`entered:${e.origin.kind}${'asUser' in e.origin && e.origin.asUser ? '+asUser' : ''}:${e.text}`)
     return { text: e.text }
   })
 }

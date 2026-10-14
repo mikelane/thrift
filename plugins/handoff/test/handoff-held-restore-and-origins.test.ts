@@ -114,14 +114,14 @@ describe('mixed origins and the carried prompt', () => {
     const { world, finishNote } = await heldBeforeTheHandoff($, on)
     await submitPerson($, 'also this')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso this'])
+    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2\n\nalso this'])
   })
 
   test('It sends the prompt the handoff already carries once when the person sends it again during the write', ASK, async ($, on) => {
     const { world, finishNote } = await heldBeforeTheHandoff($, on)
     await submitPerson($, 'now ENG-2')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'])
   })
 
   test('It logs a dropped repeat of the carried prompt to debug without its text', ASK, async ($, on) => {
@@ -152,16 +152,16 @@ describe('mixed origins and the carried prompt', () => {
     await world.clock.settle()
     await submitPerson($, 'person two')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:person one\n\nperson two', 'entered:plugin:nightly one'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:person one\n\nperson two', 'entered:plugin:nightly one'])
   })
 
-  test('It joins only the attended prompts to the note of an attended handoff and sends scheduled ones apart', async ($, on) => {
+  test('It sends the attended prompts apart from the note of an attended handoff, as the person, before the scheduled ones', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     await submitPerson($, 'person says')
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}\n\nperson says`, 'entered:plugin:nightly job'])
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:person says', 'entered:plugin:nightly job'])
   })
 
   test('It joins only the scheduled prompts to the note of an unattended handoff and sends person prompts apart', ASK, async ($, on) => {
@@ -169,7 +169,7 @@ describe('mixed origins and the carried prompt', () => {
     world.appendDenied = true
     await submitPerson($, 'person says')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', `entered:plugin:${NOTE_MESSAGE}\n\nnow ENG-2`, 'entered:plugin:person says'])
+    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', `entered:plugin:${NOTE_MESSAGE}\n\nnow ENG-2`, 'entered:plugin+asUser:person says'])
   })
 
   test('It drops a repeat of the carried prompt that arrives with an attachment and leaves the box alone', ASK, async ($, on) => {
@@ -179,7 +179,16 @@ describe('mixed origins and the carried prompt', () => {
     expect([dropOf(repeat), world.box.text, entered(world)]).toEqual([
       REPEAT_NOT_ADDED,
       '',
-      ['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'],
+      ['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'],
     ])
+  })
+})
+
+describe('the voice a resubmitted prompt is read in', () => {
+  test('It submits a held person prompt as the person after the clear', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'person says')
+    await finishNote()
+    expect(entered(world)).toEqual(['entered:plugin+asUser:person says'])
   })
 })

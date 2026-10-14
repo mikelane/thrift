@@ -281,7 +281,7 @@ test('It keeps a person prompt held while the waiting status is up', async ($, o
   await submitPerson($, 'next thing')
   await completeTurn($)
   await world.clock.settle()
-  expect(world.effects).toContain('entered:plugin:next thing')
+  expect(world.effects).toContain('entered:plugin+asUser:next thing')
 })
 
 // Guard for the `if (!state.isTurnRunning) break` after the pre-clear busy check in waitForClearWindow.

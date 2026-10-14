@@ -139,7 +139,6 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. H
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
-const UNSENT_NOTE_AND_PROMPT = 'The handoff note and your prompt could not be sent or put in the prompt box. Here they are:'
 const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be sent, so here they are:'
 
 // /handoff is registered only when a person is at the prompt, so only then is it there to mention.
@@ -333,6 +332,10 @@ const canUseBox = (prompt: HeldPrompt): boolean => isComposerOrigin(prompt.origi
 const keepInTranscript = ($: EngineInterface, prompt: HeldPrompt, notice?: string) =>
   $.ui.log(`${notice ?? (canUseBox(prompt) ? UNSENT_PROMPT : UNSENT_OTHER_PROMPT)}\n${prompt.text}`)
 
+// A person's prompt is read by the model as the person's own words, not as a message from this plugin. A scheduled prompt
+// keeps the plugin's frame: nobody typed it. The plugin's own handoff note is not the person's either, so its callers say so.
+const speaksForPerson = (prompt: HeldPrompt): boolean => !prompt.isUnattended && isPersonOrigin(prompt.origin)
+
 // The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
 // plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
 // the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
@@ -343,10 +346,11 @@ const submitEntered = async (
   state: SessionState,
   prompt: HeldPrompt,
   failureLabel: string,
+  asUser: boolean,
 ): Promise<boolean> => {
   queueResubmittedPrompt(state, prompt)
   try {
-    const result = await $.prompt.submit({ text: prompt.text })
+    const result = await $.prompt.submit(asUser ? { text: prompt.text, asUser: true } : { text: prompt.text })
     if (result.drop === undefined) return true
     debug($, `${failureLabel}: ${result.drop}`)
   } catch (error) {
@@ -357,7 +361,7 @@ const submitEntered = async (
 }
 
 const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not restore the held prompt')) return 'submitted'
+  if (await submitEntered($, state, prompt, 'could not restore the held prompt', speaksForPerson(prompt))) return 'submitted'
   keepInTranscript($, prompt)
   return 'not_carried'
 }
@@ -506,15 +510,15 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type SendOptions = { placement?: BoxPlacement; notice?: string | undefined }
+type SendOptions = { placement?: BoxPlacement; notice?: string | undefined; asUser?: boolean }
 
 const sendOrKeepInBox = async (
   $: EngineInterface,
   state: SessionState,
   prompt: HeldPrompt,
-  { placement = 'before_draft', notice }: SendOptions = {},
+  { placement = 'before_draft', notice, asUser = speaksForPerson(prompt) }: SendOptions = {},
 ): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not send the prompt')) {
+  if (await submitEntered($, state, prompt, 'could not send the prompt', asUser)) {
     await emptySentPromptFromBox($, prompt)
     return 'submitted'
   }
@@ -528,11 +532,12 @@ const announce = ($: EngineInterface, message: string) => {
   $.ui.toast(message)
 }
 
-// The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
-// A note that is never offered to the box (a scheduled handoff's, or one joined to a prompt typed elsewhere) gets a notice
-// that does not say it was, and a note joined to a prompt names both.
+// A scheduled handoff's note rides with the scheduled group, both under the plugin's frame. An attended handoff's note goes alone
+// and framed, then the person's prompts follow it as the person's own words.
+// A note that is never offered to the box (a scheduled handoff's) gets a notice that does not say it was, and a note joined to
+// a scheduled prompt names both.
 const unsentNoteNotice = (note: HeldPrompt, isJoined: boolean): string => {
-  if (isJoined) return canUseBox(note) ? UNSENT_NOTE_AND_PROMPT : UNSENT_NOTE_AND_OTHER_PROMPT
+  if (isJoined) return UNSENT_NOTE_AND_OTHER_PROMPT
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
@@ -547,7 +552,7 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
     origin,
     ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
-  return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
+  return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined), asUser: false })
 }
 
 const sendHeldGroups = async (
@@ -587,8 +592,8 @@ const continueInFreshSession = async (
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
   const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
-  // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
-  if (noteDelivery !== 'appended') releaseCarried(state)
+  // A note sent as a prompt may have taken the scheduled group along; it is released with that group, as any other is.
+  if (noteDelivery !== 'appended' && groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended) !== undefined) releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)

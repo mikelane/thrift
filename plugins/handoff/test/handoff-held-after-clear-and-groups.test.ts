@@ -29,7 +29,7 @@ describe('prompts that arrive after the clear', () => {
 
   test('It sends the carried prompt once when it is repeated after the clear', ASK, async ($, on) => {
     const { world } = await repeatingDuringDelivery($, on)
-    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'])
   })
 
   test('It lets a repeat of the carried prompt through once the handoff has finished', ASK, async ($, on) => {
@@ -53,13 +53,13 @@ describe('prompts that arrive after the clear', () => {
     const { world, fork } = await carriedPlusScheduled($, on)
     world.appendDenied = true
     world.submitDropped = true
-    const outcome = repeatOnSubmitAfter($, world, 1)
+    const outcome = repeatOnSubmitAfter($, world, 2)
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
     expect(outcome.repeat).not.toBeNull()
     expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
       HELD_FOR_HANDOFF,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:plugin:now ENG-2'],
+      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:plugin+asUser:now ENG-2'],
     ])
   })
 })
@@ -116,35 +116,33 @@ describe('boxText on a group', () => {
 })
 
 describe('groupJoiningNote and groupsLeftToSend', () => {
-  test('It picks the group that shares the handoff origin in groupJoiningNote', () => {
-    expect([
-      groupJoiningNote([personGroup, scheduledGroup], false),
-      groupJoiningNote([personGroup, scheduledGroup], true),
-    ]).toEqual([personGroup, scheduledGroup])
+  test('It picks the scheduled group in groupJoiningNote for an unattended handoff', () => {
+    expect(groupJoiningNote([personGroup, scheduledGroup], true)).toEqual(scheduledGroup)
   })
 
-  test('It picks no group in groupJoiningNote when none shares the handoff origin', () => {
-    expect(groupJoiningNote([scheduledGroup], false)).toBeUndefined()
+  test('It picks no group in groupJoiningNote for an attended handoff, so the person group stays apart from the note', () => {
+    expect(groupJoiningNote([personGroup, scheduledGroup], false)).toBeUndefined()
+  })
+
+  test('It picks no group in groupJoiningNote when no scheduled group is held for an unattended handoff', () => {
+    expect(groupJoiningNote([personGroup], true)).toBeUndefined()
   })
 
   test('It leaves every group to send in groupsLeftToSend when the note was appended', () => {
     expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'appended')).toEqual([personGroup, scheduledGroup])
   })
 
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was submitted', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'submitted')).toEqual([scheduledGroup])
-  })
+  for (const noteDelivery of ['submitted', 'in_box', 'not_carried'] as const) {
+    test(`It leaves every group to send in groupsLeftToSend when the note was ${noteDelivery} and an attended handoff kept it apart`, () => {
+      expect(groupsLeftToSend([personGroup, scheduledGroup], false, noteDelivery)).toEqual([personGroup, scheduledGroup])
+    })
 
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was in_box', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'in_box')).toEqual([scheduledGroup])
-  })
-
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was not_carried', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'not_carried')).toEqual([scheduledGroup])
-  })
+    test(`It leaves only the person group to send in groupsLeftToSend when the note was ${noteDelivery} with the scheduled group of an unattended handoff`, () => {
+      expect(groupsLeftToSend([personGroup, scheduledGroup], true, noteDelivery)).toEqual([personGroup])
+    })
+  }
 
   test('It leaves no groups to send in groupsLeftToSend for no groups', () => {
     expect(groupsLeftToSend([], false, 'submitted')).toEqual([])
   })
-
 })

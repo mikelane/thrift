@@ -16,6 +16,7 @@ import {
   type LogRecord,
   type World,
 } from './helpers'
+import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
@@ -60,7 +61,7 @@ const expectSecretTravelled = (world: World) => {
 }
 
 const enteredTexts = (world: World): string[] =>
-  world.effects.filter(effect => effect.startsWith('entered:plugin:')).map(effect => effect.slice('entered:plugin:'.length))
+  world.effects.filter(effect => /^entered:plugin(\+asUser)?:/.test(effect)).map(effect => effect.replace(/^entered:plugin(\+asUser)?:/, ''))
 
 const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
   const record = world.records.filter(candidate => candidate.action === action).at(-1)
@@ -243,15 +244,14 @@ describe('held_other_delivery on a cleared record', () => {
     expect(enteredTexts(world)).toEqual([SECRET_PROMPT])
   })
 
-  test('It records held_other_delivery none when the note carried the only held group', async ($, on) => {
+  test('It records held_other_delivery submitted when the note was submitted apart from the only held person group', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person'])
     world.appendDenied = true
-    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'none' })
-    expect(enteredTexts(world)).toHaveLength(1)
-    expect(enteredTexts(world)[0]).toMatch(new RegExp(`\n\n${SECRET_PROMPT}$`))
+    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'submitted' })
+    expect(enteredTexts(world)).toEqual([NOTE_MESSAGE, SECRET_PROMPT])
   })
 
-  test('It records the delivery of the group that did not ride with the note', async ($, on) => {
+  test('It records the worst delivery of the groups that did not ride with the note', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     world.appendDenied = true
     world.submitHooks = [undefined, () => {

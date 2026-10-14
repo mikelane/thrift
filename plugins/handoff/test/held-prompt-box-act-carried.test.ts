@@ -14,7 +14,7 @@ test('It holds a prompt typed during an act-mode handoff as typed, not after the
   await world.clock.settle()
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
-  expect(entered(world)).toContain('entered:plugin:now ENG-2\n\ntwo')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2\n\ntwo')
 })
 
 // A bridge prompt was never typed in this terminal's box, so a line there that matches it is the person's own draft.

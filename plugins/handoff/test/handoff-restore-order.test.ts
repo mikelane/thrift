@@ -51,7 +51,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     ])
     await failNote()
     expect([entered(world), world.box.text]).toEqual([
-      ['entered:plugin:nightly job', 'entered:plugin:late one', 'entered:plugin:late two', 'entered:plugin:late three'],
+      ['entered:plugin:nightly job', 'entered:plugin:late one', 'entered:plugin+asUser:late two', 'entered:plugin:late three'],
       '',
     ])
   })
@@ -85,6 +85,9 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
 const logs = (world: World) => world.effects.filter(effect => effect.startsWith('log:'))
 
 const remoteCases = ['bridge', 'sdk', 'scheduled-trigger'] as const
+
+// A scheduled prompt keeps the plugin's frame; a person's, from wherever they sent it, is read as their own words.
+const SUBMITTED_AS = { bridge: 'plugin+asUser', sdk: 'plugin+asUser', 'scheduled-trigger': 'plugin' } as const
 
 const HANDED_OFF = 'log:Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session'
 const NOTE_NOT_ADDED = 'log:The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-session'
@@ -126,7 +129,7 @@ describe('a held remote prompt that cannot be resubmitted', () => {
       const { world, failNote } = await writingTheNote($, on)
       await submitPerson($, 'from far away', { kind: c })
       await failNote()
-      expect([entered(world), world.box.text]).toEqual([['entered:plugin:from far away'], ''])
+      expect([entered(world), world.box.text]).toEqual([[`entered:${SUBMITTED_AS[c]}:from far away`], ''])
     })
   }
 })
@@ -164,20 +167,28 @@ describe('the transcript wording for a note that could be neither sent nor put i
     expect(logs(world)).toEqual([`log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`, NOTE_NOT_ADDED])
   })
 
-  test('It names both the note and the prompt when the note went with a held prompt', async ($, on) => {
+  test('It names the note and the prompt apart when the note went with a held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'held one')
     refuseEverything(world)
     await finishNote()
-    expect(logs(world)).toEqual([`log:The handoff note and your prompt could not be sent or put in the prompt box. Here they are:\n${NOTE}\n\nheld one`, NOTE_NOT_ADDED])
+    expect(logs(world)).toEqual([
+      `log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`,
+      NOTE_NOT_ADDED,
+      'log:Your prompt could not be sent or put in the prompt box. Here it is:\nheld one',
+    ])
   })
 
-  test('It does not say the box was tried when the note went with a bridge prompt', async ($, on) => {
+  test('It does not say the box was tried for a bridge prompt that went apart from the note', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'held one', { kind: 'bridge' })
     refuseEverything(world)
     await finishNote()
-    expect(logs(world)).toEqual([`log:The handoff note and a prompt could not be sent, so here they are:\n${NOTE}\n\nheld one`, NOTE_NOT_ADDED])
+    expect(logs(world)).toEqual([
+      `log:The handoff note could not be sent or put in the prompt box. Here it is:\n${NOTE}`,
+      NOTE_NOT_ADDED,
+      'log:A prompt could not be sent, so here it is:\nheld one',
+    ])
   })
 })
 
@@ -232,7 +243,7 @@ const arriveTogether = ($: Parameters<typeof submitPerson>[0], world: World, arr
 }
 
 const LATE: TogetherArrival[] = [{ text: 'late typed' }, { text: 'late bridge', options: { kind: 'bridge' } }]
-const RESTORED_IN_ORDER = [['entered:plugin:nightly job', 'entered:plugin:late bridge'], 'held one\nlate typed']
+const RESTORED_IN_ORDER = [['entered:plugin:nightly job', 'entered:plugin+asUser:late bridge'], 'held one\nlate typed']
 
 describe('restore order on every abandon reason', () => {
   test('It restores held and late prompts in order when the clear fails', async ($, on) => {
