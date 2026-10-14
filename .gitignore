@@ -18,3 +18,4 @@ plugins/*/hooks/*.js
 !.env.example
 *.pem
 *.key
+.live/
