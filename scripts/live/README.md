@@ -24,7 +24,8 @@ Before the first run, trust the harness's working directory yourself. Sessions s
 (`LIVE_CWD` overrides both). Run `claude` there once, answer the trust prompt, and quit:
 
 ```sh
-mkdir -p ~/.cache/thrift-live/cwd && cd ~/.cache/thrift-live/cwd && claude
+dir="${XDG_CACHE_HOME:-$HOME/.cache}/thrift-live/cwd"
+mkdir -p -- "$dir" && cd -- "$dir" && claude
 ```
 
 Until then every scenario stops with ERROR at the trust dialog and prints this instruction.
@@ -106,9 +107,9 @@ fix is in they pass. `busy-abandon` passes on main: it guards the abandon path t
 
 `peer-during-compaction` checks prevention: that no peer turn starts between the queued `/clear`
 and the clear. #57 was fixed by detecting and reporting that turn instead (#62), so the scenario
-still reports FAIL on a build with that fix. The evidence for #57 is in the run: `late_turn: true`
-on the `cleared` record, and the "A turn ran in the previous session" line at the end of the note.
-The scenario does not check either.
+still reports FAIL on a build with that fix. On such a build, the `cleared` record the scenario
+prints carries `late_turn: true`, and the note in the fresh session ends with the "A turn ran in the
+previous session" line. Those two are the evidence for #57; the scenario checks neither.
 
 ## How it works
 

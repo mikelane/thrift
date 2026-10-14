@@ -52,27 +52,27 @@ handoff_start_peer() {
 # say_apple <name>: one tiny turn, so the session has a reply to hand off (a handoff before the
 # first reply has nothing to fork, #54).
 say_apple() {
-  local before
-  before=$(turns_done "$1")
+  local turns_before
+  turns_before=$(turns_done "$1")
   submit "$1" 'say the word apple'
-  wait_for "the first turn of '$1' to finish" turns_done_above "$1" "$before"
+  wait_for "the first turn of '$1' to finish" turns_done_above "$1" "$turns_before"
 }
 
 # held_prompts_flow <name>: the turn, then /handoff, then three prompts typed while the note is
 # written, then waits for the handoff to clear and the fresh session to answer the held prompts.
 held_prompts_flow() {
-  local name=$1 count=0 word
+  local name=$1 held_count=0 word
   say_apple "$name"
-  local turns_before
-  turns_before=$(log_count "$name" 'cc_turn_origin=')
+  local origins_before
+  origins_before=$(log_count "$name" 'cc_turn_origin=')
   submit "$name" '/handoff'
   wait_for "the note status line" pane_has "$name" 'Writing a handoff note'
   for word in one two three; do
-    count=$((count + 1))
+    held_count=$((held_count + 1))
     submit "$name" "$word"
-    wait_for "prompt '$word' to be held" log_has "$name" "held a prompt for the handoff \\($count held\\)"
+    wait_for "prompt '$word' to be held" log_has "$name" "held a prompt for the handoff \\($held_count held\\)"
   done
   wait_for "the handoff to clear" record_exists cleared
-  wait_for "the fresh session to start a turn" log_has_more_than "$name" 'cc_turn_origin=' "$turns_before"
+  wait_for "the fresh session to start a turn" log_has_more_than "$name" 'cc_turn_origin=' "$origins_before"
   wait_for "the fresh session to answer" turns_done_above "$name" 0
 }

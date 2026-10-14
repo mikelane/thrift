@@ -17,12 +17,24 @@ write_live_stubs() {
   chmod +x "$TEST_DIR/bin/tmux" "$TEST_DIR/bin/claude"
 }
 
+# hermetic_env <command...>: drops the owner's settings that would steer the harness out of the
+# test's own directories or change its timeouts and cleanup.
+hermetic_env() { env -u XDG_CACHE_HOME -u LIVE_CWD -u LIVE_KEEP -u LIVE_TIMEOUT -u CLAUDE_CONFIG_DIR "$@"; }
+
 # run_live <bash-snippet>: the snippet runs under `set -euo pipefail` with lib.sh sourced.
 run_live() {
   write_live_stubs
   EXIT_CODE=0
-  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
     "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+
+# run_live_sh <args...>: runs live.sh itself against the stubs, with HOME and TMPDIR in the test.
+run_live_sh() {
+  write_live_stubs
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    "$BASH" "$LIVE_DIR/live.sh" "$@" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
 }
 
 assert_tmux_called() { assert_file_has "$TMUX_LOG" "$1"; }
@@ -53,6 +65,27 @@ test_a_command_that_fails_before_the_verdict_is_an_error_not_a_fail() {
   run_live 'live_init; false'
   assert_exit_code 2
   assert_out_has 'before it reached a verdict'
+  assert_out_has '(status 1): false'
+}
+
+# bash 3.2 hands an EXIT trap $? = 0 after a `set -u` abort, so the status alone would read PASS.
+test_an_unbound_variable_before_the_verdict_is_an_error_not_a_pass() {
+  run_live 'live_init; echo "$LIVE_NOT_SET_ANYWHERE"'
+  assert_exit_code 2
+}
+
+test_live_sh_exits_2_when_a_scenario_fails_before_live_init() {
+  write_live_stubs
+  local repo=$TEST_DIR/repo
+  mkdir -p "$repo/scripts"
+  cp -R "$LIVE_DIR" "$repo/scripts/live"
+  mkdir -p "$repo/scripts/live/bare/scenarios"
+  printf '%s\n' 'echo "$LIVE_NOT_SET_ANYWHERE"' 'scenario_run() { :; }' > "$repo/scripts/live/bare/scenarios/s.sh"
+  mkdir -p "$repo/plugins/bare/.claude-plugin"
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    "$BASH" "$repo/scripts/live/live.sh" bare s > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 2
 }
 
 test_a_failed_check_is_a_fail() {
@@ -64,16 +97,17 @@ test_a_failed_check_is_a_fail() {
 test_a_run_directory_is_removed_after_a_pass() {
   run_live 'live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
   assert_exit_code 0
-  local run
-  run=$(sed -n 's/^RUN=//p' "$OUTPUT")
-  [[ -n "$run" ]] || fail 'the snippet printed no run directory'
-  assert_no_file "$run"
+  local run_dir
+  run_dir=$(sed -n 's/^RUN=//p' "$OUTPUT")
+  [[ -n "$run_dir" ]] || fail 'the snippet printed no run directory'
+  assert_no_file "$run_dir"
 }
 
 test_a_wait_that_never_succeeds_ends_in_an_error() {
   run_live 'LIVE_TIMEOUT=1; live_init; wait_for "a thing that never happens" false'
   assert_exit_code 2
   assert_out_has 'timed out after 1s waiting for a thing that never happens'
+  assert_out_has '(condition: false)'
 }
 
 test_a_timeout_that_is_not_a_whole_number_is_an_error() {
@@ -83,7 +117,7 @@ test_a_timeout_that_is_not_a_whole_number_is_an_error() {
 }
 
 test_log_count_is_zero_before_the_debug_log_exists() {
-  run_live 'live_init; echo "COUNT=$(log_count a x)"'
+  run_live 'live_init; echo "COUNT=$(log_count a x)"; live_verdict s'
   assert_exit_code 0
   assert_out_has 'COUNT=0'
 }
@@ -159,7 +193,7 @@ test_handoff_prepare_is_an_error_when_a_constant_it_patches_is_gone() {
 test_live_sh_exits_2_when_it_cannot_make_its_working_directory() {
   write_live_stubs
   EXIT_CODE=0
-  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_CWD=/dev/null/cwd \
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_CWD=/dev/null/cwd \
     "$BASH" "$LIVE_DIR/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
   assert_exit_code 2
 }
@@ -218,17 +252,176 @@ test_live_start_sets_the_permission_mode_instead_of_inheriting_the_owners() {
 
 test_live_sh_starts_sessions_outside_any_git_work_tree() {
   write_live_stubs
-  local repo=$TEST_DIR/repo cwd
+  local repo=$TEST_DIR/repo session_cwd
   mkdir -p "$repo/scripts"
   cp -R "$LIVE_DIR" "$repo/scripts/live"
   make_plugin_fixture "$repo/plugins/handoff"
   git -C "$repo" init -q
   EXIT_CODE=0
-  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
     "$BASH" "$repo/scripts/live/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
-  cwd=$(sed -n 's/^new-session .* -c \([^ ]*\) .*/\1/p' "$TMUX_LOG")
-  [[ -n "$cwd" ]] || fail 'tmux new-session was not called'
-  ! git -C "$cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $cwd"
+  session_cwd=$(sed -n 's/^new-session .* -c \([^ ]*\) .*/\1/p' "$TMUX_LOG")
+  [[ -n "$session_cwd" ]] || fail 'tmux new-session was not called'
+  ! git -C "$session_cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $session_cwd"
+}
+
+test_interrupt_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-4-a); kill -INT $$; sleep 5 & wait $!'
+  assert_exit_code 130
+  assert_tmux_called 'kill-session -t =live-4-a'
+}
+
+test_a_run_directory_is_kept_after_a_pass_when_keep_is_set() {
+  run_live 'LIVE_KEEP=1; live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'run directory kept'
+  assert_file_exists "$(sed -n 's/^RUN=//p' "$OUTPUT")"
+}
+
+test_a_run_directory_is_kept_after_a_fail() {
+  run_live 'live_init; check x detail false; live_verdict s'
+  assert_exit_code 1
+  assert_out_has 'run directory kept'
+}
+
+test_a_passing_check_is_a_pass() {
+  run_live 'live_init; check x detail true; live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'PASS  x'
+  assert_out_has 'PASS s (1 checks)'
+}
+
+test_a_missing_tool_is_an_error() {
+  # jq's directory is on PATH and may hold a real tmux, so the stub alone cannot be removed.
+  run_live 'PATH=$TMPDIR/no-tools; live_require'
+  assert_exit_code 2
+  assert_out_has "'tmux' is not installed"
+}
+
+test_live_start_is_an_error_when_tmux_cannot_start_the_session() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
+  assert_exit_code 2
+  assert_out_has 'tmux could not start session'
+}
+
+test_live_start_isolates_the_session_from_the_owners_settings_memory_and_session() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
+  assert_tmux_called '--setting-sources project'
+  assert_tmux_called 'CLAUDE_CODE_DISABLE_AUTO_MEMORY=1'
+  assert_tmux_called 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
+  assert_tmux_called '-u CLAUDECODE'
+  assert_tmux_called '-u CLAUDE_CODE_SESSION_ID'
+  assert_tmux_called '--append-system-prompt'
+  assert_tmux_called "THRIFT_HOME=$TEST_DIR/tmp"
+  assert_tmux_called "--debug-file $TEST_DIR/tmp/debug-a.log"
+}
+
+test_start_dialogs_cleared_is_an_error_when_the_session_exited() {
+  run_live 'live_init; start_dialogs_cleared a'
+  assert_exit_code 2
+  assert_out_has 'exited at start-up'
+}
+
+test_start_dialogs_cleared_answers_the_claude_md_imports_dialog_and_keeps_waiting() {
+  run_live 'live_init; tmux() { command tmux "$@" || true; }
+    pane() { echo "Allow external CLAUDE.md file imports"; }
+    ! start_dialogs_cleared a
+    live_verdict s'
+  assert_exit_code 0
+  assert_tmux_called 'send-keys -t live-'
+  assert_tmux_called '-a Enter'
+}
+
+test_start_dialogs_cleared_is_an_error_on_a_dialog_it_will_not_answer() {
+  run_live 'live_init; LIVE_CWD=$TMPDIR; tmux() { command tmux "$@" || true; }
+    pane() { printf "%s\n" "Do you trust the files in this folder?" "Enter to confirm"; }
+    start_dialogs_cleared a'
+  assert_exit_code 2
+  assert_out_has 'will not answer'
+  assert_tmux_not_called 'send-keys'
+}
+
+test_start_dialogs_cleared_succeeds_once_the_prompt_box_is_up() {
+  run_live 'live_init; tmux() { command tmux "$@" || true; }
+    pane() { printf "%s\n" "──────" "❯ " "──────"; }
+    start_dialogs_cleared a
+    live_verdict s'
+  assert_exit_code 0
+}
+
+test_box_text_prints_the_box_between_the_last_two_rules_without_the_glyph() {
+  run_live 'live_init
+    pane() { printf "%s\n" "──────" "❯ old" "──────" "output" "──────" "❯ hello there" "──────" "footer"; }
+    echo "BOX=[$(box_text a)]"
+    live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'BOX=[hello there]'
+}
+
+test_record_count_is_zero_before_the_decision_log_exists() {
+  run_live 'live_init; echo "COUNT=$(record_count none)"; ! record_exists none; live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'COUNT=0'
+}
+
+test_live_sh_list_prints_each_plugin_and_scenario() {
+  run_live_sh --list
+  assert_exit_code 0
+  assert_out_has 'handoff busy-abandon'
+  assert_out_has 'handoff held-prompt-box'
+}
+
+test_live_sh_exits_2_with_usage_for_fewer_than_two_arguments() {
+  run_live_sh handoff
+  assert_exit_code 2
+  assert_out_has 'Usage:'
+}
+
+test_live_sh_exits_2_with_usage_for_a_plugin_dir_with_no_value() {
+  run_live_sh handoff held-prompt-box --plugin-dir
+  assert_exit_code 2
+  assert_out_has 'Usage:'
+}
+
+test_live_sh_exits_2_with_usage_for_an_unknown_option() {
+  run_live_sh handoff held-prompt-box --bogus
+  assert_exit_code 2
+  assert_out_has 'Usage:'
+}
+
+test_live_sh_accepts_keep_as_an_option() {
+  run_live_sh handoff held-prompt-box --keep --plugin-dir "$TEST_DIR/nowhere"
+  assert_exit_code 2
+  assert_out_has 'is not a directory'
+  assert_out_lacks 'Usage:'
+}
+
+test_live_sh_exits_2_for_a_scenario_that_does_not_exist() {
+  run_live_sh handoff nope
+  assert_exit_code 2
+  assert_out_has "No scenario 'nope' for plugin 'handoff'"
+  assert_out_has 'handoff held-prompt-box'
+}
+
+test_live_sh_exits_2_for_a_plugin_dir_that_is_not_a_plugin() {
+  mkdir -p "$TEST_DIR/plain"
+  run_live_sh handoff held-prompt-box --plugin-dir "$TEST_DIR/plain"
+  assert_exit_code 2
+  assert_out_has 'is not a plugin directory'
+}
+
+test_live_sh_runs_a_plugin_that_has_scenarios_but_no_common_sh() {
+  write_live_stubs
+  local repo=$TEST_DIR/repo
+  mkdir -p "$repo/scripts/live/bare/scenarios"
+  cp "$LIVE_DIR/live.sh" "$LIVE_DIR/lib.sh" "$repo/scripts/live/"
+  printf '%s\n' 'scenario_run() { check "scenario ran" "no" true; }' > "$repo/scripts/live/bare/scenarios/only.sh"
+  make_plugin_fixture "$repo/plugins/bare"
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    "$BASH" "$repo/scripts/live/live.sh" bare only > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has 'PASS bare/only (1 checks)'
 }
 
 run_tests "$@"

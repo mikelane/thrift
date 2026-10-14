@@ -19,22 +19,32 @@ LIVE_FAILED=0
 LIVE_CHECKED=0
 LIVE_KEEP=${LIVE_KEEP:-0}
 LIVE_VERDICT_REACHED=0
+LIVE_ABORTED=0
+LIVE_WAITING=''
 
 # --- lifecycle -----------------------------------------------------------------------------------
 
 # Kills only this run's own sessions, each by exact name: a bare `-t name` also matches by prefix.
 # An exit status of 1 means FAIL, and only live_verdict may produce it. Any other command that failed
 # under `set -e` before the verdict was reached is the harness breaking, which is an ERROR (2).
+# Likewise only live_verdict may produce 0: bash 3.2 hands this trap $? = 0 after a `set -u` abort.
+# Inside a trap BASH_COMMAND is still the command the trap interrupted, so the ERROR names it. The
+# panes are shown before the sessions are killed, so an ERROR or interrupt keeps the screen it hit.
 live_cleanup() {
-  local status=$?
+  local status=$? failed_command=$BASH_COMMAND
   local session
+  if [[ "$status" -lt 128 && "$LIVE_VERDICT_REACHED" != 1 && "$LIVE_ABORTED" != 1 ]]; then
+    echo "ERROR: the harness stopped on a command that failed before it reached a verdict (status $status): ${failed_command%%$'\n'*}" >&2
+    live_show_panes 'at the error'
+    status=2
+  fi
+  if [[ "$status" -ge 128 && -n "$LIVE_WAITING" ]]; then
+    echo "interrupted while waiting for $LIVE_WAITING" >&2
+    live_show_panes 'at the interrupt'
+  fi
   for session in ${LIVE_SESSIONS[@]+"${LIVE_SESSIONS[@]}"}; do
     tmux kill-session -t "=$session" 2>/dev/null || true
   done
-  if [[ "$status" -eq 1 && "$LIVE_VERDICT_REACHED" != 1 ]]; then
-    echo "ERROR: the harness stopped on a command that failed before it reached a verdict" >&2
-    status=2
-  fi
   if [[ -n "$LIVE_RUN" ]]; then
     if [[ "$LIVE_KEEP" == 1 || "$status" -ne 0 ]]; then
       echo "run directory kept: $LIVE_RUN" >&2
@@ -47,12 +57,23 @@ live_cleanup() {
 
 live_abort() {
   echo "ERROR: $*" >&2
-  local name
-  for name in ${LIVE_NAMES[@]+"${LIVE_NAMES[@]}"}; do
-    echo "--- pane of '$name' at the abort ---" >&2
-    pane "$name" 2>/dev/null | grep -v '^$' | tail -n 20 >&2 || true
-  done
+  live_show_panes 'at the abort'
+  LIVE_ABORTED=1
   exit 2
+}
+
+# live_show_panes <when>: each session's last screen lines and debug-log path, on stderr. A pane that
+# cannot be read says so, so a session that died does not look like an empty screen.
+live_show_panes() {
+  local name screen
+  for name in ${LIVE_NAMES[@]+"${LIVE_NAMES[@]}"}; do
+    echo "--- pane of '$name' $1 (debug log: $(debug_log_of "$name")) ---" >&2
+    if screen=$(pane "$name" 2>&1); then
+      grep -v '^$' <<<"$screen" | tail -n 20 >&2 || echo '(the pane is empty)' >&2
+    else
+      echo "(no pane: ${screen:-the session is gone})" >&2
+    fi
+  done
 }
 
 live_require() {
@@ -62,15 +83,15 @@ live_require() {
   done
 }
 
-# live_init <plugin-dir>: makes the run directory and, per run, a throwaway copy of the plugin.
+# live_init: makes the run directory and its decision log location, and installs the exit traps.
 live_init() {
   LIVE_NAMES=()
   [[ "$LIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_TIMEOUT must be a whole number of seconds, not '$LIVE_TIMEOUT'"
-  LIVE_RUN=$(mktemp -d "${TMPDIR:-/tmp}/live.XXXXXX")
   trap live_cleanup EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  LIVE_RUN=$(mktemp -d "${TMPDIR:-/tmp}/live.XXXXXX")
   mkdir -p -- "$LIVE_RUN/thrift"
   LIVE_THRIFT_HOME="$LIVE_RUN/thrift"
   LIVE_DECISIONS="$LIVE_THRIFT_HOME/decisions.jsonl"
@@ -85,10 +106,12 @@ wait_for() {
   local description=$1
   shift
   local deadline=$((SECONDS + LIVE_TIMEOUT))
+  LIVE_WAITING="$description (condition: $*)"
   until "$@"; do
-    ((SECONDS < deadline)) || live_abort "timed out after ${LIVE_TIMEOUT}s waiting for $description"
+    ((SECONDS < deadline)) || live_abort "timed out after ${LIVE_TIMEOUT}s waiting for $LIVE_WAITING"
     sleep "$LIVE_POLL"
   done
+  LIVE_WAITING=''
 }
 
 # --- sessions ------------------------------------------------------------------------------------
@@ -111,15 +134,15 @@ live_start() {
   shift
   local session
   session=$(session_of "$name")
-  local command
-  command=$(printf '%q ' env \
+  local claude_command
+  claude_command=$(printf '%q ' env \
     -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION \
     -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID \
     -u CLAUDE_CODE_SESSION_ATTENDED \
     "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     claude --name "$session" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@")
-  tmux new-session -d -s "$session" -x 120 -y 40 -c "$LIVE_CWD" "$command" \
+  tmux new-session -d -s "$session" -x 120 -y 40 -c "$LIVE_CWD" "$claude_command" \
     || live_abort "tmux could not start session '$session'"
   LIVE_SESSIONS+=("$session")
   LIVE_NAMES+=("$name")
@@ -140,7 +163,7 @@ start_dialogs_cleared() {
     return 1
   fi
   if grep -q 'Enter to confirm' <<<"$screen"; then
-    live_abort "claude is showing a dialog this harness will not answer. Run 'cd $LIVE_CWD && claude' once, answer it, then run again"
+    live_abort "claude is showing a dialog this harness will not answer (on a first run, the workspace trust prompt). Run 'cd $LIVE_CWD && claude' once, answer it, quit, then run the scenario again"
   fi
   box_text "$name" >/dev/null || return 1
 }
@@ -149,11 +172,11 @@ start_dialogs_cleared() {
 # leading prompt glyph. Fails when the screen shows no box.
 box_text() {
   pane "$1" | awk '
-    /^──/ { before = last; last = NR; rules++ }
+    /^──/ { previous_rule = last_rule; last_rule = NR; rules++ }
     { line[NR] = $0 }
     END {
       if (rules < 2) exit 1
-      for (i = before + 1; i < last; i++) { sub(/^❯ ?/, "", line[i]); print line[i] }
+      for (i = previous_rule + 1; i < last_rule; i++) { sub(/^❯ ?/, "", line[i]); print line[i] }
     }'
 }
 
@@ -187,34 +210,45 @@ log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
 # grep -c prints nothing when the file does not exist yet, which would break the arithmetic callers.
 log_count() { local count; count=$(grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null) || true; echo "${count:-0}"; }
 log_has_more_than() { (($(log_count "$1" "$2") > $3)); }
-# The timestamp / line number of the first debug-log line after line <from> matching an extended
-# regex. The pattern travels in the environment because awk -v would eat its backslashes.
-log_ts() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print $1; exit }' "$(debug_log_of "$1")"; }
-log_line() { LIVE_RE=$2 awk -v from="${3:-0}" 'NR > from && $0 ~ ENVIRON["LIVE_RE"] { print NR; exit }' "$(debug_log_of "$1")"; }
+# The timestamp of the first debug-log line matching an extended regex. The pattern travels in the
+# environment because awk -v would eat its backslashes.
+log_ts() { LIVE_RE=$2 awk '$0 ~ ENVIRON["LIVE_RE"] { print $1; exit }' "$(debug_log_of "$1")"; }
 # ts_before <a> <b>: succeeds when timestamp a is strictly earlier than b. Both must be non-empty ISO
 # timestamps of one width. awk compares bytes under LC_ALL=C; the shell's `<` follows the locale.
 ts_before() {
   [[ -n "$1" && -n "$2" ]] || return 1
   LC_ALL=C awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'
 }
-log_line_text() { sed -n "${2}p" "$(debug_log_of "$1")" | cut -c1-200; }
 turn_origins() { sed -n 's/.*cc_turn_origin=\([a-z_-]*\).*/\1/p' "$(debug_log_of "$1")"; }
 
 # A finished turn leaves a "✻ <verb> for <n>s" line behind.
 turns_done() { pane_count "$1" '^✻ [^(]+ for ([0-9]+m )?[0-9]+s'; }
 turns_done_above() { (($(turns_done "$1") > $2)); }
 
-record_count() { [[ -f "$LIVE_DECISIONS" ]] && jq -s --arg a "$1" '[.[] | select(.action == $a)] | length' "$LIVE_DECISIONS" || echo 0; }
-records_with() { [[ -f "$LIVE_DECISIONS" ]] && jq -c --arg a "$1" 'select(.action == $a)' "$LIVE_DECISIONS" || true; }
+record_count() { [[ -f "$LIVE_DECISIONS" ]] && jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" || echo 0; }
+records_with() { [[ -f "$LIVE_DECISIONS" ]] && jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" || true; }
 record_exists() { (($(record_count "$1") > ${2:-0})); }
 
 # --- verdicts ------------------------------------------------------------------------------------
 
 section() { printf '\n--- %s ---\n' "$1"; }
-show_pane() { section "pane of '$1'${2:+ ($2)}"; pane "$1" | grep -v '^$' | tail -n "${3:-14}"; }
+# The show_* helpers print evidence and never fail: under `set -e` a helper that found nothing would
+# otherwise end the run as an ERROR before the checks give their verdict. They say what was missing.
+show_pane() { section "pane of '$1'${2:+ ($2)}"; pane "$1" | grep -v '^$' | tail -n "${3:-14}" || echo '(no pane, or an empty one)'; }
 show_box() { section "prompt box of '$1'${2:+ ($2)}"; printf '[%s]\n' "$(box_text "$1")"; }
-show_records() { section "decision records: $1"; records_with "$1"; }
-show_log() { section "debug log of '$1' matching /$2/"; grep -nE -- "$2" "$(debug_log_of "$1")" | cut -c1-220 | tail -n "${3:-12}"; }
+show_records() {
+  section "decision records: $1 (in $LIVE_DECISIONS)"
+  local records
+  records=$(records_with "$1")
+  printf '%s\n' "${records:-(none)}"
+}
+show_log() {
+  local file
+  file=$(debug_log_of "$1")
+  section "debug log of '$1' matching /$2/ ($file)"
+  [[ -f "$file" ]] || { echo '(no debug log)'; return 0; }
+  grep -nE -- "$2" "$file" | cut -c1-220 | tail -n "${3:-12}" || echo '(no matching lines)'
+}
 
 # check <name> <detail> <command...>: records PASS when the command succeeds, FAIL when not.
 check() {

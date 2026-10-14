@@ -8,7 +8,8 @@
 # turns of tokens per run. CI has no authenticated claude, so nothing here runs there.
 #
 # Exit status: 0 PASS, 1 FAIL (the plugin misbehaved), 2 ERROR (the harness could not reach the
-# state it needed: a timeout, a missing tool, a missed timing window).
+# state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, a usage
+# error, or any harness command that failed before a verdict).
 set -euo pipefail
 unset CDPATH
 
@@ -32,6 +33,14 @@ if [[ "${1:-}" == "--list" ]]; then
   list_scenarios
   exit 0
 fi
+# Until live_init installs live_cleanup, any exit is the harness failing: never 0 (PASS) or 1 (FAIL).
+# Signals keep their status. bash 3.2 reports $? = 0 here after a `set -u` abort, so 0 maps to 2 too.
+exit_as_error() {
+  local status=$?
+  [[ "$status" -gt 1 ]] || status=2
+  exit "$status"
+}
+trap exit_as_error EXIT
 if [[ "$#" -lt 2 ]]; then
   usage
   exit 2
@@ -84,15 +93,16 @@ mkdir -p -- "$LIVE_CWD" || {
   echo "ERROR: cannot make the working directory $LIVE_CWD" >&2
   exit 2
 }
-# shellcheck disable=SC2034 # LIVE_PLUGIN and LIVE_PLUGIN_SOURCE are read by <plugin>/common.sh
-LIVE_PLUGIN=$plugin
-# shellcheck disable=SC2034
+# shellcheck disable=SC2034 # LIVE_PLUGIN_SOURCE is read by <plugin>/common.sh
 LIVE_PLUGIN_SOURCE=$plugin_dir
 
 # shellcheck source=lib.sh
 source "$live_dir/lib.sh"
-# shellcheck source=handoff/common.sh
-source "$live_dir/$plugin/common.sh"
+# A plugin's own helpers are optional; the generic harness assumes nothing about them.
+if [[ -f "$live_dir/$plugin/common.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$live_dir/$plugin/common.sh"
+fi
 # shellcheck source=/dev/null
 source "$scenario_file"
 
