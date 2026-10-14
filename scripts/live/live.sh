@@ -49,6 +49,7 @@ while [[ "$#" -gt 0 ]]; do
       shift 2
       ;;
     --keep)
+      # shellcheck disable=SC2034 # read by lib.sh
       LIVE_KEEP=1
       shift
       ;;
@@ -79,7 +80,9 @@ fi
 # Override it with LIVE_CWD.
 LIVE_CWD=${LIVE_CWD:-$repo_root/.live/cwd}
 mkdir -p -- "$LIVE_CWD"
+# shellcheck disable=SC2034 # LIVE_PLUGIN and LIVE_PLUGIN_SOURCE are read by <plugin>/common.sh
 LIVE_PLUGIN=$plugin
+# shellcheck disable=SC2034
 LIVE_PLUGIN_SOURCE=$plugin_dir
 
 # shellcheck source=lib.sh

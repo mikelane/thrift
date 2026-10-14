@@ -108,5 +108,8 @@ test's own hooks beneath the plugin.
 ## Verifying in a real session
 
 Some behavior only shows in an interactive terminal: bands, buttons, `/clear`, and resuming.
-Verify it with `claude --resume <id> --plugin-dir ~/dev/thrift/plugins/<name>` and paste the log
-records into the PR. Say in the PR what was not verified live.
+`scripts/live/live.sh <plugin> <scenario>` drives real sessions in tmux and prints PASS or FAIL
+with the evidence. It is local only (CI has no authenticated `claude`); see
+`scripts/live/README.md`. For anything it does not cover, verify by hand with
+`claude --resume <id> --plugin-dir ~/dev/thrift/plugins/<name>` and paste the log records into the
+PR. Say in the PR what was not verified live.

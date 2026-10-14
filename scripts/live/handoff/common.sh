@@ -4,18 +4,25 @@
 # handoff_prepare <options-json>: copies the plugin into the run directory, so the repo is never
 # touched, and writes the settings file that sets the plugin's options for the run.
 #
-# The copy gets one change: TESTED_THROUGH is raised to the running Claude Code release. Past
-# TESTED_THROUGH the plugin holds every session at `off` and shows a notice, which would hide the
-# band and the modes. The same change is made by hand for live runs on a newer release.
+# The copy gets two changes:
+# - TESTED_THROUGH is raised to the running Claude Code release. Past TESTED_THROUGH the plugin
+#   holds every session at `off` and shows a notice, which would hide the band and the modes. The
+#   same change is made by hand for live runs on a newer release.
+# - The context-size minimum is lowered, in plugin.json and in MIN_THRESHOLD, so a band can be
+#   offered at the 20,000 tokens a tiny session reaches. The real minimum is 80,000, which a
+#   session of one-word prompts never gets near.
 handoff_prepare() {
   local options=$1
   local copy="$LIVE_RUN/plugin"
   mkdir -p -- "$copy/.claude-plugin"
   cp -R -- "$LIVE_PLUGIN_SOURCE/hooks" "$copy/hooks"
-  cp -- "$LIVE_PLUGIN_SOURCE/.claude-plugin/plugin.json" "$copy/.claude-plugin/plugin.json"
+  jq '.userConfig.handoffContextTokens.min = 1000' "$LIVE_PLUGIN_SOURCE/.claude-plugin/plugin.json" \
+    >"$copy/.claude-plugin/plugin.json"
   sed "s/^export const TESTED_THROUGH = .*/export const TESTED_THROUGH = '$LIVE_ENGINE_VERSION'/" \
     "$copy/hooks/engine-version.ts" >"$copy/hooks/engine-version.ts.new"
   mv -- "$copy/hooks/engine-version.ts.new" "$copy/hooks/engine-version.ts"
+  sed 's/^const MIN_THRESHOLD = .*/const MIN_THRESHOLD = 1_000/' "$copy/hooks/signals.ts" >"$copy/hooks/signals.ts.new"
+  mv -- "$copy/hooks/signals.ts.new" "$copy/hooks/signals.ts"
   jq -n --argjson options "$options" \
     '{pluginConfigs: {"handoff@inline": {options: ({handoffMode: "ask"} + $options)}}}' \
     >"$LIVE_RUN/settings.json"

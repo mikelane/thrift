@@ -6,6 +6,7 @@
 # the pane (what the person sees), the debug log (timings, turn origins) and the decision log
 # (records). It waits on conditions, never on fixed sleeps; LIVE_POLL is only the polling interval.
 
+# shellcheck disable=SC2034 # the LIVE_* variables are set here and read by the sourcing scripts
 LIVE_POLL=0.25
 LIVE_TIMEOUT=${LIVE_TIMEOUT:-90}
 
