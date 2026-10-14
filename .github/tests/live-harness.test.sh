@@ -323,6 +323,30 @@ test_a_pass_stays_a_pass_when_the_run_directory_cannot_be_removed() {
   assert_out_has 'PASS s (1 checks)'
 }
 
+# Ctrl-\ sends SIGQUIT to the foreground job. bash 3.2 dies of it without running the EXIT trap.
+test_quit_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-10-a); kill -QUIT $$; sleep 5 & wait $!'
+  assert_exit_code 131
+  assert_tmux_called 'kill-session -t =live-10-a'
+}
+
+# Ctrl-C while `tmux new-session` runs: the server has made the session, but the INT trap exits before
+# live_start records it, so the cleanup does not know to kill it.
+test_interrupt_while_tmux_starts_a_session_still_kills_it() {
+  run_live 'live_init; LIVE_CWD=$TMPDIR
+    tmux() { echo "$*" >> "$TMPDIR/../tmux-calls"; [[ "$1" != new-session ]] || kill -INT $$; return 0; }
+    live_start a'
+  assert_exit_code 130
+  assert_tmux_called 'kill-session -t =live-'
+}
+
+# With SIGPIPE ignored (as under an agent's shell), `live.sh ... | head` that closes the pipe just as
+# the verdict prints makes printf fail after LIVE_VERDICT_REACHED=1: every check passed, yet it exits 1.
+test_a_verdict_that_cannot_be_printed_is_not_a_fail_when_every_check_passed() {
+  run_live 'trap "" PIPE; live_init; check x detail true; exec > >(:); sleep 1; live_verdict s'
+  [[ "$EXIT_CODE" -ne 1 ]] || fail "exit 1 (FAIL) with every check passing; output: $(cat "$OUTPUT")"
+}
+
 test_a_run_directory_is_kept_after_a_pass_when_keep_is_set() {
   run_live 'LIVE_KEEP=1; live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
   assert_exit_code 0
