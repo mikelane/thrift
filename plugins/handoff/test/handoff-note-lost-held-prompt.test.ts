@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { entered, submitPerson, writingTheNote, type World } from './helpers'
+import { entered, lastRecord, submitPerson, writingTheNote, type World } from './helpers'
 import { unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
 
@@ -117,6 +117,72 @@ describe('where a held prompt goes when the note did not enter the fresh session
     noteRefusedApart(world)
     await finishNote()
     expect(world.box.text.split('\n').filter(line => line === 'next thing')).toHaveLength(1)
+  })
+})
+
+describe('what the record and the transcript say about a held-back prompt', () => {
+  const noteRefusedApart = (world: World) => {
+    world.appendDenied = true
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+  }
+  const lines = (world: World) => world.effects.filter(effect => effect.startsWith('log:'))
+
+  test('It records in_box for a held prompt that went in the prompt box after the note', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    noteRefusedApart(world)
+    await finishNote()
+    expect(lastRecord(world).trigger_values).toMatchObject({ note: 'in_box', held_other_delivery: 'in_box' })
+  })
+
+  test('It records not_carried for a held bridge prompt kept in the transcript', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    noteRefusedApart(world)
+    await finishNote()
+    expect(lastRecord(world).trigger_values).toMatchObject({ note: 'in_box', held_other_delivery: 'not_carried' })
+  })
+
+  test('It writes the note to the transcript before the held bridge prompt, once each', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'from phone', { kind: 'bridge' })
+    noteRefusedApart(world)
+    world.fillRefusal = 'dialog'
+    await finishNote()
+    expect(lines(world).map(line => line.split('\n')[0])).toEqual([
+      'log:The handoff note could not be sent or put in the prompt box. Here it is:',
+      'log:The handoff note could not be added to this session. To reopen the full previous conversation: claude --resume old-session',
+      'log:A prompt could not be sent, so here it is:',
+    ])
+  })
+
+  test('It puts the held prompt after a draft that follows the note in the prompt box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    world.box = { text: 'my draft', cursor: 8 }
+    noteRefusedApart(world)
+    await finishNote()
+    expect(world.box.text).toBe(`${NOTE_MESSAGE}\nmy draft\nnext thing`)
+  })
+
+  test('It writes a held bridge prompt that arrives mid-delivery to the transcript once', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    world.submitHooks = [
+      () => {
+        void submitPerson($, 'late phone', { kind: 'bridge' })
+      },
+    ]
+    await finishNote()
+    expect(lines(world).filter(line => line.includes('late phone'))).toEqual(['log:A prompt could not be sent, so here it is:\nlate phone'])
   })
 })
 

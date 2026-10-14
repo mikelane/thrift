@@ -123,10 +123,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       plugin's own note and a scheduled prompt keep the plugin's name in front.
       A person's prompt follows the note, so it is not submitted when the note did not enter the
       fresh session as a message (it could only go in the prompt box, or only in the transcript), for
-      an attended and a scheduled handoff alike. It is
-      held back after the note instead: in the prompt box if it was typed at this terminal, otherwise
-      in the transcript. That includes a prompt that arrives while the delivery runs. Scheduled prompts
-      are still submitted.
+      an attended and a scheduled handoff alike. It is held back after the note instead: in the prompt
+      box if it was typed at this terminal, otherwise in the transcript. That includes a prompt that
+      arrives while the delivery runs. Scheduled prompts are still submitted.
       A prompt that arrives while this step runs is held too. It is delivered after everything above,
       one prompt at a time in the order it arrived, the same way: submitted, then put in the prompt box
       if it was typed at this terminal, then written to the transcript. A prompt from the bridge, the SDK,
