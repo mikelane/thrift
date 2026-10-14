@@ -254,6 +254,8 @@ export const startMainTurn = (state: SessionState, turnText: string): void => {
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
+  // SAFETY: a subagent's turn also lands here, as it does for hasTurnAfterNote: work that ran after the note was written is
+  // work the note missed, whoever started it. No guard.
   if (state.isOwnClearQueued) state.hasLateTurn = true
 }
 
