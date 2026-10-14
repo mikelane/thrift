@@ -137,7 +137,6 @@ test('It still clears after a successful compaction first', ACT_COMPACTING, asyn
 
 const failedForks: ReadonlyArray<readonly [string, () => Promise<ModelForkResult>]> = [
   ['an API error', async () => ({ isAnswered: false, reason: 'api-error', status: 500, error: 'server_error', usage: ZERO_USAGE })],
-  ['nothing to fork', async () => ({ isAnswered: false, reason: 'nothing-to-fork' })],
   ['an empty reply', async () => ({ isAnswered: false, reason: 'empty-reply', usage: ZERO_USAGE })],
   ['a blank note', async () => answered('   ')],
   [

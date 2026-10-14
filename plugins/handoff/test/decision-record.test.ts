@@ -60,6 +60,7 @@ describe('recordFromEvaluation', () => {
 
   const optionalFields: ReadonlyArray<{ name: string; extra: Partial<Evaluation>; expected: object }> = [
     { name: 'a reason', extra: { reason: 'backoff' }, expected: { reason: 'backoff' } },
+    { name: 'a fork reason', extra: { forkReason: 'nothing-to-fork' }, expected: { fork_reason: 'nothing-to-fork' } },
     { name: 'a note delivery', extra: { note: 'in_box' }, expected: { note: 'in_box' } },
     { name: 'held fields', extra: { heldFields }, expected: heldFields },
     { name: 'cleared_by person', extra: { clearedBy: 'person' }, expected: { cleared_by: 'person' } },
@@ -80,6 +81,7 @@ describe('recordFromEvaluation', () => {
     { name: 'lateTurn is false', extra: { lateTurn: false } },
     { name: 'clearedBy is undefined', extra: { clearedBy: undefined } },
     { name: 'reason is undefined', extra: { reason: undefined } },
+    { name: 'forkReason is undefined', extra: { forkReason: undefined } },
     { name: 'note is undefined', extra: { note: undefined } },
     { name: 'heldFields is undefined', extra: { heldFields: undefined } },
   ]

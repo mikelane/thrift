@@ -38,10 +38,13 @@ import {
   type Trigger,
 } from './decision-record'
 import { isUntestedEngine } from './engine-version'
+import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import {
   FINAL_MESSAGES,
+  NO_HANDOFF_MESSAGE,
   busyRefusalMessage,
   clearFailedMessage,
+  noHandoffMessage,
   sessionEndedMessage,
   HANDOFF_PROMPT,
   handoffMessage,
@@ -393,6 +396,7 @@ const abandonHandoff = async (
   reason: DecisionReason,
   message: string,
   sessionId?: string,
+  forkReason?: ForkReason,
 ) => {
   // Before the first await, as in continueInFreshSession: the caller took the held prompts in the same synchronous run, so a
   // prompt that arrives while they are restored is held until they, and every prompt that arrived meanwhile, are back.
@@ -406,6 +410,7 @@ const abandonHandoff = async (
     ...settledHandoff.trigger,
     action: 'none',
     reason,
+    forkReason,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
@@ -416,13 +421,18 @@ const abandonHandoff = async (
   })
 }
 
-const writeNote = async ($: EngineInterface): Promise<string | null> => {
+const writeNote = async ($: EngineInterface): Promise<NoteOutcome> => {
   try {
     const answer = await $.model.fork({ prompt: HANDOFF_PROMPT })
-    return answer.isAnswered && answer.text.trim() !== '' ? answer.text.trim() : null
+    // nothing-to-fork already reaches the record as fork_reason; every other non-answer is explained only here.
+    if (!answer.isAnswered && answer.reason !== 'nothing-to-fork') {
+      const detail = answer.reason === 'api-error' ? ` (status ${String(answer.status)}, ${answer.error})` : ''
+      debug($, `the fork wrote no handoff note: ${answer.reason}${detail}`)
+    }
+    return noteOutcome(answer)
   } catch (error) {
     debug($, `could not write the handoff note: ${String(error)}`)
-    return null
+    return { note: null }
   }
 }
 
@@ -575,15 +585,15 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
     // session_id would name the new session instead of the one the note came from.
     oldId = await $.session.id()
     beginNoteWindow(state)
-    const note = await writeNote($)
-    if (note === null) {
-      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', 'No handoff was written. This session is unchanged.', oldId)
+    const outcome = await writeNote($)
+    if (outcome.note === null) {
+      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', noHandoffMessage(outcome.forkReason), oldId, outcome.forkReason)
       return null
     }
-    return { oldId, note }
+    return { oldId, note: outcome.note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', 'No handoff was written. This session is unchanged.', oldId)
+    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', NO_HANDOFF_MESSAGE, oldId)
     return null
   }
 }
