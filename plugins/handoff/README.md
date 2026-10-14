@@ -87,10 +87,12 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         only queues the command, and a prompt the engine queued earlier (a peer's message, a task
         notification) runs first, in the old session, so a turn can still start before the clear
         takes effect. Such a turn is a late turn: it adds the "A turn ran in the previous session"
-        line in step 6 and sets `late_turn` on the `cleared` record. It is told, not prevented:
-        `command.run` takes no priority, and the engine's declarations give no read of its prompt
-        queue. `session.receive` shows a peer's or relay's delivery as it arrives, but not a task
-        notification or a scheduled prompt, and cannot move it behind the `/clear`.
+        line in step 6 and sets `late_turn` on the `cleared` record. The plugin reports a late turn; it
+        does not prevent one. `command.run` takes no priority, and the declarations give no read of
+        the prompt queue. A `session.receive` hook can take a delivery before it is queued (a peer's
+        message, or a relay's event or trigger under origin `task-notification`) by returning
+        `{ consumed }`, so one that arrives during the handoff could be held and sent after the
+        clear. The plugin does not do that yet.
    6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
       (&lt;id&gt;), written by Claude just before a /clear". If a turn ran in the old session after the
       note began to be written, the message ends with one more line saying so ("A turn ran in the previous session

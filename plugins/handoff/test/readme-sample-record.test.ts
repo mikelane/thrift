@@ -36,6 +36,7 @@ test('It finds no drift when the README line is what recordFromEvaluation builds
 const evaluations: ReadonlyArray<readonly [string, Evaluation]> = [
   ['a reason', { ...cleared, action: 'none', reason: 'background_busy', note: undefined }],
   ['a person clear', { ...cleared, clearedBy: 'person' }],
+  ['a late turn', { ...cleared, lateTurn: true }],
   ['a held restore', { ...cleared, action: 'none', heldFields: { held_groups: 1, held_unattended: true, handoff_unattended: false, held_restore: 'in_box' } }],
   ['a record without held fields', { ...cleared, action: 'advised', note: undefined, clearedBy: undefined, compactedBeforeClear: undefined, heldFields: undefined }],
 ]
@@ -92,6 +93,7 @@ const malformedLines: ReadonlyArray<readonly [string, string]> = [
   ['has a string for context_tokens', lineOf(cleared).replace('"context_tokens":200000', '"context_tokens":"200000"')],
   ['has a number for an optional note', lineOf(cleared).replace('"note":"appended"', '"note":1')],
   ['has false for compacted_before_clear', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":false')],
+  ['has false for late_turn', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":true,"late_turn":false')],
 ]
 for (const [name, line] of malformedLines) {
   test(`It throws naming the line when the README sample record ${name}`, () => {

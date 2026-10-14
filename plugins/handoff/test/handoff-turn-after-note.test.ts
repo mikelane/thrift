@@ -8,11 +8,11 @@ describe('the line that says a turn ran after the note', () => {
   // The engine queues /clear, and a prompt already queued runs first, in the old session, before the clear's session end.
   // The mock's session id setter runs at that point: after the clear was issued, before the session.end hook.
   const startTurnBeforeClearEnds = (world: { sessionId: string }, $: Parameters<typeof startTurn>[0]) => {
-    let ended = world.sessionId
+    let currentSessionId = world.sessionId
     Object.defineProperty(world, 'sessionId', {
-      get: () => ended,
+      get: () => currentSessionId,
       set: (next: string) => {
-        ended = next
+        currentSessionId = next
         void startTurn($, 'queued before the clear ran')
       },
     })
