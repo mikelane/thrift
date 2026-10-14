@@ -265,10 +265,62 @@ test_live_sh_starts_sessions_outside_any_git_work_tree() {
   ! git -C "$session_cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $session_cwd"
 }
 
+# A home directory that is itself a git work tree (dotfiles kept in a repo at $HOME) puts the default
+# working directory inside it.
+test_live_sh_starts_sessions_outside_a_git_work_tree_at_home() {
+  write_live_stubs
+  local repo=$TEST_DIR/repo session_cwd
+  mkdir -p "$repo/scripts"
+  cp -R "$LIVE_DIR" "$repo/scripts/live"
+  make_plugin_fixture "$repo/plugins/handoff"
+  git -C "$TEST_DIR/home" init -q
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    "$BASH" "$repo/scripts/live/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  session_cwd=$(sed -n 's/^new-session .* -c \([^ ]*\) .*/\1/p' "$TMUX_LOG")
+  [[ -n "$session_cwd" ]] || return 0
+  ! git -C "$session_cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $session_cwd"
+}
+
 test_interrupt_kills_the_sessions() {
   run_live 'live_init; LIVE_SESSIONS=(live-4-a); kill -INT $$; sleep 5 & wait $!'
   assert_exit_code 130
   assert_tmux_called 'kill-session -t =live-4-a'
+}
+
+# Closing the terminal hangs up stderr too, so a write to it fails. The cleanup must still kill the
+# sessions and keep the signal's status: set -e stays on inside the EXIT trap.
+test_hangup_with_stderr_gone_still_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-7-a); LIVE_WAITING="a thing"; exec 2>&-; kill -HUP $$; sleep 5 & wait $!'
+  assert_exit_code 129
+  assert_tmux_called 'kill-session -t =live-7-a'
+}
+
+# `live.sh ... 2>&1 | tee run.log` then Ctrl-C: the INT reaches tee too, so the cleanup writes into a
+# pipe with no reader.
+test_interrupt_with_the_output_pipe_gone_still_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-8-a); LIVE_WAITING="a thing"; exec 2> >(:); sleep 1; kill -INT $$; sleep 5 & wait $!'
+  assert_exit_code 130
+  assert_tmux_called 'kill-session -t =live-8-a'
+}
+
+# A second Ctrl-C while the cleanup shows the panes of an interrupted wait.
+test_a_second_interrupt_during_cleanup_still_kills_the_sessions() {
+  run_live 'live_init; LIVE_SESSIONS=(live-9-a); LIVE_NAMES=(a); LIVE_WAITING="a thing"
+    pane() { kill -INT $$; echo screen; }
+    kill -INT $$; sleep 5 & wait $!'
+  assert_exit_code 130
+  assert_tmux_called 'kill-session -t =live-9-a'
+}
+
+# A run directory that cannot be removed in full (here a read-only subdirectory; live, a session
+# still writing as it is killed) does not turn a PASS into exit 1.
+test_a_pass_stays_a_pass_when_the_run_directory_cannot_be_removed() {
+  run_live 'live_init; echo "RUN=$LIVE_RUN"; mkdir "$LIVE_RUN/locked"; touch "$LIVE_RUN/locked/f"; chmod 500 "$LIVE_RUN/locked"
+    check x detail true; live_verdict s'
+  chmod -R u+w "$TEST_DIR/tmp"
+  assert_exit_code 0
+  assert_out_has 'PASS s (1 checks)'
 }
 
 test_a_run_directory_is_kept_after_a_pass_when_keep_is_set() {
