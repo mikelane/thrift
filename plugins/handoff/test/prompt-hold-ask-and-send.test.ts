@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { PromptOrigin } from 'claude-code'
 
-import { dropOf, emptyBox, entered, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
+import { dropOf, entered, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
 import { ASK, ACT, ready } from './prompt-hold-fixtures'
 
 test('It drops a prompt that names new work and holds it in ask mode', ASK, async ($, on) => {
@@ -59,15 +59,6 @@ test('It still hands a bridge prompt that names new work off first in act mode',
   const result = await submitPerson($, 'now ENG-2', { kind: 'bridge' })
   expect([dropOf(result), entered(world)]).toEqual([HANDING_OFF_FIRST, ['entered:composer:start on ENG-1']])
   await world.clock.settle()
-})
-
-test('It refills the box with the held prompt once the clock fires', ASK, async ($, on) => {
-  const world = await ready($, on)
-  await submitPerson($, 'now ENG-2')
-  emptyBox(world)
-  expect(world.effects).not.toContain('fill:now ENG-2')
-  await world.clock.settle()
-  expect(world.effects).toContain('fill:now ENG-2')
 })
 
 test('It leaves one copy of the held prompt in the box when the engine kept its text', ASK, async ($, on) => {

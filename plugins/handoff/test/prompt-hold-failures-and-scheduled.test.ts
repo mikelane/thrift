@@ -1,13 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bash, completeTurn, dropOf, emptyBox, entered, lastRecord, mountBand, submitPerson } from './helpers'
+import { answered, bash, completeTurn, dropOf, entered, holdFork, lastRecord, mountBand, submitPerson } from './helpers'
 import { ASK, ACT, NOTE_HEADING, ready } from './prompt-hold-fixtures'
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
   const world = await ready($, on)
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2')
-  emptyBox(world)
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1'])
@@ -27,7 +26,6 @@ test('It puts the prompt back in the box when /clear throws', ACT, async ($, on)
   const world = await ready($, on)
   world.clearThrows = true
   await submitPerson($, 'now ENG-2')
-  emptyBox(world)
   await world.clock.settle()
   expect(world.effects).toContain('fill:now ENG-2')
 })
@@ -48,12 +46,14 @@ test('It drops only one of two prompts that name new work at once', ACT, async (
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
 })
 
-test('It holds a second prompt and sends it once with the first while a handoff is scheduled', ACT, async ($, on) => {
+test('It holds a second prompt and sends it once with the first while the handoff note is written', ACT, async ($, on) => {
   const world = await ready($, on)
+  const fork = holdFork(world)
   await submitPerson($, 'now ENG-2')
-  emptyBox(world)
+  await world.clock.settle()
   const second = await submitPerson($, 'also ENG-3')
   expect(dropOf(second)).toBe("A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript.")
+  fork.release(answered('The handoff note.'))
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
   expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2\n\nalso ENG-3'])

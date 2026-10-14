@@ -241,11 +241,6 @@ export const submitPerson = async ($: Engine, text: string, { kind = 'composer',
   return result
 }
 
-// The person erases the dropped prompt's text the engine kept, so a restore has an empty box to fill.
-export const emptyBox = (world: World) => {
-  world.box = { text: '', cursor: 0 }
-}
-
 export const dropOf = (result: unknown): string | undefined =>
   typeof result === 'object' && result !== null && 'drop' in result && typeof result.drop === 'string' ? result.drop : undefined
 
