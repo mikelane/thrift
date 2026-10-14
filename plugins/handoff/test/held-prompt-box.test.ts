@@ -260,6 +260,14 @@ describe('the prompt box while prompts are held', () => {
     expect(world.effects.filter(effect => effect.startsWith('debug:handoff: could not empty the prompt box'))).toHaveLength(1)
   })
 
+  test('It writes a debug line and carries on when the box refuses to be emptied at hold time', async ($, on) => {
+    const { world } = await writingTheNote($, on)
+    world.isFillRefusedOverText = true
+    await submitPerson($, 'one')
+    await world.clock.settle()
+    expect(world.effects).toContain('debug:handoff: the prompt box refused to be emptied: refused by a hook')
+  })
+
   test('It restores a held group once when the hold-time clear emptied the box', async ($, on) => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'first')
@@ -268,5 +276,13 @@ describe('the prompt box while prompts are held', () => {
     await world.clock.settle()
     await failNote()
     expect(world.box.text).toBe('first\n\nsecond')
+  })
+
+  test('It keeps the box copy of a held prompt the handoff put back before the hold-time clear ran', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
+    await failNote()
+    await world.clock.settle()
+    expect(world.box.text).toBe('next thing')
   })
 })

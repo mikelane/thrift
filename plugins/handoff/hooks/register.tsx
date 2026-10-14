@@ -841,7 +841,9 @@ const inspectPrompt = async ($: EngineInterface, state: SessionState, text: stri
 const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
   try {
     const remainingDraft = withoutPrompt((await $.prompt.read()).text, text)
-    if (remainingDraft !== null) await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
+    if (remainingDraft === null) return
+    const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
+    if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
@@ -900,6 +902,8 @@ const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmit
   // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the
   // text back after the hook returns. Only while prompts are still collected: once the handoff took them, a restore may have
   // put the text back, and the delivery and restore paths deal with what the engine left.
+  // SAFETY: a handoff that ends and a second one that starts inside this one tick would let the clear run in the second hold.
+  // Both need several engine round trips, so a real session cannot produce it, and no code guards it.
   if (isComposerOrigin(e.origin.kind)) {
     $.clock.after(0, () => {
       if (isCollectingHeldPrompts(state)) void logFailure($, emptyBoxIfHolding($, e.text))
