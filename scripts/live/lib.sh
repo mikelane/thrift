@@ -8,6 +8,8 @@
 
 # shellcheck disable=SC2034 # the LIVE_* variables are set here and read by the sourcing scripts
 LIVE_POLL=0.25
+# The box shows a typed text wrapped, so only its first characters are matched.
+LIVE_BOX_MATCH_CHARS=40
 LIVE_TIMEOUT=${LIVE_TIMEOUT:-90}
 
 LIVE_RUN=''
@@ -156,7 +158,7 @@ press() {
   tmux send-keys -t "$(session_of "$name")" "$@"
 }
 
-box_shows() { box_text "$1" | grep -qF -- "${2:0:40}"; }
+box_shows() { box_text "$1" | grep -qF -- "${2:0:LIVE_BOX_MATCH_CHARS}"; }
 
 # type_text <name> <text>: types without Enter and waits until the box shows it. Enter pressed in
 # the same call as a long text is taken as part of a paste and ignored.

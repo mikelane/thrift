@@ -37,20 +37,14 @@ test_cleanup_kills_each_own_session_by_exact_name_and_never_the_server() {
 }
 
 test_hangup_kills_the_sessions_and_keeps_the_run_directory() {
-  write_live_stubs
-  EXIT_CODE=0
-  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
-    "$BASH" --noprofile --norc -e -c 'source "$LIVE_DIR/lib.sh"; live_init; LIVE_SESSIONS=(live-2-a); kill -HUP $$; sleep 5 & wait $!' > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  run_live 'live_init; LIVE_SESSIONS=(live-2-a); kill -HUP $$; sleep 5 & wait $!'
   assert_exit_code 129
   assert_tmux_called 'kill-session -t =live-2-a'
   assert_out_has 'run directory kept'
 }
 
 test_terminate_kills_the_sessions() {
-  write_live_stubs
-  EXIT_CODE=0
-  env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" \
-    "$BASH" --noprofile --norc -e -c 'source "$LIVE_DIR/lib.sh"; live_init; LIVE_SESSIONS=(live-3-a); kill -TERM $$; sleep 5 & wait $!' > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  run_live 'live_init; LIVE_SESSIONS=(live-3-a); kill -TERM $$; sleep 5 & wait $!'
   assert_exit_code 143
   assert_tmux_called 'kill-session -t =live-3-a'
 }
