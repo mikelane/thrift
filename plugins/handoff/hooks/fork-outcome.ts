@@ -1,5 +1,8 @@
+import type { ModelForkResult } from 'claude-code'
+
 // The one non-answer that says why, and that a person can fix: the session has no reply to fork yet.
-export type ForkReason = 'nothing-to-fork'
+// Taken from the engine's declaration, so tsc fails here if the engine renames or drops that reason.
+export type ForkReason = Extract<Extract<ModelForkResult, { isAnswered: false }>['reason'], 'nothing-to-fork'>
 
 export type NoteOutcome = { note: string } | { note: null; forkReason?: ForkReason }
 

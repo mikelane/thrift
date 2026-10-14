@@ -423,7 +423,13 @@ const abandonHandoff = async (
 
 const writeNote = async ($: EngineInterface): Promise<NoteOutcome> => {
   try {
-    return noteOutcome(await $.model.fork({ prompt: HANDOFF_PROMPT }))
+    const answer = await $.model.fork({ prompt: HANDOFF_PROMPT })
+    // nothing-to-fork already reaches the record as fork_reason; every other non-answer is explained only here.
+    if (!answer.isAnswered && answer.reason !== 'nothing-to-fork') {
+      const detail = answer.reason === 'api-error' ? ` (status ${String(answer.status)}, ${answer.error})` : ''
+      debug($, `the fork wrote no handoff note: ${answer.reason}${detail}`)
+    }
+    return noteOutcome(answer)
   } catch (error) {
     debug($, `could not write the handoff note: ${String(error)}`)
     return { note: null }

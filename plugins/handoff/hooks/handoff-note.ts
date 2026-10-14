@@ -37,7 +37,7 @@ export const sessionEndedMessage = (hasCompacted: boolean, oldSessionId: string)
 
 export const NO_HANDOFF_MESSAGE = 'No handoff was written. This session is unchanged.'
 
-export const NO_REPLY_MESSAGE = 'Nothing to hand off yet: this session has no reply from Claude. Send a prompt first.'
+export const NO_REPLY_MESSAGE = "Nothing to hand off yet: Claude hasn't finished a reply in this session. Type /handoff again once it has."
 
 export const noHandoffMessage = (forkReason: ForkReason | undefined): string => (forkReason === 'nothing-to-fork' ? NO_REPLY_MESSAGE : NO_HANDOFF_MESSAGE)
 
