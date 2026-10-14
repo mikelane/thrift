@@ -65,6 +65,7 @@ describe('recordFromEvaluation', () => {
     { name: 'held fields', extra: { heldFields }, expected: heldFields },
     { name: 'cleared_by person', extra: { clearedBy: 'person' }, expected: { cleared_by: 'person' } },
     { name: 'compacted_before_clear', extra: { compactedBeforeClear: true }, expected: { compacted_before_clear: true } },
+    { name: 'late_turn', extra: { lateTurn: true }, expected: { late_turn: true } },
     { name: 'cleared_by handoff', extra: { clearedBy: 'handoff' }, expected: { cleared_by: 'handoff' } },
   ]
   for (const { name, extra, expected } of optionalFields) {
@@ -77,6 +78,7 @@ describe('recordFromEvaluation', () => {
   // register.tsx passes compactedBeforeClear: false (not undefined) whenever no compaction ran before the clear.
   const absentFields: ReadonlyArray<{ name: string; extra: Partial<Evaluation> }> = [
     { name: 'compactedBeforeClear is false', extra: { compactedBeforeClear: false } },
+    { name: 'lateTurn is false', extra: { lateTurn: false } },
     { name: 'clearedBy is undefined', extra: { clearedBy: undefined } },
     { name: 'reason is undefined', extra: { reason: undefined } },
     { name: 'forkReason is undefined', extra: { forkReason: undefined } },

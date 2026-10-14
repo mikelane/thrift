@@ -30,6 +30,7 @@ export type TriggerValues = {
   held_restore?: GroupDelivery
   cleared_by?: ClearedBy
   compacted_before_clear?: true
+  late_turn?: true
 }
 
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
@@ -67,6 +68,7 @@ export type Evaluation = Trigger & {
   note?: NoteDelivery
   clearedBy?: ClearedBy
   compactedBeforeClear?: boolean
+  lateTurn?: boolean
   heldFields?: HeldRecordFields
   sessionId?: string
 }
@@ -130,8 +132,9 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
+  const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
     now,
     sessionId,
@@ -151,6 +154,7 @@ export const recordFromEvaluation = (
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
       ...compactedFields,
+      ...lateTurnFields,
       ...heldFields,
     },
   })

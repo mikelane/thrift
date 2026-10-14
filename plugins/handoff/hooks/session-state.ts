@@ -77,6 +77,8 @@ export type SessionState = Settings & {
   isPressRunning: boolean
   deferredPress: ButtonPress | null
   hasTurnAfterNote: boolean
+  isOwnClearQueued: boolean
+  hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
   handoffStage: HandoffStage
   sessionEndBeforeClear: SessionEndBeforeClear | null
@@ -104,6 +106,8 @@ export const createState = (settings: Settings): SessionState => ({
   isPressRunning: false,
   deferredPress: null,
   hasTurnAfterNote: false,
+  isOwnClearQueued: false,
+  hasLateTurn: false,
   turnEndWaiter: null,
   handoffStage: 'idle',
   sessionEndBeforeClear: null,
@@ -217,6 +221,8 @@ export const releaseCarriedGroup = (state: SessionState, group: HeldPromptGroup,
 export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
   state.handoffStage = 'idle'
+  state.isOwnClearQueued = false
+  state.hasLateTurn = false
 }
 
 export const beginBeforeClear = (state: SessionState): void => {
@@ -224,12 +230,17 @@ export const beginBeforeClear = (state: SessionState): void => {
   state.sessionEndBeforeClear = null
 }
 
+// $.command.run('/clear') only queues the command: a prompt the engine queued earlier runs first, in the old session.
+// So the clear is queued from here until the session end it causes, and a turn that starts in between is a late turn.
 export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
+  state.isOwnClearQueued = true
+  state.hasLateTurn = false
 }
 
 // Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
 export const recordSessionEnd = (state: SessionState, reason: string): void => {
+  if (state.handoffStage === 'own_clear') state.isOwnClearQueued = false
   if (state.handoffStage !== 'before_clear') return
   if (state.sessionEndBeforeClear === 'other') return
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
@@ -243,6 +254,9 @@ export const startMainTurn = (state: SessionState, turnText: string): void => {
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
+  // SAFETY: a subagent's turn also lands here, as it does for hasTurnAfterNote: work that ran after the note was written is
+  // work the note missed, whoever started it. No guard.
+  if (state.isOwnClearQueued) state.hasLateTurn = true
 }
 
 export const endMainTurn = (state: SessionState): void => {
