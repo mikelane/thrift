@@ -326,7 +326,7 @@ failed, was vetoed, or reported no size. A strong signal is not held back.
   a prompt, joined to any held scheduled prompt of a scheduled handoff. Held prompts from a person
   follow it as separate prompts, so the model reads them as the person's own words.
 - **The prompt cannot be sent after the clear, or Send here cannot send it.** When someone is at
-  the prompt, it goes back in the box. A box that
+  the prompt, it goes back in the box, after the handoff note when the note is in the box too. A box that
   already holds it as a whole line is left alone.
 - **Prompt text in the engine's debug log.** A prompt or note kept in the transcript, and a refused
   remote prompt, are written with `$.ui.log`. The engine also copies every `$.ui.log` line, up to

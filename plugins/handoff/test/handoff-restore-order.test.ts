@@ -326,3 +326,15 @@ describe('the box placement of a prompt refused during a handoff', () => {
     expect([dropOf(result), entered(world), world.box.text]).toEqual([undefined, ['entered:composer:with image'], 'draft'])
   })
 })
+
+describe('the prompt box when neither the note nor an attended prompt can be sent', () => {
+  test('It leaves the handoff note ahead of the held prompt in the box', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'held one')
+    world.box = { text: '', cursor: 0 }
+    world.appendDenied = true
+    world.submitDropped = true
+    await finishNote()
+    expect(world.box.text).toEqual(`${NOTE}\nheld one`)
+  })
+})

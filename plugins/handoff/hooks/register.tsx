@@ -560,10 +560,11 @@ const sendHeldGroups = async (
   state: SessionState,
   groups: readonly HeldPromptGroup[],
   handoffIsUnattended: boolean,
+  placement: BoxPlacement = 'before_draft',
 ): Promise<Carried[]> => {
   const deliveries: Carried[] = []
   for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, state, group))
+    deliveries.push(await sendOrKeepInBox($, state, group, { placement }))
     releaseCarriedGroup(state, group, handoffIsUnattended)
   }
   return deliveries
@@ -597,7 +598,8 @@ const continueInFreshSession = async (
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
+  // A note left in the box is read first, so a prompt that also lands there goes after it.
+  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, noteDelivery === 'in_box' ? 'after_draft' : 'before_draft')
   const late = await sendLateArrivals($, state)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
