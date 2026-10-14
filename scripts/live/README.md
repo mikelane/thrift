@@ -51,10 +51,13 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   marker word returned the word. `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` removed it (the probe returned
   NONE), and every session sets it.
 - **Auto-memory.** Every session sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. The name is in the
-  binary; its effect was not tested. The working directory below is new and empty, so it has no
-  project memory in any case.
-- **Git context.** The working directory (see [Run it](#run-it)) is an empty directory outside any
-  git work tree, so the system prompt carries no branch or status.
+  binary; its effect was not tested. The working directory below is a dedicated one, reused on every
+  run, and holds no project files; with `CLAUDE_CODE_DISABLE_AUTO_MEMORY` unverified, memory that
+  earlier runs there wrote is the one thing it could carry.
+- **Git context.** The working directory (see [Run it](#run-it)) is a dedicated directory outside
+  any git work tree, so the system prompt carries no branch or status. `live.sh` checks this at
+  start and stops with ERROR (exit 2) if the directory is inside a work tree, as it is when `$HOME`
+  is a repository; set `LIVE_CWD` to move it.
 - **Permission mode.** Every session runs with `--permission-mode dontAsk`, so it does not inherit the
   owner's mode (auto). `dontAsk` denies any tool the scenario did not allow with `--allowedTools`:
   the first session of `busy-abandon` may run `Bash(sleep *)`, the peer may use `ToolSearch` and

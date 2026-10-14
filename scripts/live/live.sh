@@ -93,6 +93,11 @@ mkdir -p -- "$LIVE_CWD" || {
   echo "ERROR: cannot make the working directory $LIVE_CWD" >&2
   exit 2
 }
+# $HOME can itself be a work tree (dotfiles kept in a repository), which puts the default inside it.
+if git -C "$LIVE_CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: the working directory $LIVE_CWD is inside a git work tree, so a session would see its branch and status. Set LIVE_CWD to a directory outside any work tree." >&2
+  exit 2
+fi
 # shellcheck disable=SC2034 # LIVE_PLUGIN_SOURCE is read by <plugin>/common.sh
 LIVE_PLUGIN_SOURCE=$plugin_dir
 

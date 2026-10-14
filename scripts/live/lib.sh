@@ -24,54 +24,65 @@ LIVE_WAITING=''
 
 # --- lifecycle -----------------------------------------------------------------------------------
 
+# The cleanup must finish whatever happens to the terminal. errexit is off inside it, signals and
+# SIGPIPE are ignored while it runs (a second Ctrl-C, or a closed pipe from `| tee`, must not cut it
+# short), the screens are read first and the sessions killed before anything is written, and every
+# write tolerates a closed stderr.
 # Kills only this run's own sessions, each by exact name: a bare `-t name` also matches by prefix.
 # An exit status of 1 means FAIL, and only live_verdict may produce it. Any other command that failed
 # under `set -e` before the verdict was reached is the harness breaking, which is an ERROR (2).
 # Likewise only live_verdict may produce 0: bash 3.2 hands this trap $? = 0 after a `set -u` abort.
-# Inside a trap BASH_COMMAND is still the command the trap interrupted, so the ERROR names it. The
-# panes are shown before the sessions are killed, so an ERROR or interrupt keeps the screen it hit.
+# Inside a trap BASH_COMMAND is still the command the trap interrupted, so the ERROR names it.
+# A failure to clean up is a warning and never changes the verdict's exit status.
 live_cleanup() {
   local status=$? failed_command=$BASH_COMMAND
-  local session
+  set +e
+  trap '' INT TERM HUP PIPE
+  local error_message='' interrupt_message='' screens='' session
   if [[ "$status" -lt 128 && "$LIVE_VERDICT_REACHED" != 1 && "$LIVE_ABORTED" != 1 ]]; then
-    echo "ERROR: the harness stopped on a command that failed before it reached a verdict (status $status): ${failed_command%%$'\n'*}" >&2
-    live_show_panes 'at the error'
+    error_message="ERROR: the harness stopped on a command that failed before it reached a verdict (status $status): ${failed_command%%$'\n'*}"
+    screens=$(live_pane_report 'at the error')
     status=2
-  fi
-  if [[ "$status" -ge 128 && -n "$LIVE_WAITING" ]]; then
-    echo "interrupted while waiting for $LIVE_WAITING" >&2
-    live_show_panes 'at the interrupt'
+  elif [[ "$status" -ge 128 && -n "$LIVE_WAITING" ]]; then
+    interrupt_message="interrupted while waiting for $LIVE_WAITING"
+    screens=$(live_pane_report 'at the interrupt')
   fi
   for session in ${LIVE_SESSIONS[@]+"${LIVE_SESSIONS[@]}"}; do
-    tmux kill-session -t "=$session" 2>/dev/null || true
+    tmux kill-session -t "=$session" 2>/dev/null
   done
+  [[ -z "$error_message" ]] || live_say "$error_message"
+  [[ -z "$interrupt_message" ]] || live_say "$interrupt_message"
+  [[ -z "$screens" ]] || live_say "$screens"
   if [[ -n "$LIVE_RUN" ]]; then
     if [[ "$LIVE_KEEP" == 1 || "$status" -ne 0 ]]; then
-      echo "run directory kept: $LIVE_RUN" >&2
-    else
-      rm -rf -- "$LIVE_RUN"
+      live_say "run directory kept: $LIVE_RUN"
+    elif ! rm -rf -- "$LIVE_RUN"; then
+      live_say "warning: could not remove the run directory $LIVE_RUN"
     fi
   fi
   exit "$status"
 }
 
+# live_say <text>: a diagnostic line on stderr. A closed or broken stderr loses it and nothing more.
+live_say() { printf '%s\n' "$*" >&2 2>/dev/null || true; }
+
 live_abort() {
-  echo "ERROR: $*" >&2
-  live_show_panes 'at the abort'
+  live_say "ERROR: $*"
+  live_say "$(live_pane_report 'at the abort')"
   LIVE_ABORTED=1
   exit 2
 }
 
-# live_show_panes <when>: each session's last screen lines and debug-log path, on stderr. A pane that
-# cannot be read says so, so a session that died does not look like an empty screen.
-live_show_panes() {
+# live_pane_report <when>: each session's last screen lines and debug-log path. A pane that cannot be
+# read says so, so a session that died does not look like an empty screen.
+live_pane_report() {
   local name screen
   for name in ${LIVE_NAMES[@]+"${LIVE_NAMES[@]}"}; do
-    echo "--- pane of '$name' $1 (debug log: $(debug_log_of "$name")) ---" >&2
+    echo "--- pane of '$name' $1 (debug log: $(debug_log_of "$name")) ---"
     if screen=$(pane "$name" 2>&1); then
-      grep -v '^$' <<<"$screen" | tail -n 20 >&2 || echo '(the pane is empty)' >&2
+      grep -v '^$' <<<"$screen" | tail -n 20 || echo '(the pane is empty)'
     else
-      echo "(no pane: ${screen:-the session is gone})" >&2
+      echo "(no pane: ${screen:-the session is gone})"
     fi
   done
 }
