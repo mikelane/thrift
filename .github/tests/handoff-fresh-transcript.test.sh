@@ -5,12 +5,13 @@ set -euo pipefail
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/live" && pwd)
 # shellcheck source=/dev/null
 source "$SCRIPTS/handoff/common.sh"
-failed=0
+failed=0 total=0
 
 NOTE='{"type":"user","message":{"content":"Handoff from the previous session (old-1), written by"}}'
 
 report() {
-  if [[ "$2" == "$3" ]]; then echo "PASS $1"; else echo "FAIL $1: got [$2] want [$3]"; failed=1; fi
+  total=$((total + 1))
+  if [[ "$2" == "$3" ]]; then echo "PASS $1"; else echo "FAIL $1: got [$2] want [$3]"; failed=$((failed + 1)); fi
 }
 
 # setup_layout <root>: the old session, the fresh session, and two decoys that quote the note line.
@@ -70,4 +71,5 @@ test_returns_the_fresh_sibling_not_the_decoys
 test_ignores_subagent_transcripts
 test_returns_nothing_when_the_old_transcript_is_missing
 test_excludes_the_old_session_file
-exit "$failed"
+echo "$((total - failed)) of $total passed"
+[[ "$failed" == 0 ]]
