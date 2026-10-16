@@ -1,4 +1,4 @@
-export const TESTED_THROUGH = '2.1.295'
+export const TESTED_THROUGH = '2.1.302'
 
 const RELEASE = /^(\d+)\.(\d+)\.(\d+)$/
 
