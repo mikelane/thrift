@@ -23,7 +23,7 @@ scenario_run() {
   show_pane a 'fresh session'
 
   check 'the held prompts reach the transcript as the person'"'"'s (origin.asUser) in one entry' \
-    "no user entry with origin.asUser and the text 'one two three' in [${transcript:-no transcript found}]" \
+    "no user entry with origin.asUser and the held words joined by blank lines in [${transcript:-no transcript found}]" \
     held_prompts_as_user "$transcript"
   check 'the held prompts are not framed as a plugin message' 'the screen shows "The handoff plugin sent a message"' \
     not_framed_as_plugin_message a
