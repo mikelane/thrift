@@ -101,7 +101,7 @@ Not isolated:
 | Scenario | Tracks | Passes when |
 |---|---|---|
 | `held-prompt-box` | #56 | Three prompts typed during one handoff are delivered and the prompt box is empty afterwards. |
-| `held-prompt-origin` | #55 | The fresh session's transcript (found by the old session id) holds the held words as one user entry with `origin.asUser`, and the screen does not frame them "The handoff plugin sent a message". (The turn's `cc_turn_origin` is not `human` for an `asUser` prompt, so it isn't checked.) |
+| `held-prompt-origin` | #55 | The three held prompts reach the fresh session's transcript (the one whose handoff note names the old session id) as one user entry marked `origin.asUser`, joined by blank lines, and the screen does not frame them "The handoff plugin sent a message". The turn's `cc_turn_origin` isn't checked: it is not `human` for an `asUser` prompt. |
 | `peer-during-compaction` | #57 | A peer message that arrives while the old session compacts does not start a turn between the queued `/clear` and the clear. |
 | `busy-abandon` | #43 | A handoff whose wait ends with background work running stops with `background_busy`, puts the held prompt back in the box (`held_restore: in_box`), clears nothing, and leaves a compacted old-session transcript. |
 

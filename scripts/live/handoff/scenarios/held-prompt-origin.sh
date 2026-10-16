@@ -19,7 +19,7 @@ scenario_run() {
   transcript=$(fresh_transcript_path "$old_id")
   show_records cleared
   section "fresh session transcript (found by the old session id ${old_id:-<none>})"
-  show_user_entries "$transcript"
+  show_user_entries "$old_id" "$transcript"
   show_pane a 'fresh session'
 
   check 'the held prompts reach the transcript as the person'"'"'s (origin.asUser) in one entry' \
@@ -37,13 +37,26 @@ user_entries() {
   }' "$1"
 }
 
+# show_user_entries <old-session-id> <fresh-transcript>: the fresh transcript's user entries, or, when
+# there is none, which lookup step failed and where it looked. Never fails.
 show_user_entries() {
-  if [[ -z "$1" || ! -f "$1" ]]; then
-    echo "no transcript found containing the handoff note's opening line"
+  local old_id=$1 transcript=$2 old_path
+  if [[ -n "$transcript" && -f "$transcript" ]]; then
+    printf '%s\n' "$transcript"
+    user_entries "$transcript" 2>/dev/null | cut -c 1-200 || true
     return 0
   fi
-  printf '%s\n' "$1"
-  user_entries "$1" 2>/dev/null | cut -c 1-200 || true
+  if [[ -z "$old_id" || "$old_id" == null ]]; then
+    echo "(a) no old session id: the cleared record has no session_id (got '${old_id:-<empty>}')"
+    return 0
+  fi
+  old_path=$(transcript_path "$old_id")
+  if [[ -z "$old_path" ]]; then
+    echo "(b) no $old_id.jsonl under $(transcripts_dir)"
+    return 0
+  fi
+  echo "(c) no transcript beside $(dirname -- "$old_path") holding the note line 'Handoff from the previous session ($old_id)'"
+  return 0
 }
 
 held_prompts_as_user() {
