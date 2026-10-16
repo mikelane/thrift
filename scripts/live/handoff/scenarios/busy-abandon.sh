@@ -62,8 +62,6 @@ handoff_ended() { record_has_reason background_busy || record_exists cleared; }
 no_cleared_record() { [[ "$(record_count cleared)" == 0 ]]; }
 held_prompt_in_box() { records_with none | jq -e 'select(.trigger_values.held_restore == "in_box")' >/dev/null; }
 
-# Claude Code writes transcripts under its config directory, one file per session id.
-transcript_path() { find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" -name "$1.jsonl" 2>/dev/null | head -n 1 || true; }
 transcript_is_compacted() {
   local path
   path=$(transcript_path "$1")
@@ -73,7 +71,7 @@ transcript_summary() {
   local path
   path=$(transcript_path "$1")
   if [[ -z "$path" ]]; then
-    echo "no transcript file '${1:-<no session id>}.jsonl' under ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+    echo "no transcript file '${1:-<no session id>}.jsonl' under $(transcripts_dir)"
     return
   fi
   printf '%s\n' "$path"
