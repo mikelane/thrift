@@ -58,6 +58,23 @@ say_apple() {
   wait_for "the first turn of '$1' to finish" turns_done_above "$1" "$turns_before"
 }
 
+# Claude Code writes transcripts under its config directory, one file per session id.
+transcripts_dir() { echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"; }
+transcript_path() { find "$(transcripts_dir)" -name "$1.jsonl" 2>/dev/null | head -n 1 || true; }
+
+# fresh_transcript_path <old-session-id>: the transcript of the session that took over from the old
+# one, found by the handoff note's opening line. The fresh session runs in the old session's project
+# directory, so only its top-level transcripts are searched: subagent transcripts and other projects
+# can quote the note line, and the old session's own file is skipped.
+fresh_transcript_path() {
+  [[ -n "${1:-}" ]] || return 0
+  local old dir
+  old=$(transcript_path "$1")
+  [[ -n "$old" ]] || return 0
+  dir=$(dirname -- "$old")
+  grep -lF -- "Handoff from the previous session ($1)" "$dir"/*.jsonl 2>/dev/null | grep -vxF -- "$old" | head -n 1 || true
+}
+
 # held_prompts_flow <name>: the turn, then /handoff, then three prompts typed while the note is
 # written, then waits for the handoff to clear and the fresh session to answer the held prompts.
 held_prompts_flow() {

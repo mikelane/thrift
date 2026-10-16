@@ -199,7 +199,7 @@ test_live_sh_exits_2_when_it_cannot_make_its_working_directory() {
 }
 
 test_busy_abandon_is_a_fail_when_the_old_transcript_has_no_compaction() {
-  run_live 'source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
     set -uo pipefail
     CLAUDE_CONFIG_DIR=$HOME/.claude
     live_init

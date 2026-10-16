@@ -1,25 +1,67 @@
 #!/usr/bin/env bash
 # #55: what the fresh session's model sees for a held prompt. It must arrive as the person's
-# prompt (turn origin human), not as a message the handoff plugin sent (turn origin system, framed
-# "The handoff plugin sent a message:").
+# prompt, not as a message the handoff plugin sent (framed "The handoff plugin sent a message:").
+#
+# The turn's `cc_turn_origin` can't show this: a plugin's `$.prompt.submit({ asUser: true })` keeps
+# the plugin origin (see the engine declarations). What `asUser` changes is the transcript entry, so
+# the check reads the fresh session's transcript: a user entry with `origin.asUser == true` whose
+# text is the held words joined by blank lines.
+
+HELD_TEXT=$'one\n\ntwo\n\nthree'
 
 scenario_run() {
   handoff_prepare '{}'
   handoff_start a
   held_prompts_flow a
 
-  local origins
-  origins=$(turn_origins a | tr '\n' ' ')
+  local old_id transcript
+  old_id=$(records_with cleared | jq -r '.session_id' | tail -n 1)
+  transcript=$(fresh_transcript_path "$old_id")
   show_records cleared
-  section 'turn origins in order (the first is the turn before the handoff)'
-  echo "$origins"
+  section "fresh session transcript (found by the old session id ${old_id:-<none>})"
+  show_user_entries "$old_id" "$transcript"
   show_pane a 'fresh session'
 
-  check 'the turn that answers the held prompts has origin human' "turn origins were: $origins" \
-    last_turn_is_human a
+  check 'the held prompts reach the transcript as the person'"'"'s (origin.asUser) in one entry' \
+    "no user entry with origin.asUser and the held words joined by blank lines in [${transcript:-no transcript found}]" \
+    held_prompts_as_user "$transcript"
   check 'the held prompts are not framed as a plugin message' 'the screen shows "The handoff plugin sent a message"' \
     not_framed_as_plugin_message a
 }
 
-last_turn_is_human() { [[ "$(turn_origins "$1" | tail -n 1)" == human ]]; }
+# user_entries <transcript>: each user entry as {origin, text}, text being the content as one string.
+user_entries() {
+  jq -c 'select(.type == "user") | {
+    origin: (.origin // null),
+    text: ((.message.content // "") | if type == "string" then . else map(select(.type == "text") | .text) | join("") end)
+  }' "$1"
+}
+
+# show_user_entries <old-session-id> <fresh-transcript>: the fresh transcript's user entries, or, when
+# there is none, which lookup step failed and where it looked. Never fails.
+show_user_entries() {
+  local old_id=$1 transcript=$2 old_path
+  if [[ -n "$transcript" && -f "$transcript" ]]; then
+    printf '%s\n' "$transcript"
+    user_entries "$transcript" 2>/dev/null | cut -c 1-200 || true
+    return 0
+  fi
+  if [[ -z "$old_id" || "$old_id" == null ]]; then
+    echo "(a) no old session id: the cleared record has no session_id (got '${old_id:-<empty>}')"
+    return 0
+  fi
+  old_path=$(transcript_path "$old_id")
+  if [[ -z "$old_path" ]]; then
+    echo "(b) no $old_id.jsonl under $(transcripts_dir)"
+    return 0
+  fi
+  echo "(c) no transcript beside $(dirname -- "$old_path") holding the note line 'Handoff from the previous session ($old_id)'"
+  return 0
+}
+
+held_prompts_as_user() {
+  [[ -n "$1" && -f "$1" ]] || return 1
+  user_entries "$1" | jq -e --arg held "$HELD_TEXT" 'select(.origin.asUser == true and .text == $held)' >/dev/null
+}
+
 not_framed_as_plugin_message() { ! pane_has "$1" 'The handoff plugin sent a message'; }
