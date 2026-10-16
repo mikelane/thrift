@@ -204,7 +204,7 @@ test('It records a non-trigger turn as active in an interactive session on a tes
 })
 
 const untestedBuilds = [
-  ['a newer release', { version: '2.1.296', base: '2.1.296' }],
+  ['a newer release', { version: '2.1.303', base: '2.1.303' }],
   ['a development build', { version: '2.1.295-dev.20260920.t1.sha1', base: '2.1.295-dev' }],
   ['a build with no base', { version: 'custom' }],
 ] as const
@@ -240,30 +240,30 @@ for (const [name, version] of untestedBuilds) {
 
 test('It does not say /handoff works in the untested toast of a session with no prompt', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($, false)
-  expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual(['toast:Untested on Claude Code 2.1.296, so this session only logs decisions.'])
+  expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual(['toast:Untested on Claude Code 2.1.303, so this session only logs decisions.'])
 })
 
 test('It writes the untested notice to the transcript as well as the toast', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
-  expect(world.effects).toContain('log:Untested on Claude Code 2.1.296, so this session only logs decisions. /handoff still works.')
+  expect(world.effects).toContain('log:Untested on Claude Code 2.1.303, so this session only logs decisions. /handoff still works.')
 })
 
 test('It registers no /handoff command in a session with no prompt', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($, false)
   expect(world.effects).not.toContain('register:handoff')
 })
 
 test('It names the base version in the untested toast', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
-  expect(world.effects).toContain('toast:Untested on Claude Code 2.1.296, so this session only logs decisions. /handoff still works.')
+  expect(world.effects).toContain('toast:Untested on Claude Code 2.1.303, so this session only logs decisions. /handoff still works.')
 })
 
 test('It records the version string when the base is missing', ACT, async ($, on) => {
@@ -275,7 +275,7 @@ test('It records the version string when the base is missing', ACT, async ($, on
 
 test('It logs untested_engine without a toast when the mode is off', async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
   expect(world.records.map(record => record.action)).toEqual(['untested_engine'])
   expect(world.effects.filter(effect => effect.startsWith('toast:'))).toEqual([])
@@ -283,7 +283,7 @@ test('It logs untested_engine without a toast when the mode is off', async ($, o
 
 test('It records untested_engine at the session-start point', async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
   expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', trigger_values: { point: 'session-start' } })
 })
@@ -318,7 +318,7 @@ test('It records effective_mode off and setting act for /handoff under -p', ACT,
 
 test('It records effective_mode off and setting act for /handoff on an untested build', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()
@@ -327,7 +327,7 @@ test('It records effective_mode off and setting act for /handoff on an untested 
 
 test('It records effective_mode off and setting act on the untested_engine record', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '2.1.296', base: '2.1.296' }
+  world.version = { version: '2.1.303', base: '2.1.303' }
   await startSession($)
   expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', trigger_values: { setting: 'act', effective_mode: 'off' } })
 })

@@ -9,7 +9,7 @@ session.
 Success means fewer cache-read tokens per turn in long sessions, measured against the shadow
 baseline that `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.295, but nothing here has been watched
+> **Status:** early. The tests pass against Claude Code 2.1.302, but nothing here has been watched
 > in a live terminal yet. See [What has not been verified](#what-has-not-been-verified).
 
 ## Install
@@ -437,7 +437,7 @@ plugin without any error. Four layers guard against that:
 
 | Release | Tested through Claude Code |
 |---|---|
-| 0.1.0 | 2.1.295 |
+| 0.1.0 | 2.1.302 |
 
 ## What has not been verified
 
