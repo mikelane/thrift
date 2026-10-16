@@ -28,7 +28,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'held one')
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:held one', 'entered:plugin:late'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'])
   })
 
   test('It holds a prompt that arrives mid-delivery instead of running it', async ($, on) => {
@@ -36,7 +36,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'held one')
     const results = arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect([dropOf(await results[0]), entered(world)]).toEqual([HELD_FOR_HANDOFF, ['entered:plugin:held one', 'entered:plugin:late']])
+    expect([dropOf(await results[0]), entered(world)]).toEqual([HELD_FOR_HANDOFF, ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late']])
   })
 
   test('It sends a prompt that arrives mid-delivery after both held groups', async ($, on) => {
@@ -46,7 +46,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     arriveDuringSubmits($, world, [{ text: 'late' }])
     world.submitHooks.unshift(undefined)
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:person says', 'entered:plugin:nightly job', 'entered:plugin:late'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:person says', 'entered:plugin:nightly job', 'entered:plugin+asUser:late'])
   })
 
   test('It sends a held scheduled group before a prompt that arrives mid-delivery', async ($, on) => {
@@ -54,7 +54,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:nightly job', 'entered:plugin:late'])
+    expect(entered(world)).toEqual(['entered:plugin:nightly job', 'entered:plugin+asUser:late'])
   })
 
   test('It sends prompts that arrive mid-delivery one by one in arrival order', async ($, on) => {
@@ -63,10 +63,10 @@ describe('prompts that arrive while the handoff delivers', () => {
     arriveDuringSubmits($, world, [{ text: 'late one' }, { text: 'late two', kind: 'scheduled-trigger' }, { text: 'late three' }])
     await finishNote()
     expect(entered(world)).toEqual([
-      'entered:plugin:held one',
-      'entered:plugin:late one',
+      'entered:plugin+asUser:held one',
+      'entered:plugin+asUser:late one',
       'entered:plugin:late two',
-      'entered:plugin:late three',
+      'entered:plugin+asUser:late three',
     ])
   })
 
@@ -80,20 +80,20 @@ describe('prompts that arrive while the handoff delivers', () => {
       },
     })
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin:late'])
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:late'])
     expect(dropOf(await late)).toBe(HELD_FOR_HANDOFF)
   })
 
-  test('It sends a prompt that arrives while the note is submitted with the held prompt after them', async ($, on) => {
+  test('It sends a prompt that arrives while the note is submitted after the note and the held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     await submitPerson($, 'held one')
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}\n\nheld one`, 'entered:plugin:late'])
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:held one', 'entered:plugin+asUser:late'])
   })
 
-  test('It sends a prompt that arrives mid-delivery once the refused note and held prompt went in the box', async ($, on) => {
+  test('It holds a prompt that arrives mid-delivery in the box after the refused note and held prompt', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     world.submitDropped = true
@@ -103,7 +103,7 @@ describe('prompts that arrive while the handoff delivers', () => {
       world.submitDropped = false
     })
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:late'], `${NOTE_MESSAGE}\n\nheld one`])
+    expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nheld one\nlate`])
   })
 
   test('It lets a prompt through once the delivery has finished', async ($, on) => {
@@ -111,7 +111,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'held one')
     await finishNote()
     expect(dropOf(await submitPerson($, 'after'))).toBeUndefined()
-    expect(entered(world)).toEqual(['entered:plugin:held one', 'entered:composer:after'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:held one', 'entered:composer:after'])
   })
 })
 
@@ -122,7 +122,7 @@ describe('events that land while the handoff delivers', () => {
     await submitPerson($, 'held one')
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:held one', 'entered:plugin:late'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'])
   })
 
   test('It refuses a second /handoff while the first is delivering', async ($, on) => {
@@ -150,7 +150,7 @@ describe('events that land while the handoff delivers', () => {
       },
     ]
     await finishNote()
-    expect([dropOf(await late), entered(world), world.box.text]).toEqual([REFUSED_DURING_HANDOFF, ['entered:plugin:held one'], 'late picture'])
+    expect([dropOf(await late), entered(world), world.box.text]).toEqual([REFUSED_DURING_HANDOFF, ['entered:plugin+asUser:held one'], 'late picture'])
   })
 })
 
@@ -185,7 +185,7 @@ describe('the record of a handoff that held prompts while it delivered', () => {
       refuseTheLateSubmit,
     ]
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:held one'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:held one'])
     expect(lastRecord(world).trigger_values).toMatchObject({ held_other_delivery: 'not_carried' })
   })
 
@@ -211,7 +211,7 @@ describe('tickets named by a prompt that arrived while the handoff delivered', (
     const result = await submitPerson($, 'keep going on ENG-2')
     expect([dropOf(result), entered(world)]).toEqual([
       undefined,
-      ['entered:plugin:start on ENG-1', 'entered:plugin:now ENG-2', 'entered:composer:keep going on ENG-2'],
+      ['entered:plugin+asUser:start on ENG-1', 'entered:plugin+asUser:now ENG-2', 'entered:composer:keep going on ENG-2'],
     ])
   })
 })

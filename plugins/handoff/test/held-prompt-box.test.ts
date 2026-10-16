@@ -19,7 +19,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await submitPerson($, 'next thing')
     await leftInBox(world, 'next thing')
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:next thing'], ''])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:next thing'], ''])
   })
 
   test('It leaves the box empty after a group of held prompts is sent', async ($, on) => {
@@ -29,10 +29,10 @@ describe('the prompt box after a held prompt is delivered', () => {
     await submitPerson($, 'second')
     await leftInBox(world, 'second')
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:first\n\nsecond'], ''])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:first\n\nsecond'], ''])
   })
 
-  test('It leaves the box empty after the note and a held prompt are sent together', async ($, on) => {
+  test('It leaves the box empty after the note and a held prompt are sent apart', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     await submitPerson($, 'first')
@@ -40,7 +40,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await submitPerson($, 'second')
     await leftInBox(world, 'second')
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${NOTE_MESSAGE}\n\nfirst\n\nsecond`], ''])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:first\n\nsecond'], ''])
   })
 
   test('It leaves the box empty after a prompt that arrived during the delivery is sent', async ($, on) => {
@@ -52,7 +52,7 @@ describe('the prompt box after a held prompt is delivered', () => {
       },
     ]
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:held one', 'entered:plugin:late'], ''])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'], ''])
   })
 
   test('It leaves a box alone that holds a different draft than the prompt sent', async ($, on) => {
@@ -76,7 +76,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await submitPerson($, 'my prompt')
     await submitPerson($, 'from phone', { kind: 'bridge' })
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:my prompt\n\nfrom phone'], ''])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:my prompt\n\nfrom phone'], ''])
   })
 
   test('It takes a multi-line composer prompt out of the box', async ($, on) => {
@@ -158,7 +158,7 @@ describe('the prompt box when a group with a remote prompt in it is sent back', 
     await submitPerson($, 'my prompt')
     await submitPerson($, 'from phone', { kind: 'bridge' })
     await failNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:my prompt\n\nfrom phone'], ''])
+    expect([entered(world), world.box.text]).toEqual([['entered:plugin+asUser:my prompt\n\nfrom phone'], ''])
   })
 
   test('It leaves a draft alone that matches a bridge prompt sent on its own', async ($, on) => {
@@ -229,7 +229,7 @@ describe('the prompt box while prompts are held', () => {
     await submitPerson($, 'three')
     await world.clock.settle()
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:one\n\ntwo\n\nthree'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:one\n\ntwo\n\nthree'])
   })
 
   test('It empties the box after a held person prompt', async ($, on) => {

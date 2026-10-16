@@ -51,8 +51,11 @@ import {
   groupHeldPrompts,
   holdsPrompt,
   joinPrompts,
+  speaksForPerson,
+  deliveryAfterNote,
   groupJoiningNote,
   groupsLeftToSend,
+  noteTookGroupAlong,
   withoutPrompt,
   boxCopiesOf,
   boxCopyOf,
@@ -139,7 +142,9 @@ const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. H
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
-const UNSENT_NOTE_AND_PROMPT = 'The handoff note and your prompt could not be sent or put in the prompt box. Here they are:'
+// Held back by design, not by a failed send: none was tried, because the note did not enter the fresh session.
+const HELD_BACK_PROMPT = 'Your prompt was held back after the handoff note, so read the note first. Here it is:'
+const HELD_BACK_OTHER_PROMPT = 'A prompt was held back after the handoff note, so read the note first. Here it is:'
 const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be sent, so here they are:'
 
 // /handoff is registered only when a person is at the prompt, so only then is it there to mention.
@@ -323,7 +328,7 @@ const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): P
   }
 }
 
-const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer' })
+const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer', author: 'person' })
 
 // Only a prompt typed at this terminal is offered to the box. The sender of any other prompt is somewhere else, and filling
 // the box could displace the draft of the person who is here.
@@ -343,10 +348,11 @@ const submitEntered = async (
   state: SessionState,
   prompt: HeldPrompt,
   failureLabel: string,
+  asUser: boolean,
 ): Promise<boolean> => {
   queueResubmittedPrompt(state, prompt)
   try {
-    const result = await $.prompt.submit({ text: prompt.text })
+    const result = await $.prompt.submit(asUser ? { text: prompt.text, asUser: true } : { text: prompt.text })
     if (result.drop === undefined) return true
     debug($, `${failureLabel}: ${result.drop}`)
   } catch (error) {
@@ -357,7 +363,7 @@ const submitEntered = async (
 }
 
 const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not restore the held prompt')) return 'submitted'
+  if (await submitEntered($, state, prompt, 'could not restore the held prompt', speaksForPerson(prompt))) return 'submitted'
   keepInTranscript($, prompt)
   return 'not_carried'
 }
@@ -506,20 +512,21 @@ const appendNote = async ($: EngineInterface, message: string): Promise<boolean>
   }
 }
 
-type SendOptions = { placement?: BoxPlacement; notice?: string | undefined }
+// holdBack keeps a prompt out of the fresh session: a person's prompt must not run ahead of a note that never entered it.
+type SendOptions = { placement?: BoxPlacement; notice?: string | undefined; holdBack?: boolean }
 
 const sendOrKeepInBox = async (
   $: EngineInterface,
   state: SessionState,
   prompt: HeldPrompt,
-  { placement = 'before_draft', notice }: SendOptions = {},
+  { placement = 'before_draft', notice, holdBack = false }: SendOptions = {},
 ): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not send the prompt')) {
+  if (!holdBack && (await submitEntered($, state, prompt, 'could not send the prompt', speaksForPerson(prompt)))) {
     await emptySentPromptFromBox($, prompt)
     return 'submitted'
   }
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
-  keepInTranscript($, prompt, notice)
+  keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
   return 'not_carried'
 }
 
@@ -528,11 +535,12 @@ const announce = ($: EngineInterface, message: string) => {
   $.ui.toast(message)
 }
 
-// The note rides with the prompts that follow the handoff's own origin; the other group is sent after it.
-// A note that is never offered to the box (a scheduled handoff's, or one joined to a prompt typed elsewhere) gets a notice
-// that does not say it was, and a note joined to a prompt names both.
+// A scheduled handoff's note rides with the scheduled group, both under the plugin's frame. An attended handoff's note goes alone
+// and framed, then the person's prompts follow it as the person's own words.
+// A note that is never offered to the box (a scheduled handoff's) gets a notice that does not say it was, and a note joined to
+// a scheduled prompt names both.
 const unsentNoteNotice = (note: HeldPrompt, isJoined: boolean): string => {
-  if (isJoined) return canUseBox(note) ? UNSENT_NOTE_AND_PROMPT : UNSENT_NOTE_AND_OTHER_PROMPT
+  if (isJoined) return UNSENT_NOTE_AND_OTHER_PROMPT
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
@@ -541,10 +549,11 @@ const deliverNote = async ($: EngineInterface, state: SessionState, settledHando
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
-  const note = {
+  const note: HeldPrompt = {
     text: joinPrompts(message, sameOriginGroup?.text),
     isUnattended: settledHandoff.isUnattended,
     origin,
+    author: 'plugin',
     ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
   }
   return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
@@ -555,20 +564,21 @@ const sendHeldGroups = async (
   state: SessionState,
   groups: readonly HeldPromptGroup[],
   handoffIsUnattended: boolean,
+  { placement, holdBackPersonGroups }: { placement: BoxPlacement; holdBackPersonGroups: boolean },
 ): Promise<Carried[]> => {
   const deliveries: Carried[] = []
   for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, state, group))
+    deliveries.push(await sendOrKeepInBox($, state, group, { placement, holdBack: holdBackPersonGroups && speaksForPerson(group) }))
     releaseCarriedGroup(state, group, handoffIsUnattended)
   }
   return deliveries
 }
 
-const sendLateArrivals = ($: EngineInterface, state: SessionState): Promise<LateArrivals> =>
+const sendLateArrivals = ($: EngineInterface, state: SessionState, holdBackPersonPrompts: boolean): Promise<LateArrivals> =>
   forEachLateArrival(state, async prompt => {
     // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
     await inspectPrompt($, state, prompt.text)
-    return sendOrKeepInBox($, state, prompt, { placement: 'after_draft' })
+    return sendOrKeepInBox($, state, prompt, { placement: 'after_draft', holdBack: holdBackPersonPrompts && speaksForPerson(prompt) })
   })
 
 const continueInFreshSession = async (
@@ -587,13 +597,13 @@ const continueInFreshSession = async (
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
   const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
-  // Without an appended note, deliverNote joined the carried group to the note and has now handed it over.
-  if (noteDelivery !== 'appended') releaseCarried(state)
+  if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
   announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended)
-  const late = await sendLateArrivals($, state)
+  const { holdBackPerson, placement } = deliveryAfterNote(noteDelivery)
+  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
+  const late = await sendLateArrivals($, state, holdBackPerson)
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
@@ -792,7 +802,7 @@ const scheduleHandoff = (
     state,
     request.heldPrompt === undefined
       ? null
-      : { text: request.heldPrompt, isUnattended: request.isUnattended, origin: request.heldPromptOrigin ?? 'composer' },
+      : { text: request.heldPrompt, isUnattended: request.isUnattended, origin: request.heldPromptOrigin ?? 'composer', author: 'person' },
   )
   $.clock.after(0, () => {
     void logFailure($, runHandoff($, state, request, beforeRun))
@@ -907,7 +917,7 @@ const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
 }
 
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
-  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind })
+  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind, author: 'person' })
   debug($, `held a prompt for the handoff (${heldCount} held)`)
   // Claude Code leaves a dropped prompt's text in the box, so the next prompt would be typed after it and held as
   // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the

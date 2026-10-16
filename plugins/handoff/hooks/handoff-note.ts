@@ -1,6 +1,6 @@
 import type { ForkReason } from './fork-outcome'
-import { isComposerOrigin } from './prompt-plan'
-import { isGroupOfOrigin, type HeldPrompt, type HeldPromptGroup } from './session-state'
+import { isComposerOrigin, isPersonOrigin } from './prompt-plan'
+import { isGroupOfOrigin, type BoxPlacement, type HeldPrompt, type HeldPromptGroup } from './session-state'
 
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
 Cover, under short headings:
@@ -72,21 +72,26 @@ export const joinPrompts = (handoff: string, heldPrompts: string | undefined): s
 
 // A group is the composer's only while every prompt in it is; one remote prompt keeps the whole group out of the box, because
 // the box is where the person at this terminal reviews what they typed.
-const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['origin']): HeldPrompt['origin'] => (isComposerOrigin(groupSoFar) ? joining : groupSoFar)
+// SAFETY: held prompts always come from a person. Only person origins reach holdForHandoff (prompt.submit goes through
+// decidePrompt), and a scheduled trigger forms its own group through isUnattended. So the non-person clause below guards a mix
+// that no held path builds: a group stays a person's only while every prompt in it is, whatever order they arrived in.
+const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['origin']): HeldPrompt['origin'] =>
+  isComposerOrigin(groupSoFar) || (isPersonOrigin(groupSoFar) && !isPersonOrigin(joining)) ? joining : groupSoFar
 
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
   const groups: HeldPromptGroup[] = []
-  for (const { text, isUnattended, origin } of prompts) {
+  for (const { text, isUnattended, origin, author } of prompts) {
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
-    if (group === undefined) groups.push({ text, isUnattended, origin })
+    if (group === undefined) groups.push({ text, isUnattended, origin, author })
     else {
       const boxCopy = isComposerOrigin(origin) ? text : boxCopyOf(group)
       groups[index] = {
         text: `${group.text}${PROMPT_SEPARATOR}${text}`,
         isUnattended,
         origin: groupOrigin(group.origin, origin),
+        author: group.author === 'plugin' || author === 'plugin' ? 'plugin' : 'person',
         ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
       }
     }
@@ -94,17 +99,34 @@ export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGrou
   return groups
 }
 
-// The note rides with the group that shares the handoff's own origin.
+// Only a scheduled handoff's note rides with the scheduled group, and both go under the plugin's frame. The attended group is
+// the person's own words and is sent apart from the note, so the model reads it bare.
 export const groupJoiningNote = (groups: readonly HeldPromptGroup[], handoffIsUnattended: boolean): HeldPromptGroup | undefined =>
-  groups.find(group => isGroupOfOrigin(group, handoffIsUnattended))
+  handoffIsUnattended ? groups.find(group => isGroupOfOrigin(group, true)) : undefined
 
-// A note that was appended to the session leaves every group to send; a note that was sent as a prompt already carried its group.
+// A note that was appended to the session leaves every group to send; a note that was sent as a prompt already carried the group
+// that joined it, and only that one.
 export const groupsLeftToSend = (
   groups: readonly HeldPromptGroup[],
   handoffIsUnattended: boolean,
   noteDelivery: NoteDelivery,
 ): HeldPromptGroup[] =>
-  noteDelivery === 'appended' ? [...groups] : groups.filter(group => !isGroupOfOrigin(group, handoffIsUnattended))
+  noteDelivery === 'appended' ? [...groups] : groups.filter(group => group !== groupJoiningNote(groups, handoffIsUnattended))
+
+// A note sent as a prompt may have taken the scheduled group along; the carried prompt is released with that group, as with any other.
+export const noteTookGroupAlong = (
+  groups: readonly HeldPromptGroup[],
+  handoffIsUnattended: boolean,
+  noteDelivery: NoteDelivery,
+): boolean => noteDelivery !== 'appended' && groupJoiningNote(groups, handoffIsUnattended) !== undefined
+
+// A person's prompt follows the note. If the note never entered the fresh session, it is held back instead: in the box or the
+// transcript, after the note, rather than running in a session that knows nothing of the work. A note left in the box is read
+// first, so a prompt that also lands there goes after it.
+export const deliveryAfterNote = (noteDelivery: NoteDelivery): { holdBackPerson: boolean; placement: BoxPlacement } => ({
+  holdBackPerson: noteDelivery === 'in_box' || noteDelivery === 'not_carried',
+  placement: noteDelivery === 'in_box' ? 'after_draft' : 'before_draft',
+})
 
 // The text the engine left in the box for a group: the last prompt typed at the composer, which a remote prompt joined
 // after it does not replace. A group with no composer prompt left nothing there.
@@ -117,6 +139,11 @@ export const boxCopiesOf = (prompt: Pick<HeldPrompt, 'text' | 'origin' | 'boxTex
   ...(isComposerOrigin(prompt.origin) ? [prompt.text] : []),
   ...(prompt.boxText === undefined ? [] : [prompt.boxText]),
 ]
+
+// A person's prompt is read by the model as the person's own words, not as a message from this plugin. A scheduled prompt and
+// the plugin's own note keep the plugin's frame: nobody typed them.
+export const speaksForPerson = (prompt: Pick<HeldPrompt, 'isUnattended' | 'origin' | 'author'>): boolean =>
+  prompt.author === 'person' && !prompt.isUnattended && isPersonOrigin(prompt.origin)
 
 export const holdsPrompt = (draft: string, prompt: string): boolean => `\n${draft}\n`.includes(`\n${prompt}\n`)
 

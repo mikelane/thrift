@@ -42,10 +42,10 @@ test('It sends the held prompt only once the turn ends after Send here was press
   await startTurn($)
   await band.press({ key: 'send-here' })
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === 'entered:plugin:now ENG-2')).toHaveLength(0)
+  expect(world.effects.filter(effect => effect === 'entered:plugin+asUser:now ENG-2')).toHaveLength(0)
   await completeTurn($)
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === 'entered:plugin:now ENG-2')).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === 'entered:plugin+asUser:now ENG-2')).toHaveLength(1)
 })
 
 test('It does not hand off when a background shell started during the turn a Hand off press waited on', ASK, async ($, on) => {

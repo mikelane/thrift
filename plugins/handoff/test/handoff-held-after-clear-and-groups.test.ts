@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { groupHeldPrompts, groupJoiningNote, groupsLeftToSend } from '../hooks/handoff-note'
+import type { HeldPrompt } from '../hooks/session-state'
+import {
+  deliveryAfterNote,
+  groupHeldPrompts,
+  groupJoiningNote,
+  groupsLeftToSend,
+  noteTookGroupAlong,
+  speaksForPerson,
+} from '../hooks/handoff-note'
 import { answered, dropOf, entered, submitPerson, writingTheNote } from './helpers'
 import {
   ASK,
@@ -29,7 +37,20 @@ describe('prompts that arrive after the clear', () => {
 
   test('It sends the carried prompt once when it is repeated after the clear', ASK, async ($, on) => {
     const { world } = await repeatingDuringDelivery($, on)
-    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin:now ENG-2'])
+    expect(entered(world)).toEqual(['entered:composer:start on ENG-1', 'entered:plugin+asUser:now ENG-2'])
+  })
+
+  test('It drops a repeat of the carried prompt that arrives after the note was submitted and before the prompt follows it', ASK, async ($, on) => {
+    const { world, fork } = await heldBeforeTheHandoff($, on)
+    world.appendDenied = true
+    const outcome = repeatOnSubmitAfter($, world, 1)
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    expect(outcome.repeat).not.toBeNull()
+    expect([dropOf(await outcome.repeat), entered(world).filter(line => line.endsWith('now ENG-2'))]).toEqual([
+      REPEAT_NOT_ADDED,
+      ['entered:plugin+asUser:now ENG-2'],
+    ])
   })
 
   test('It lets a repeat of the carried prompt through once the handoff has finished', ASK, async ($, on) => {
@@ -49,7 +70,7 @@ describe('prompts that arrive after the clear', () => {
     expect(dropOf(await outcome.repeat)).toBe(HELD_FOR_HANDOFF)
   })
 
-  test('It sends a carried prompt the person re-sends from the box after the scheduled group, once the note was refused', ASK, async ($, on) => {
+  test('It holds back a carried prompt the person re-sends from the box, but sends the scheduled group, once the note was refused', ASK, async ($, on) => {
     const { world, fork } = await carriedPlusScheduled($, on)
     world.appendDenied = true
     world.submitDropped = true
@@ -59,7 +80,7 @@ describe('prompts that arrive after the clear', () => {
     expect(outcome.repeat).not.toBeNull()
     expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
       HELD_FOR_HANDOFF,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job', 'entered:plugin:now ENG-2'],
+      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job'],
     ])
   })
 })
@@ -70,21 +91,21 @@ describe('groupHeldPrompts', () => {
   })
 
   test('It joins prompts of one origin in arrival order in groupHeldPrompts', () => {
-    expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer' }, { text: 'a', isUnattended: false, origin: 'composer' }])).toEqual([
-      { text: 'a\n\na', isUnattended: false, origin: 'composer', boxText: 'a' },
+    expect(groupHeldPrompts([{ text: 'a', isUnattended: false, origin: 'composer', author: 'person' }, { text: 'a', isUnattended: false, origin: 'composer', author: 'person' }])).toEqual([
+      { text: 'a\n\na', isUnattended: false, origin: 'composer', author: 'person', boxText: 'a' },
     ])
   })
 
   test('It keeps one group per origin, ordered by first arrival, in groupHeldPrompts', () => {
     expect(
       groupHeldPrompts([
-        { text: 'u1', isUnattended: true, origin: 'scheduled-trigger' },
-        { text: 'p1', isUnattended: false, origin: 'composer' },
-        { text: 'u2', isUnattended: true, origin: 'scheduled-trigger' },
+        { text: 'u1', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+        { text: 'p1', isUnattended: false, origin: 'composer', author: 'person' },
+        { text: 'u2', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
       ]),
     ).toEqual([
-      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger' },
-      { text: 'p1', isUnattended: false, origin: 'composer' },
+      { text: 'u1\n\nu2', isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+      { text: 'p1', isUnattended: false, origin: 'composer', author: 'person' },
     ])
   })
 })
@@ -113,38 +134,113 @@ describe('boxText on a group', () => {
     const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
     expect(groupHeldPrompts(prompts)[0]).not.toHaveProperty('boxText')
   })
+
+  test('It keeps a group from speaking for the person when a task notification joins a bridge prompt, a guard for a mix no held path builds', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
+    expect(groupHeldPrompts(prompts).map(speaksForPerson)).toEqual([false])
+  })
+
+  test('It gives a group the task-notification origin when one joins a bridge prompt, a guard for a mix no held path builds', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'task done', origin: 'task-notification' as const }]
+    expect(groupHeldPrompts(prompts)[0]?.origin).toBe('task-notification')
+  })
+
+  test('It keeps a person origin when person origins join in groupHeldPrompts', () => {
+    const prompts = [{ ...personGroup, origin: 'bridge' as const }, { ...personGroup, text: 'again', origin: 'sdk' as const }]
+    expect(groupHeldPrompts(prompts)[0]?.origin).toBe('bridge')
+  })
 })
 
 describe('groupJoiningNote and groupsLeftToSend', () => {
-  test('It picks the group that shares the handoff origin in groupJoiningNote', () => {
-    expect([
-      groupJoiningNote([personGroup, scheduledGroup], false),
-      groupJoiningNote([personGroup, scheduledGroup], true),
-    ]).toEqual([personGroup, scheduledGroup])
+  test('It picks the scheduled group in groupJoiningNote for an unattended handoff', () => {
+    expect(groupJoiningNote([personGroup, scheduledGroup], true)).toEqual(scheduledGroup)
   })
 
-  test('It picks no group in groupJoiningNote when none shares the handoff origin', () => {
-    expect(groupJoiningNote([scheduledGroup], false)).toBeUndefined()
+  test('It picks no group in groupJoiningNote for an attended handoff, so the person group stays apart from the note', () => {
+    expect(groupJoiningNote([personGroup, scheduledGroup], false)).toBeUndefined()
+  })
+
+  test('It picks no group in groupJoiningNote when no scheduled group is held for an unattended handoff', () => {
+    expect(groupJoiningNote([personGroup], true)).toBeUndefined()
   })
 
   test('It leaves every group to send in groupsLeftToSend when the note was appended', () => {
     expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'appended')).toEqual([personGroup, scheduledGroup])
   })
 
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was submitted', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'submitted')).toEqual([scheduledGroup])
-  })
+  for (const noteDelivery of ['submitted', 'in_box', 'not_carried'] as const) {
+    test(`It leaves every group to send in groupsLeftToSend when the note was ${noteDelivery} and an attended handoff kept it apart`, () => {
+      expect(groupsLeftToSend([personGroup, scheduledGroup], false, noteDelivery)).toEqual([personGroup, scheduledGroup])
+    })
 
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was in_box', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'in_box')).toEqual([scheduledGroup])
-  })
-
-  test('It leaves only the other origin to send in groupsLeftToSend when the note was not_carried', () => {
-    expect(groupsLeftToSend([personGroup, scheduledGroup], false, 'not_carried')).toEqual([scheduledGroup])
-  })
+    test(`It leaves only the person group to send in groupsLeftToSend when the note was ${noteDelivery} with the scheduled group of an unattended handoff`, () => {
+      expect(groupsLeftToSend([personGroup, scheduledGroup], true, noteDelivery)).toEqual([personGroup])
+    })
+  }
 
   test('It leaves no groups to send in groupsLeftToSend for no groups', () => {
     expect(groupsLeftToSend([], false, 'submitted')).toEqual([])
   })
+})
 
+describe('noteTookGroupAlong', () => {
+  test('It returns false from noteTookGroupAlong when the note was appended', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], true, 'appended')).toBe(false)
+  })
+
+  test('It returns true from noteTookGroupAlong when an unattended note was submitted with the scheduled group', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], true, 'submitted')).toBe(true)
+  })
+
+  test('It returns false from noteTookGroupAlong when an attended note was submitted apart from the person group', () => {
+    expect(noteTookGroupAlong([personGroup, scheduledGroup], false, 'submitted')).toBe(false)
+  })
+})
+
+describe('deliveryAfterNote', () => {
+  test('It sends person prompts before the draft in deliveryAfterNote when the note was appended', () => {
+    expect(deliveryAfterNote('appended')).toEqual({ holdBackPerson: false, placement: 'before_draft' })
+  })
+
+  test('It sends person prompts before the draft in deliveryAfterNote when the note was submitted', () => {
+    expect(deliveryAfterNote('submitted')).toEqual({ holdBackPerson: false, placement: 'before_draft' })
+  })
+
+  test('It holds person prompts back after the draft in deliveryAfterNote when the note was left in the box', () => {
+    expect(deliveryAfterNote('in_box')).toEqual({ holdBackPerson: true, placement: 'after_draft' })
+  })
+
+  test('It holds person prompts back before the draft in deliveryAfterNote when the note was not carried', () => {
+    expect(deliveryAfterNote('not_carried')).toEqual({ holdBackPerson: true, placement: 'before_draft' })
+  })
+})
+
+describe('speaksForPerson', () => {
+  test('It returns true from speaksForPerson for an attended composer prompt', () => {
+    expect(speaksForPerson(personGroup)).toBe(true)
+  })
+
+  test('It returns false from speaksForPerson for a scheduled prompt', () => {
+    expect(speaksForPerson(scheduledGroup)).toBe(false)
+  })
+
+  test('It returns false from speaksForPerson for the plugin note, whatever person origin it borrows', () => {
+    expect(speaksForPerson({ ...personGroup, author: 'plugin' })).toBe(false)
+  })
+
+  test('It returns true from speaksForPerson for a bridge prompt', () => {
+    expect(speaksForPerson({ ...personGroup, origin: 'bridge' })).toBe(true)
+  })
+
+  test('It returns false from speaksForPerson for an origin that is not a person', () => {
+    expect(speaksForPerson({ ...personGroup, origin: 'task-notification' })).toBe(false)
+  })
+})
+
+describe('who wrote a held prompt', () => {
+  test('It fails to compile a held prompt built without an author', () => {
+    // @ts-expect-error author is required, so omitting it cannot mean the person's voice
+    const unattributed: HeldPrompt = { text: 'x', isUnattended: false, origin: 'composer' }
+    expect(speaksForPerson({ ...unattributed, author: 'plugin' })).toBe(false)
+  })
 })

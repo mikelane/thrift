@@ -6,6 +6,7 @@ import { heldGroupFields, type DecisionAction } from '../hooks/decision-record'
 import type { HeldPromptGroup } from '../hooks/session-state'
 import {
   answered,
+  entered,
   growTo200k,
   holdFork,
   install,
@@ -16,6 +17,7 @@ import {
   type LogRecord,
   type World,
 } from './helpers'
+import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
 
 const ASK = { options: { handoffMode: 'ask' } } as const
 const COMPACTING = { options: { compactBeforeClear: true } } as const
@@ -24,9 +26,9 @@ const SECRET_PROMPT = 'zebra-quartz-7731 rotate the staging credentials'
 type HeldKind = 'person' | 'person again' | 'scheduled'
 
 const GROUP_OF: Record<HeldKind, HeldPromptGroup> = {
-  person: { text: SECRET_PROMPT, isUnattended: false, origin: 'composer' },
-  'person again': { text: `${SECRET_PROMPT} again`, isUnattended: false, origin: 'composer' },
-  scheduled: { text: `${SECRET_PROMPT} nightly`, isUnattended: true, origin: 'scheduled-trigger' },
+  person: { text: SECRET_PROMPT, isUnattended: false, origin: 'composer', author: 'person' },
+  'person again': { text: `${SECRET_PROMPT} again`, isUnattended: false, origin: 'composer', author: 'person' },
+  scheduled: { text: `${SECRET_PROMPT} nightly`, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
 }
 
 const SUBMISSIONS: Record<HeldKind, ($: Engine) => Promise<unknown>> = {
@@ -60,7 +62,7 @@ const expectSecretTravelled = (world: World) => {
 }
 
 const enteredTexts = (world: World): string[] =>
-  world.effects.filter(effect => effect.startsWith('entered:plugin:')).map(effect => effect.slice('entered:plugin:'.length))
+  world.effects.filter(effect => /^entered:plugin(\+asUser)?:/.test(effect)).map(effect => effect.replace(/^entered:plugin(\+asUser)?:/, ''))
 
 const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
   const record = world.records.filter(candidate => candidate.action === action).at(-1)
@@ -69,11 +71,11 @@ const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
 }
 
 const groupCases = [
-  { name: 'nothing was held', held: [], groupCount: 0, isUnattended: false, origin: 'composer' },
-  { name: 'a person group was held', held: ['person'], groupCount: 1, isUnattended: false, origin: 'composer' },
-  { name: 'a scheduled group was held', held: ['scheduled'], groupCount: 1, isUnattended: true, origin: 'scheduled-trigger' },
-  { name: 'a person and a scheduled group were held', held: ['person', 'scheduled'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger' },
-  { name: 'a scheduled and a person group were held', held: ['scheduled', 'person'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger' },
+  { name: 'nothing was held', held: [], groupCount: 0, isUnattended: false, origin: 'composer', author: 'person' },
+  { name: 'a person group was held', held: ['person'], groupCount: 1, isUnattended: false, origin: 'composer', author: 'person' },
+  { name: 'a scheduled group was held', held: ['scheduled'], groupCount: 1, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+  { name: 'a person and a scheduled group were held', held: ['person', 'scheduled'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
+  { name: 'a scheduled and a person group were held', held: ['scheduled', 'person'], groupCount: 2, isUnattended: true, origin: 'scheduled-trigger', author: 'person' },
 ] as const
 
 describe('heldGroupFields', () => {
@@ -240,18 +242,17 @@ describe('held_other_delivery on a cleared record', () => {
       world.submitDropped = true
     }]
     expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values.held_other_delivery).toBe('not_carried')
-    expect(enteredTexts(world)).toEqual([SECRET_PROMPT])
+    expect(entered(world)).toEqual([`entered:plugin+asUser:${SECRET_PROMPT}`])
   })
 
-  test('It records held_other_delivery none when the note carried the only held group', async ($, on) => {
+  test('It records held_other_delivery submitted when the note was submitted apart from the only held person group', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person'])
     world.appendDenied = true
-    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'none' })
-    expect(enteredTexts(world)).toHaveLength(1)
-    expect(enteredTexts(world)[0]).toMatch(new RegExp(`\n\n${SECRET_PROMPT}$`))
+    expect(lastRecordOf(await clearsWith(), 'cleared').trigger_values).toMatchObject({ note: 'submitted', held_other_delivery: 'submitted' })
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, `entered:plugin+asUser:${SECRET_PROMPT}`])
   })
 
-  test('It records the delivery of the group that did not ride with the note', async ($, on) => {
+  test('It records the worst delivery of the groups that did not ride with the note', async ($, on) => {
     const { world, clearsWith } = await handoffWithHeld($, on, ['person', 'scheduled'])
     world.appendDenied = true
     world.submitHooks = [undefined, () => {

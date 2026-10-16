@@ -24,10 +24,10 @@ describe('holding prompts while the note is written', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'next thing')
     await finishNote()
-    expect(world.effects.filter(effect => ['clear', 'append', 'entered:plugin:next thing'].includes(effect))).toEqual([
+    expect(world.effects.filter(effect => ['clear', 'append', 'entered:plugin+asUser:next thing'].includes(effect))).toEqual([
       'clear',
       'append',
-      'entered:plugin:next thing',
+      'entered:plugin+asUser:next thing',
     ])
   })
 
@@ -35,14 +35,14 @@ describe('holding prompts while the note is written', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'from phone', { kind: 'bridge' })
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:from phone'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:from phone'])
   })
 
   test('It holds a prompt from the sdk', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'from sdk', { kind: 'sdk' })
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:from sdk'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:from sdk'])
   })
 
   test('It holds a prompt from a scheduled trigger', async ($, on) => {
@@ -66,7 +66,7 @@ describe('holding prompts while the note is written', () => {
     await world.clock.settle()
     await submitPerson($, 'third')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:first\n\nsecond\n\nthird'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:first\n\nsecond\n\nthird'])
   })
 
   test('It sends two identical prompts sent on purpose during the write both', async ($, on) => {
@@ -74,15 +74,31 @@ describe('holding prompts while the note is written', () => {
     await submitPerson($, 'continue')
     await submitPerson($, 'continue')
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:continue\n\ncontinue'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:continue\n\ncontinue'])
   })
 
-  test('It joins the held prompt to the note when the note has to be submitted', async ($, on) => {
+  test('It submits the note framed, then the held prompt as the person, when the note has to be submitted', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     world.appendDenied = true
     await submitPerson($, 'next thing')
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}\n\nnext thing`])
+    expect(entered(world)).toEqual([`entered:plugin:${NOTE_MESSAGE}`, 'entered:plugin+asUser:next thing'])
+  })
+
+  test('It holds the person prompt back in the box after the note when the note submitted apart from it is refused', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.appendDenied = true
+    await submitPerson($, 'next thing')
+    world.submitHooks = [
+      () => {
+        world.submitDropped = true
+      },
+      () => {
+        world.submitDropped = false
+      },
+    ]
+    await finishNote()
+    expect([entered(world), world.box.text]).toEqual([[], `${NOTE_MESSAGE}\nnext thing`])
   })
 
   test('It logs a held prompt to debug with the count and no text', async ($, on) => {
@@ -106,7 +122,7 @@ describe('holding prompts while the note is written', () => {
     expect(dropOf(await submitPerson($, 'during compaction'))).toBe(HELD_FOR_HANDOFF)
     finishCompaction()
     await world.clock.settle()
-    expect(entered(world)).toEqual(['entered:plugin:during compaction'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:during compaction'])
   })
 
   test('It never holds a plugin prompt sent while the note is written', async ($, on) => {
@@ -158,7 +174,7 @@ describe('refusing a prompt with attachments or context', () => {
     await world.clock.settle()
     await submitPerson($, 'look', { attachments: IMAGE })
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:plain'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:plain'])
   })
 
   test('It logs a refused prompt to debug without its text', async ($, on) => {

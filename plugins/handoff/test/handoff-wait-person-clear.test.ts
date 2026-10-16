@@ -158,7 +158,7 @@ test('It sends a person prompt held during the silent wait in the cleared-to ses
   await completeTurn($)
   await world.clock.settle()
   expect(world.appended).toEqual([BASE_MESSAGE])
-  expect(world.effects).toContain('entered:plugin:next thing')
+  expect(world.effects).toContain('entered:plugin+asUser:next thing')
 })
 
 test('It shows the waiting status again on a second handoff after the first ended by the person clearing', async ($, on) => {

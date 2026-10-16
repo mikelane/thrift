@@ -62,7 +62,7 @@ test('It submits the held prompt when the box cannot be read to put it back', AC
   world.boxReadDenied = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(entered(world)).toContain('entered:plugin:now ENG-2')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2')
   expect(world.debugLines.join('\n')).toContain('could not refill the prompt box')
 })
 
@@ -131,7 +131,7 @@ test('It sends the held prompt on when the box cannot be read to refill it', ASK
   world.boxReadDenied = true
   await submitPerson($, 'now ENG-2')
   await world.clock.settle()
-  expect(entered(world)).toContain('entered:plugin:now ENG-2')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2')
   expect(world.debugLines.join('\n')).toContain('could not refill the prompt box')
 })
 
@@ -153,7 +153,7 @@ test('It reports a box it cannot read when Send here empties it', ASK, async ($,
   await band.press({ key: 'send-here' })
   await world.clock.settle()
   expect(world.debugLines.join('\n')).toContain('could not empty the prompt box')
-  expect(entered(world)).toContain('entered:plugin:now ENG-2')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2')
 })
 
 test('It sends the held prompt once when Send here is pressed twice', ASK, async ($, on) => {
@@ -163,7 +163,7 @@ test('It sends the held prompt once when Send here is pressed twice', ASK, async
   const band = await mountBand($)
   await Promise.all([band.press({ key: 'send-here' }), band.press({ key: 'send-here' })])
   await world.clock.settle()
-  expect(entered(world).filter(effect => effect.startsWith('entered:plugin:'))).toEqual(['entered:plugin:now ENG-2'])
+  expect(entered(world).filter(effect => effect.startsWith('entered:plugin'))).toEqual(['entered:plugin+asUser:now ENG-2'])
   expect(world.records.filter(record => record.trigger_values.reason === 'send_here')).toHaveLength(1)
 })
 
@@ -174,7 +174,7 @@ test('It sends the held prompt here when /handoff claims the handoff first', ASK
   const band = await mountBand($)
   await Promise.all([band.press({ key: 'handoff-send' }), runCommand($, 'handoff')])
   await world.clock.settle()
-  expect(entered(world)).toContain('entered:plugin:now ENG-2')
+  expect(entered(world)).toContain('entered:plugin+asUser:now ENG-2')
   expect(world.effects.filter(effect => effect === 'fork')).toHaveLength(1)
 })
 

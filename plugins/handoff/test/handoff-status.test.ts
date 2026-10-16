@@ -225,7 +225,7 @@ test('It submits a held prompt in the fresh session when /handoff runs over it',
   await holdPromptThenRunHandoff($, world)
   const clearAt = world.effects.indexOf('clear')
   expect(clearAt).toBeGreaterThan(-1)
-  expect(world.effects.indexOf('entered:plugin:now ENG-2')).toBeGreaterThan(clearAt)
+  expect(world.effects.indexOf('entered:plugin+asUser:now ENG-2')).toBeGreaterThan(clearAt)
 })
 
 test('It puts a held prompt back in the box when /handoff cannot write the note', ASK, async ($, on) => {
@@ -237,7 +237,7 @@ test('It puts a held prompt back in the box when /handoff cannot write the note'
 
 const HELD_PROMPT = 'now ENG-2'
 
-const sentHeldPrompts = (world: World) => world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)
+const sentHeldPrompts = (world: World) => world.effects.filter(effect => effect === `entered:plugin+asUser:${HELD_PROMPT}`)
 
 test('It submits a held prompt exactly once when /handoff runs over it', ASK, async ($, on) => {
   const world = install($, on)
@@ -327,7 +327,7 @@ test('It still hands off a held prompt when the box cannot be read under /handof
   world.boxReadDenied = true
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === `entered:plugin+asUser:${HELD_PROMPT}`)).toHaveLength(1)
 })
 
 test('It still hands off a held prompt when the box refuses the fill under /handoff from the bridge', ASK, async ($, on) => {
@@ -336,7 +336,7 @@ test('It still hands off a held prompt when the box refuses the fill under /hand
   world.fillRefusal = 'no_composer'
   await handoffFromBridge($)
   await world.clock.settle()
-  expect(world.effects.filter(effect => effect === `entered:plugin:${HELD_PROMPT}`)).toHaveLength(1)
+  expect(world.effects.filter(effect => effect === `entered:plugin+asUser:${HELD_PROMPT}`)).toHaveLength(1)
 })
 
 test('It keeps what else the person typed when /handoff from the bridge empties a held prompt', ASK, async ($, on) => {

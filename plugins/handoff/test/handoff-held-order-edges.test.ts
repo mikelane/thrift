@@ -65,7 +65,7 @@ describe('the session ends while the handoff sends', () => {
     ]
     await finishNote()
     expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
-      ['entered:plugin:held one', 'entered:plugin:late'],
+      ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
       1,
     ])
   })
@@ -81,7 +81,7 @@ describe('the session ends while the handoff sends', () => {
     ]
     await finishNote()
     expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
-      ['entered:plugin:held one', 'entered:plugin:late'],
+      ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
       1,
     ])
   })

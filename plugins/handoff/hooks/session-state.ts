@@ -13,7 +13,10 @@ export type ButtonPress = { offer: Offer; button: Button }
 // origin is the engine's origin kind: it decides whether a prompt that cannot be sent may go in this terminal's box.
 // boxText is the text the engine left in the box for a group of several prompts: the last one typed at the composer, not
 // the joined text. A group with no composer prompt in it has none.
-export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind']; boxText?: string }
+// author is required so that who wrote the words is never a default: the plugin's own words (the handoff note) keep the
+// plugin's frame whatever person origin they borrow for the box, and only a person's are read as the person's.
+type HeldPromptAuthor = 'person' | 'plugin'
+export type HeldPrompt = { text: string; isUnattended: boolean; origin: PromptOrigin['kind']; author: HeldPromptAuthor; boxText?: string }
 
 // One origin's held prompts, joined into a single text.
 export type HeldPromptGroup = HeldPrompt

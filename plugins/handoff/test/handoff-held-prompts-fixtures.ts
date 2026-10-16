@@ -91,6 +91,6 @@ export const repeatOnSubmitAfter = ($: Engine, world: World, submitsBefore: numb
   return outcome
 }
 
-export const personGroup = { text: 'person says', isUnattended: false, origin: 'composer' } satisfies HeldPrompt
+export const personGroup = { text: 'person says', isUnattended: false, origin: 'composer', author: 'person' } satisfies HeldPrompt
 
-export const scheduledGroup = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger' } satisfies HeldPrompt
+export const scheduledGroup = { text: 'nightly job', isUnattended: true, origin: 'scheduled-trigger', author: 'person' } satisfies HeldPrompt
