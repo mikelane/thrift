@@ -233,7 +233,6 @@ ts_before() {
   [[ -n "$1" && -n "$2" ]] || return 1
   LC_ALL=C awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'
 }
-turn_origins() { sed -n 's/.*cc_turn_origin=\([a-z_-]*\).*/\1/p' "$(debug_log_of "$1")"; }
 
 # A finished turn leaves a "✻ <verb> for <n>s" line behind.
 turns_done() { pane_count "$1" '^✻ [^(]+ for ([0-9]+m )?[0-9]+s'; }
