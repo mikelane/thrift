@@ -12,8 +12,10 @@ specific to this repo.
 - Tests for the repo's own CI live in `.github/tests/`, not under a plugin. `canary-report.sh`
   pulls the canary step scripts out of `ci.yml` and runs them, with `scripts/check.sh`, against stub
   `gh`, `claude` and `tsc`. It needs `jq` and `openssl` and runs on bash 3.2 and 5. Pass part of a
-  test name to run only matching tests: `.github/tests/canary-report.sh [name-fragment]`. It runs
-  every `.github/tests/*.test.sh`, so a new test file needs no wiring. The shared code sits in the
+  test function's name (not a file name) to run only matching tests:
+  `.github/tests/canary-report.sh [name-fragment]`. A fragment that matches no test exits 1. It runs
+  every `.github/tests/*.test.sh`, so a new test file needs no wiring; each ends with
+  `run_tests "$@"` so it honors the fragment. The shared code sits in the
   `*-lib.sh` and `*.awk` files beside them.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.

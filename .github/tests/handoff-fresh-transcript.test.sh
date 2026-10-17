@@ -1,18 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # scripts/live/handoff/common.sh: fresh_transcript_path finds the fresh session's transcript beside the
 # old one, not in subagent transcripts or other projects. Hermetic: CLAUDE_CONFIG_DIR is a temp dir.
-set -euo pipefail
-SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/live" && pwd)
+# Usage: handoff-fresh-transcript.test.sh [name-fragment]   (runs the tests whose name contains it)
+# shellcheck source=canary-report-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 # shellcheck source=/dev/null
-source "$SCRIPTS/handoff/common.sh"
-failed=0 total=0
+source "$REPO_ROOT/scripts/live/handoff/common.sh"
 
 NOTE='{"type":"user","message":{"content":"Handoff from the previous session (old-1), written by"}}'
 
-report() {
-  total=$((total + 1))
-  if [[ "$2" == "$3" ]]; then echo "PASS $1"; else echo "FAIL $1: got [$2] want [$3]"; failed=$((failed + 1)); fi
-}
+report() { [[ "$2" == "$3" ]] || fail "$1: got [$2] want [$3]"; }
 
 # setup_layout <root>: the old session, the fresh session, and two decoys that quote the note line.
 setup_layout() {
@@ -67,9 +64,4 @@ test_excludes_the_old_session_file() {
   report test_excludes_the_old_session_file "$got" ""
 }
 
-test_returns_the_fresh_sibling_not_the_decoys
-test_ignores_subagent_transcripts
-test_returns_nothing_when_the_old_transcript_is_missing
-test_excludes_the_old_session_file
-echo "$((total - failed)) of $total passed"
-[[ "$failed" == 0 ]]
+run_tests "$@"

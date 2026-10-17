@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The entry point, canary-report.sh, run over a scratch directory of stand-in test files.
 # Usage: canary-entry-point.test.sh [name-fragment]   (runs the tests whose name contains it)
+# shellcheck disable=SC2034 # EXIT_CODE is read by assert_exit_code in canary-report-lib.sh
 # shellcheck source=canary-report-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 
@@ -89,6 +90,18 @@ test_entry_point_fails_when_a_test_file_reports_no_tests_run() {
   run_entry_point
   assert_exit_code 1
   assert_out_has 'a.test.sh ran no tests'
+}
+
+# Every test file honors the name fragment: a file that ignores it runs all its tests under a fragment
+# meant for another file, and the entry point cannot tell (#78).
+test_every_test_file_exits_4_for_a_name_fragment_that_matches_none_of_its_tests() {
+  local test_file status ignoring_files=''
+  for test_file in "$HARNESS_DIR"/*.test.sh; do
+    status=0
+    "$BASH" "$test_file" zzz-matches-no-test-anywhere > /dev/null 2>&1 || status=$?
+    [[ "$status" == 4 ]] || ignoring_files+=" ${test_file##*/}(exit $status)"
+  done
+  [[ -z "$ignoring_files" ]] || fail "these test files do not exit 4 for a fragment that matches none of their tests:$ignoring_files"
 }
 
 run_tests "$@"
