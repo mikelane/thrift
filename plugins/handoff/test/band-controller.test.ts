@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import { WRITING_STATUS } from '../hooks/band-text'
 import { bash, buttonLabels, completeTurn, install, mountBand, runCommand, startSession, startTurn, writingTheNote } from './helpers'
 import { ASK, bandAfterFinishedTask, weakBand } from './band-turn-fixtures'
 import { shownText } from './wait-for-turn-helpers'
@@ -20,7 +21,7 @@ describe('drawBand', () => {
     await writingTheNote($, on)
     const band = await mountBand($)
     expect(await buttonLabels(band)).toEqual([])
-    expect(await shownText(band)).toHaveLength(1)
+    expect(await shownText(band)).toEqual([WRITING_STATUS])
   })
 
   test('It draws a button for each choice in an offer', ASK, async ($, on) => {
@@ -68,6 +69,7 @@ describe('redrawBand', () => {
     await runCommand($, 'handoff')
     await world.clock.settle()
     expect(world.debugLines.join('\n')).toContain('could not redraw the band')
+    expect(world.effects).toContain('fork')
   })
 })
 

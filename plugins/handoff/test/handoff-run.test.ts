@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { ALREADY_PENDING, NO_HANDOFF_MESSAGE } from '../hooks/handoff-note'
-import { install, lastRecord, runCommand, startSession, writingTheNote } from './helpers'
+import { ALREADY_PENDING, NO_HANDOFF_MESSAGE, NO_REPLY_MESSAGE } from '../hooks/handoff-note'
+import { entered, install, lastRecord, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
 
 describe('scheduleHandoff', () => {
   test('It starts the handoff in a later tick, not inside the command', async ($, on) => {
@@ -24,8 +24,9 @@ describe('scheduleHandoff', () => {
 describe('settleHandoff', () => {
   test('It ends the holding of prompts typed while the note was written', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'next thing')
     await finishNote()
-    expect(world.effects).toContain('clear')
+    expect(entered(world)).toEqual(['entered:plugin+asUser:next thing'])
     expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
   })
 })
@@ -77,6 +78,7 @@ describe('abandonHandoff', () => {
     await startSession($)
     await runCommand($, 'handoff')
     await world.clock.settle()
+    expect(world.effects).toContain(`toast:${NO_REPLY_MESSAGE}`)
     expect(world.effects).not.toContain('clear')
     expect(world.records).toHaveLength(1)
   })
@@ -87,8 +89,9 @@ describe('runHandoff', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()
     const next = await runCommand($, 'handoff')
-    expect(JSON.stringify(next)).not.toContain(ALREADY_PENDING)
+    expect(JSON.stringify(next)).toContain('Writing a handoff for a fresh session...')
     await world.clock.settle()
+    expect(world.forkPrompts).toHaveLength(2)
   })
 })
 
