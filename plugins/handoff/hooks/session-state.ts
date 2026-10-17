@@ -70,6 +70,7 @@ export type SessionState = Settings & {
   seenRefs: Set<string>
   urlPrefixes: Set<string>
   backgroundTasks: Set<string>
+  runningSubagentTurns: Set<string>
   hasFinishedTask: boolean
   isTurnUnattended: boolean
   resubmittedPrompts: HeldPrompt[]
@@ -99,6 +100,7 @@ export const createState = (settings: Settings): SessionState => ({
   seenRefs: new Set(),
   urlPrefixes: new Set(),
   backgroundTasks: new Set(),
+  runningSubagentTurns: new Set(),
   hasFinishedTask: false,
   isTurnUnattended: false,
   resubmittedPrompts: [],
@@ -124,6 +126,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.seenRefs.clear()
   state.urlPrefixes.clear()
   state.backgroundTasks.clear()
+  state.runningSubagentTurns.clear()
   state.hasFinishedTask = false
   state.isTurnUnattended = false
   state.resubmittedPrompts = []
@@ -266,9 +269,18 @@ export const startMainTurn = (state: SessionState, turnText: string): void => {
 // A subagent's or teammate's turn is work the note missed, whoever started it, so it counts toward both lines. It is not a
 // main-thread turn: only the main thread's turn.complete clears isTurnRunning, so setting it here would hold a handoff for
 // good. Nor can it be one of the plugin's own submissions, which only start main-thread turns, so it leaves the queue and
-// the turn's origin alone even when its prompt quotes a queued one.
-export const startSubagentTurn = (state: SessionState): void => {
+// the turn's origin alone even when its prompt quotes a queued one. Its id is kept until it ends, so a note begun while it
+// runs counts it as beginNoteWindow counts a running main turn.
+export const startSubagentTurn = (state: SessionState, turnId: string): void => {
+  state.runningSubagentTurns.add(turnId)
   noteTurnStarted(state)
+}
+
+// A subagent turn whose start this plugin did not hear (its spawn was nested in a hook) ends with nothing to remove.
+// SAFETY: the set never feeds the wait for a turn, so an entry left behind costs at most a spurious turn-after-note line,
+// never a held handoff.
+export const endSubagentTurn = (state: SessionState, turnId: string): void => {
+  state.runningSubagentTurns.delete(turnId)
 }
 
 // A turn in the session the person cleared to is not one the note missed, so it does not count.
@@ -303,9 +315,10 @@ export const removeResubmittedPrompt = (state: SessionState, prompt: HeldPrompt)
   if (index !== -1) state.resubmittedPrompts.splice(index, 1)
 }
 
-// The note's fork sees the conversation only up to here, so a turn already running now is missing from the note too.
+// The note's fork sees the conversation only up to here, so a turn already running now, a subagent's included, is missing
+// from the note too.
 export const beginNoteWindow = (state: SessionState): void => {
-  state.hasTurnAfterNote = state.isTurnRunning
+  state.hasTurnAfterNote = state.isTurnRunning || state.runningSubagentTurns.size > 0
 }
 
 // Resolves when the turn-end waiter is released. The caller re-checks isTurnRunning after each wake-up.

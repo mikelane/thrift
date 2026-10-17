@@ -336,3 +336,34 @@ test('It keeps waiting for the main turn when a subagent turn starts and ends in
   await endTurn($, world, { agentId: 'sub1' })
   expect(world.effects).not.toContain('clear')
 })
+
+// A subagent turn already running when the note begins is missing from the note, as a main turn running then is.
+const subagentTurnRunningWhenTheNoteIsWritten = async ($: Parameters<typeof startTurn>[0], on: Parameters<typeof install>[1]) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  return world
+}
+
+test('It adds the turn-after-note line when a subagent turn was already running as the note began', async ($, on) => {
+  const world = await subagentTurnRunningWhenTheNoteIsWritten($, on)
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+})
+
+test('It leaves the line out when a subagent turn ended before the note began', async ($, on) => {
+  const world = install($, on)
+  const fork = holdFork(world)
+  await startSession($)
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 'sub-t1', reason: 'answer', agentId: 'sub1' })
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  fork.release(answered('The handoff note.'))
+  await world.clock.settle()
+  expect(world.appended).toEqual([BASE_MESSAGE])
+})

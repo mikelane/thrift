@@ -28,6 +28,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     seenRefs: new Set(),
     urlPrefixes: new Set(),
     backgroundTasks: new Set(),
+    runningSubagentTurns: new Set(),
     hasFinishedTask: false,
     isTurnUnattended: false,
     resubmittedPrompts: [],

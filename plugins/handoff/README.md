@@ -70,7 +70,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       the debug log when it begins and when it ends. The waiting text says "continues", not "clears",
       because the handoff can still stop after the wait (step 5).
       Only a main-thread turn counts as running: a subagent's turn never holds the handoff, though one that
-      starts after the note still adds the "turn ran" line.
+      starts after the note, or is still running when the note begins, still adds the "turn ran" line.
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. A
       successful one writes no record of its own. The record that ends the handoff carries

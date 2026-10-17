@@ -101,6 +101,7 @@ import {
   resetForNewSession,
   startMainTurn,
   startSubagentTurn,
+  endSubagentTurn,
   takeHeldPrompts,
   isCollectingHeldPrompts,
   takeLateArrivalsOrEndSending,
@@ -1200,13 +1201,16 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) startMainTurn(state, e.text)
-    else startSubagentTurn(state)
+    else startSubagentTurn(state, e.turnId)
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId !== undefined) return result
+    if (e.agentId !== undefined) {
+      endSubagentTurn(state, e.turnId)
+      return result
+    }
     const hasFinishedTask = state.hasFinishedTask
     state.hasFinishedTask = false
     endMainTurn(state)
