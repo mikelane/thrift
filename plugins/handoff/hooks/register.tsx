@@ -103,6 +103,7 @@ import {
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
+import { waitStartedLine } from './wait-started-line'
 
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
@@ -331,15 +332,6 @@ const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
   await redrawBand($, state, WAITING)
   $.ui.toast(WAITING_STATUS)
 }
-
-// Once a session end decided the outcome, no clear will run: the wait is for delivering the note or for stopping.
-const WAIT_STARTED_LINES = {
-  none: 'waiting for a running turn to end before the handoff goes on',
-  cleared_by_person: 'waiting for a running turn to end before delivering the note',
-  other: 'waiting for a running turn to end before stopping the handoff',
-} as const satisfies Record<'none' | NonNullable<SessionState['sessionEndBeforeClear']>, string>
-
-const waitStartedLine = (state: SessionState): string => WAIT_STARTED_LINES[state.sessionEndBeforeClear ?? 'none']
 
 // Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
 const CLEARED_BY = {
