@@ -97,8 +97,10 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         takes effect. Such a turn is a late turn: it adds the "A turn ran in the previous session"
         line in step 6 and sets `late_turn` on the `cleared` record. The plugin reports a late turn; it
         does not prevent one. A person's `/clear` queued ahead of the plugin's counts too: the plugin
-        sees it through its own `command.run` hook, which tells the plugin's own clear apart by the
-        origin the engine stamps on it (`{ kind: 'plugin', name: 'handoff' }`). The session end that
+        sees it through its own `command.run` hook. On 2.1.302 the engine does not run that hook for the
+        plugin's own clear (it logs a re-entry skip), so the hook sees only other clears. The hook
+        still ignores a clear whose origin is `{ kind: 'plugin', name: 'handoff' }`, as a safeguard in
+        case an engine release stops skipping it. The session end that
         clear causes is not taken for the plugin's, nor is the end of one that was still running when
         the plugin issued its clear, and a turn in the session either clear made is a late turn. The
         plugin's clear then wipes that session, and the record says `handoff`. A `/clear` that another
@@ -496,9 +498,11 @@ by hand on 2.1.299:
   Both clears run, the `cleared` record has `cleared_by: handoff` and `compacted_before_clear:
   true`, and the note lands in the final session. It leaves an empty session in the resume list.
   The order varies: the 2.1.299 hand run and the first 2.1.302 harness run put the person's clear
-  after the handoff's, but one run on 2.1.302 put it about 75 ms ahead, just as the compaction ended
-  (issue #43, "Run A"). The record read the same either way. Whether the typed command lands inside
-  the compaction rather than just after it is still open (#90).
+  after the handoff's, but one run on 2.1.302 put it about 75 ms ahead (the person's clear reached the hook at .936, four
+  milliseconds after the handoff queued its own at .932; issue #43, "Run A"). The record read the same either way. The typed command was
+  sent before the compaction finished: the new arrival check in `clear-resume-during-handoff`
+  passed for both the `/clear` and the `/resume` on 2.1.302 (PR #101; issue #43, "Post-refactor
+  live runs").
 - `/clear` or `/resume` typed during the compaction or the wait (`clear-resume-during-handoff`, 28
   checks, 2.1.302; issue #43, "#67 scenarios" and "Run A"): exactly one record ends the handoff,
   it names the session the handoff started in with `effective_mode: ask`, no `handoff_failed`
@@ -507,7 +511,8 @@ by hand on 2.1.299:
   [What has not been verified](#what-has-not-been-verified)).
 - After an abandoned handoff the held prompts return to the box in typing order, before a draft that
   is still unsent, and the draft is not sent (`restore-order-after-abandon`, 4 checks, 2.1.302;
-  issue #43, "#67 scenarios").
+  issue #43, "#67 scenarios"). It passed twice more on the refactored plugin (PR #101; issue #43,
+  "Post-refactor live runs").
 - The handoff's own `/clear` carries the origin `handoff`. The engine skips the plugin's own
   `command.run` hook for it with a re-entry line, while other plugins' hooks still see it. A
   person's `/clear` does reach the hook, with a composer origin; `session.end` fires inside its
