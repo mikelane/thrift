@@ -89,14 +89,14 @@ test('It offers no handoff button while background work runs', ASK, async ($, on
   expect(await labelsOf(band)).toEqual(['Compact', 'Not now'])
 })
 
-test('It says background work is still running in that band', ASK, async ($, on) => {
+test('It says only the size in that band, as the question already names the background work', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)
   await bash($, world, 'sleep 100', { result: { backgroundTaskId: 'bg1' } })
   await completeTurn($)
   const band = await mountBand($)
-  expect(await band.find({ text: 'Context is 200k and background work is still running.' })).toBeDefined()
+  expect(await band.find({ text: 'Context is 200k.' })).toBeDefined()
 })
 
 test('It says only the size in a plain weak band', ASK, async ($, on) => {
