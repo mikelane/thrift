@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { FINAL_MESSAGES } from '../hooks/handoff-note'
-import { install, runCommand, startSession, submitPerson, writingTheNote } from './helpers'
+import { install, startSession, submitPerson, writingTheNote } from './helpers'
 
 describe('debug', () => {
   test('It starts every debug line with the plugin name', async ($, on) => {
@@ -9,13 +9,6 @@ describe('debug', () => {
     world.registerThrows = true
     await startSession($)
     expect(world.debugLines.every(line => line.startsWith('handoff: '))).toBe(true)
-  })
-
-  test('It writes a line to the debug log when a registration is refused', async ($, on) => {
-    const world = install($, on)
-    world.registerThrows = true
-    await startSession($)
-    expect(world.debugLines).toEqual(['handoff: could not register /handoff: HooksError: no implementation for command.register'])
   })
 })
 
@@ -55,11 +48,17 @@ describe('registerHandoffCommand', () => {
     expect(world.effects.slice(world.effects.indexOf('clear'))).toContain('register:handoff')
   })
 
-  test('It does not register /handoff when the registration is refused', async ($, on) => {
+  test('It writes a line to the debug log when a registration is refused', async ($, on) => {
     const world = install($, on)
     world.registerThrows = true
     await startSession($)
-    await runCommand($, 'handoff')
-    expect(world.effects).not.toContain('register:handoff')
+    expect(world.debugLines).toEqual(['handoff: could not register /handoff: HooksError: no implementation for command.register'])
+  })
+
+  test('It still delivers the note when registering /handoff after the clear is refused', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.registerThrows = true
+    await finishNote()
+    expect(world.effects).toContain(`toast:${FINAL_MESSAGES.appended('old-session')}`)
   })
 })
