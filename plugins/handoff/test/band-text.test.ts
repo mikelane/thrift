@@ -14,7 +14,7 @@ const messageCases = [
   ],
   [
     { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true },
-    'Context is 190k and background work is still running.',
+    'Context is 190k.',
   ],
   [
     { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: false },

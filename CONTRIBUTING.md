@@ -21,7 +21,7 @@ You need Claude Code. There is nothing else to install yet.
 
     git clone https://github.com/mikelane/thrift
     cd thrift
-    claude --plugin-dir plugins/<name>     # run a plugin in a session; saves hot-reload
+    claude --plugin-dir plugins/<name>     # edits apply after /reload-plugins
 
 [CLAUDE.md](CLAUDE.md) lists the conventions every plugin follows: layout, hooks that never
 block a turn, and the shared decision log.

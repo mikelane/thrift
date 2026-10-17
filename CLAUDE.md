@@ -55,8 +55,10 @@ plugins/<name>/
 - `/clear` fires `session.end` with `reason: 'clear'`, and no `session.start` follows. State
   that must outlive a clear can't sit in the end-of-session reset, and anything registered at
   `session.start` has to be registered again by the plugin.
-- `$.state` values used for drawing are atoms declared in `types/index.d.ts`. Module variables
-  reset on every hot reload.
+- `$.state` values used for drawing are atoms declared in `types/index.d.ts`. Module variables reset
+  when the engine restarts the plugin (a `/config` change did on 2.1.299). Editing a `--plugin-dir`
+  file does not reload the plugin; the change waits for `/reload-plugins`, which kept the plugin's
+  state.
 
 ## Shared conventions
 

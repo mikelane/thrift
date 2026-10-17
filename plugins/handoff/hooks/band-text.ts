@@ -96,11 +96,11 @@ const question = ({ signal, hasHeldPrompt, isBusy }: Offer): string => {
   return 'Compact, or hand off to a fresh session?'
 }
 
-const situation = ({ signal, contextTokens, hasHeldPrompt, isBusy }: Offer): string => {
+const situation = ({ signal, contextTokens, hasHeldPrompt }: Offer): string => {
   const context = `Context is ${formatTokens(contextTokens)}`
   if (hasHeldPrompt) return `${context} and this prompt starts new work.`
   if (signal === 'strong') return `${context} and the task just finished.`
-  return isBusy ? `${context} and background work is still running.` : `${context}.`
+  return `${context}.`
 }
 
 export const bandMessage = (offer: Offer): string =>
