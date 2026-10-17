@@ -563,7 +563,7 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 |---|---|
 | `hooks/register.tsx` | Engine wiring. A function that takes `$` is a top-level function of this file, or a `function` declaration in a module it imports (a `const` arrow in another module is refused). |
 | `hooks/engine-log.tsx` | `debug` and `logFailure`: the debug-log line and the guard for background work, shared by the modules that take `$` |
-| `hooks/band-controller.tsx` | The band: the offer atom, putting it up and taking it down, its buttons and what a press does (its `PressActions` reach the handoff and the compaction that stay in `register.tsx`), and drawing it |
+| `hooks/band-controller.tsx` | The band: the offer atom, putting it up and taking it down, its buttons and what a press does (its `PressActions`, built in `register.tsx`, reach the handoff and the compaction without importing `handoff-run.tsx`, which imports this module), and drawing it |
 | `hooks/handoff-run.tsx` | A handoff's run: claiming it (`scheduleHandoff`), writing the note, waiting for the clear window, and abandoning with a reason |
 | `hooks/compaction.tsx` | `scheduleCompaction`: the compaction a weak signal or the Compact button asks for, and its record |
 | `hooks/handoff-command.tsx` | `startHandoffCommand`: the reply to `/handoff` |

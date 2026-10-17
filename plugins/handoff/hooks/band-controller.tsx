@@ -26,8 +26,8 @@ import { bandButtons, busyRefusalTrigger, type Button } from './signals'
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 
-// What a press can start, with $ already bound: the engine follows $ past an import only into a function declaration,
-// so register.tsx binds it. Both stay there, where the handoff and the compaction they schedule are run.
+// What a press can start, with $ already bound. handoff-run.tsx imports this module, so importing scheduleHandoff here
+// would make a cycle; register.tsx builds both actions from handoff-run.tsx and compaction.tsx instead.
 export type PressActions = {
   scheduleHandoff: (state: SessionState, request: HandoffRequest) => boolean
   scheduleCompaction: (state: SessionState, trigger: Trigger) => boolean
