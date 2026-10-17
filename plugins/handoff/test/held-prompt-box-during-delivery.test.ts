@@ -80,6 +80,37 @@ describe('the prompt box while the held prompts are being delivered', () => {
     expect(entered(world)).toEqual(['entered:plugin+asUser:held one', 'entered:plugin+asUser:five', 'entered:plugin+asUser:fivesix'])
   })
 
+  // `held one`, `five`, then `remote` are submitted; `fivesix` is typed while `remote` goes in, after `five` was sent and the
+  // delivery tried to take its copy out of the box.
+  const typingWhileRemoteGoesIn = async ($: Kit, on: On, { isBoxFillRefused }: { isBoxFillRefused: boolean }) => {
+    const { world, finishDelivery } = await typingDuringDelivery($, on, LATE)
+    await submitPerson($, 'remote', { kind: 'bridge' })
+    world.isFillRefusedOverText = isBoxFillRefused
+    world.submitHooks = [undefined, undefined, () => void submitPerson($, 'fivesix')]
+    await finishDelivery()
+    return world
+  }
+
+  test('It keeps the start of a prompt typed after the delivery took the uncleared one out of the box', async ($, on) => {
+    const world = await typingWhileRemoteGoesIn($, on, { isBoxFillRefused: false })
+    expect(entered(world)).toEqual([
+      'entered:plugin+asUser:held one',
+      'entered:plugin+asUser:five',
+      'entered:plugin+asUser:remote',
+      'entered:plugin+asUser:fivesix',
+    ])
+  })
+
+  test('It holds a prompt without the leftover when the delivery could not take the leftover out of the box', async ($, on) => {
+    const world = await typingWhileRemoteGoesIn($, on, { isBoxFillRefused: true })
+    expect(entered(world)).toEqual([
+      'entered:plugin+asUser:held one',
+      'entered:plugin+asUser:five',
+      'entered:plugin+asUser:remote',
+      'entered:plugin+asUser:six',
+    ])
+  })
+
   test('It leaves exactly one copy of a prompt typed during a restore in the box', async ($, on) => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'held one')

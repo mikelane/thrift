@@ -322,16 +322,18 @@ const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPl
 }
 
 // Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
-// that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
-const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
+// that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays. A copy taken
+// out is no longer a leftover the next prompt can be joined to.
+const emptySentPromptFromBox = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<void> => {
   const copies = boxCopiesOf(prompt)
   if (copies.length === 0) return
   try {
     const draft = (await $.prompt.read()).text
-    const remainingDraft = copies.map(copy => withoutPrompt(draft, copy)).find(remaining => remaining !== null)
-    if (remainingDraft === undefined) return
-    const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
-    if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
+    const removedCopy = copies.find(copy => withoutPrompt(draft, copy) !== null)
+    if (removedCopy === undefined) return
+    const emptied = await $.prompt.fill({ text: withoutPrompt(draft, removedCopy) ?? draft, mode: 'replace' })
+    if (emptied.isFilled) noteBoxCleared(state, removedCopy)
+    else debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
@@ -385,7 +387,7 @@ const restorePrompt = async (
 ): Promise<Carried> => {
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
   const carried = await submitOrKeepInTranscript($, state, prompt)
-  if (carried === 'submitted') await emptySentPromptFromBox($, prompt)
+  if (carried === 'submitted') await emptySentPromptFromBox($, state, prompt)
   return carried
 }
 
@@ -532,7 +534,7 @@ const sendOrKeepInBox = async (
   { placement = 'before_draft', notice, holdBack = false }: SendOptions = {},
 ): Promise<Carried> => {
   if (!holdBack && (await submitEntered($, state, prompt, 'could not send the prompt', speaksForPerson(prompt)))) {
-    await emptySentPromptFromBox($, prompt)
+    await emptySentPromptFromBox($, state, prompt)
     return 'submitted'
   }
   if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
