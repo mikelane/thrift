@@ -90,5 +90,8 @@ export function decideDuringHandoff($: EngineInterface, state: SessionState, e: 
   }
   if (action === 'refuse') return refuseDuringHandoff($, state, e)
   if (action === 'hold') return holdForHandoff($, state, e)
-  return undefined
+  if (action === 'proceed') return undefined
+  // A new plan value fails to compile here instead of falling through as 'proceed'.
+  const unhandled: never = action
+  return unhandled
 }
