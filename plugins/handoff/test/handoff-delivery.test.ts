@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { entered, lastRecord, submitPerson, writingTheNote } from './helpers'
-import { NOTE_MESSAGE } from './handoff-held-prompts-fixtures'
+import { dropOf, entered, lastRecord, startTurn, submitPerson, writingTheNote } from './helpers'
+import { ASK, HELD_FOR_HANDOFF, NOTE_MESSAGE, unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 
 const HELD_BACK_PERSON = 'log:Your prompt was held back after the handoff note, so read the note first. Here it is:\nnext thing'
 
@@ -108,6 +108,22 @@ describe('restoreLateArrivals', () => {
     expect(entered(world)).toEqual(['entered:plugin:nightly job', 'entered:plugin:late job'])
   })
 
+  test('It puts a person prompt that arrives mid-restore in the box behind a draft the person typed since', async ($, on) => {
+    const { world, failNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    let arrival: Promise<unknown> = Promise.resolve()
+    world.submitHooks = [
+      () => {
+        arrival = submitPerson($, 'late typed').then(() => {
+          world.box = { text: 'my draft', cursor: 8 }
+        })
+      },
+    ]
+    await failNote()
+    await arrival
+    expect(world.box.text).toBe('my draft\nlate typed')
+  })
+
   test('It puts a person prompt that arrives mid-restore in the box behind the held one', async ($, on) => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'held one')
@@ -163,5 +179,34 @@ describe('continueInFreshSession', () => {
     world.isFillRefusedOverText = true
     await finishNote()
     expect(world.effects).toContain(HELD_BACK_PERSON)
+  })
+})
+
+describe('the late-turn check in continueInFreshSession', () => {
+  test('It leaves the turn-after-note line out when a turn starts while /handoff is being registered after the clear', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      await startTurn($, 'queued before the clear ran')
+    }
+    await finishNote()
+    expect(world.appended.join('\n')).not.toContain('A turn ran in the previous session while or after this note was written')
+  })
+})
+
+describe('releasing the carried prompt in continueInFreshSession', () => {
+  test('It holds a repeat of the carried scheduled prompt as a new prompt once the note carried it along', ASK, async ($, on) => {
+    const { world, finishNote } = await unattendedHandoffWriting($, on)
+    world.appendDenied = true
+    await submitPerson($, 'person says')
+    let repeat: Promise<unknown> = Promise.resolve()
+    world.submitHooks = [
+      undefined,
+      () => {
+        repeat = submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
+      },
+    ]
+    await finishNote()
+    expect(dropOf(await repeat)).toBe(HELD_FOR_HANDOFF)
   })
 })
