@@ -33,6 +33,8 @@ export type World = {
   onAgentList: (() => Promise<void>) | undefined
   // Runs inside each write of the band's offer, so a test can act while the plugin awaits that write.
   onOfferWrite: ((value: unknown) => Promise<void>) | undefined
+  // Runs inside each prompt.fill, before it changes the box, so a test can hold the fill while the plugin awaits it.
+  onFill: (() => Promise<void>) | undefined
   // Runs when a clear is issued, before it ends the session: what the engine ran ahead of it, in the order it ran.
   onClearIssued: (() => Promise<void>) | undefined
   // Runs after a clear ended the session, before the clear's run returns: what the engine ran next, in the fresh session.
@@ -138,7 +140,8 @@ export const installPromptMocks = (on: On, world: World) => {
     if (world.boxReadDenied) return { deny: 'no box' }
     return ok(world.fillRefusal === undefined ? world.box : { text: '', cursor: 0 })
   })
-  on('prompt.fill', (_$, e) => {
+  on('prompt.fill', async (_$, e) => {
+    await world.onFill?.()
     if (world.isFillRefusedOverText) return { isFilled: false, refusal: 'dialog' }
     if (world.fillRefusal !== undefined) return { isFilled: false, refusal: world.fillRefusal }
     world.effects.push(`fill:${e.text}`)

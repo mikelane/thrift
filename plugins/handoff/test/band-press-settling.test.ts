@@ -7,7 +7,6 @@ import {
   buttonLabels,
   clears,
   completeTurn,
-  dropOf,
   growTo200k,
   install,
   mountBand,
@@ -16,19 +15,9 @@ import {
   startTurn,
   submitPerson,
 } from './helpers'
-import { ASK, weakBand, BUSY_REFUSAL } from './band-turn-fixtures'
+import { ASK, heldPromptBand, weakBand, BUSY_REFUSAL } from './band-turn-fixtures'
 
 const BUSY_START = { result: { backgroundTaskId: 'bg1' } }
-
-const heldBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
-  world.branch = 'alice/eng-1-start'
-  await growTo200k($, world)
-  await submitPerson($, 'start on ENG-1')
-  const dropped = await submitPerson($, 'now ENG-2')
-  expect(dropOf(dropped)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
-  await world.clock.settle()
-  return mountBand($)
-}
 
 const acted = (world: Parameters<typeof growTo200k>[1]) =>
   world.records.filter(r => r.trigger_values.point === 'button').map(r => `${r.action}:${String(r.trigger_values.reason ?? '')}`)
@@ -55,7 +44,7 @@ test('It runs only one of Hand off and Compact pressed together at idle', ASK, a
 test('It does not leave a held-prompt band up after the held prompt was replaced and a busy refusal ran', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
-  const band = await heldBand($, world)
+  const band = await heldPromptBand($, world)
   await notify($, 'bgX')
   await startTurn($)
   await band.press({ key: 'handoff-send' })
@@ -70,7 +59,7 @@ test('It does not leave a held-prompt band up after the held prompt was replaced
 test('It does not record a strong signal with background work running for a refused held press', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
-  const band = await heldBand($, world)
+  const band = await heldPromptBand($, world)
   await bash($, world, 'npm run dev', BUSY_START)
   await band.press({ key: 'handoff-send' })
   expect(world.records.at(-1)).toMatchObject({ trigger_values: { reason: 'background_busy', is_background_busy: true } })
@@ -120,7 +109,7 @@ for (const shape of SHAPES) {
 test('It does not redraw the old held offer when the band was taken down since the press', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
-  const band = await heldBand($, world)
+  const band = await heldPromptBand($, world)
   await notify($, 'bgX')
   await startTurn($)
   await band.press({ key: 'handoff-send' })
