@@ -32,12 +32,17 @@ export const heldPromptBand = async ($: Engine, world: World) => {
   return mountBand($)
 }
 
-// Holds every prompt.fill until the returned release is called.
+// Holds every prompt.fill until the returned release is called; fills after the release run at once.
 export const holdFill = (world: World) => {
-  const held: { release: () => void } = { release: () => undefined }
-  world.onFill = () =>
-    new Promise<void>(resolve => {
-      held.release = resolve
-    })
-  return held
+  const gate: { open: () => void } = { open: () => undefined }
+  const opened = new Promise<void>(resolve => {
+    gate.open = resolve
+  })
+  world.onFill = () => opened
+  return {
+    release: () => {
+      world.onFill = undefined
+      gate.open()
+    },
+  }
 }

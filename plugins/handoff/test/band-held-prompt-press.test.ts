@@ -18,6 +18,8 @@ import {
 } from './helpers'
 import { ASK, HELD_PROMPT as HELD, heldPromptBand, holdFill, weakBand } from './band-turn-fixtures'
 
+const TAKEDOWN_WRITE = JSON.stringify({ shape: 'offer-has-held-prompt', value: null })
+
 test('It keeps a held-prompt band up when a task notification starts a turn', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
@@ -111,7 +113,6 @@ describe('pressHeldPromptButton', () => {
     const world = install($, on)
     await startSession($)
     const band = await heldPromptBand($, world)
-    await world.clock.settle()
     expect(world.box.text).toContain(HELD)
     await band.press({ key: 'send-here' })
     expect(world.box.text).not.toContain(HELD)
@@ -121,7 +122,6 @@ describe('pressHeldPromptButton', () => {
     const world = install($, on)
     await startSession($)
     const band = await heldPromptBand($, world)
-    await world.clock.settle()
     expect(world.box.text).toContain(HELD)
     await band.press({ key: 'handoff-send' })
     expect(world.box.text).not.toContain(HELD)
@@ -132,10 +132,11 @@ describe('pressHeldPromptButton', () => {
     await startSession($)
     const band = await heldPromptBand($, world)
     const fill = holdFill(world)
-    void band.press({ key: 'send-here' })
+    const pressed = band.press({ key: 'send-here' })
     await world.clock.settle()
     expect(entered(world).filter(effect => effect.includes(HELD))).toHaveLength(0)
     fill.release()
+    await pressed
     await world.clock.settle()
     expect(entered(world).filter(effect => effect.includes(HELD))).toHaveLength(1)
   })
@@ -145,8 +146,8 @@ describe('pressHeldPromptButton', () => {
     await startSession($)
     const band = await heldPromptBand($, world)
     const boxHeldPromptAtTakedown: boolean[] = []
-    world.onOfferWrite = async () => {
-      boxHeldPromptAtTakedown.push(world.box.text.includes(HELD))
+    world.onOfferWrite = async value => {
+      if (JSON.stringify(value) === TAKEDOWN_WRITE) boxHeldPromptAtTakedown.push(world.box.text.includes(HELD))
     }
     await band.press({ key: 'send-here' })
     expect(boxHeldPromptAtTakedown).toEqual([true])

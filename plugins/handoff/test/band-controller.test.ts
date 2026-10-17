@@ -71,15 +71,14 @@ describe('offerBand', () => {
     expect(world.offerWrites).toEqual([FRESH_OFFER])
     expect(world.records.map(record => record.action)).toEqual(['advised'])
   })
-})
 
-describe('offerBand failures', () => {
   test('It writes no takedown for a band whose offer was never stored', ASK, async ($, on) => {
     const world = install($, on)
     await startSession($)
     world.stateSetThrows = true
     await growTo200k($, world)
     await completeTurn($)
+    expect(world.records.at(-1)).toMatchObject({ action: 'none', trigger_values: { reason: 'band_failed' } })
     world.stateSetThrows = false
     await $.session.end({ reason: 'other', sessionId: 'old-session', resume: { id: 'old-session' } })
     expect(world.offerWrites).toEqual([])
@@ -104,10 +103,11 @@ describe('redrawBand', () => {
     world.stateSetThrows = true
     await runCommand($, 'handoff')
     await world.clock.settle()
+    expect(world.debugLines.join('\n')).toContain('could not redraw the band')
     world.stateSetThrows = false
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
-    expect(world.offerWrites).not.toContainEqual(TAKEDOWN)
+    expect(world.offerWrites).toEqual([])
   })
 })
 
