@@ -93,3 +93,31 @@ held_prompts_flow() {
   wait_for "the fresh session to start a turn" log_has_more_than "$name" 'cc_turn_origin=' "$origins_before"
   wait_for "the fresh session to answer" turns_done_above "$name" 0
 }
+
+# start_peer_messenger <name>: the peer session, with SendMessage already loaded (a model round trip of
+# its own), so the real send later is short.
+start_peer_messenger() {
+  handoff_start_peer "$1"
+  submit "$1" 'Use ToolSearch to load the SendMessage tool, then reply with the word ready.'
+  wait_for "the peer '$1' to load SendMessage" turns_done_above "$1" 0
+}
+
+# start_waiting_handoff <name> <peer> <peer-task>: a handoff by the band's button that is waiting for a
+# turn. The peer's message is typed ahead; the band presses hand off while the session is idle, and the
+# peer's Enter then lands while the note is written and starts a turn. The handoff says it continues
+# when that turn ends. (Pressing the button while a turn is already running defers the press until the
+# turn ends and then refuses it, which is a shorter path.)
+# <name> is started with Bash(sleep *) allowed, for the peer tasks that run `sleep`.
+start_waiting_handoff() {
+  local name=$1 peer=$2 task=$3
+  handoff_start "$name" --allowedTools "Bash(sleep *)"
+  say_apple "$name"
+  wait_for 'the band to offer a handoff' pane_has "$name" 'h: Hand off and clear'
+  type_text "$peer" "Use the SendMessage tool to send exactly this text to the session named $(session_of "$name"): $task Do nothing else."
+  press "$name" C-x Tab
+  press "$name" h
+  wait_for 'the band to press hand off' log_has "$name" 'ui\.press handoff/handoff'
+  press "$peer" Enter
+  wait_for "the peer turn to start in '$name'" log_has "$name" 'cc_turn_origin=peer'
+  wait_for 'the handoff to wait for the running turn' pane_has "$name" 'continues when the current turn ends'
+}

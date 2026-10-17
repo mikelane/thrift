@@ -134,6 +134,7 @@ Not isolated:
 | `peer-during-compaction` | #57 | A peer message that arrives while the old session compacts does not start a turn between the queued `/clear` and the clear. |
 | `delivery-window-prompts` | #63 | Two prompts submitted 40 ms apart while the held prompt is delivered are each held and sent as typed (never joined as `fivesix`), and the box is empty afterwards. It polls every 5 ms to reach the window, which closes when the delivery ends, and reports ERROR if the second prompt misses it. |
 | `busy-abandon` | #43 | A handoff whose wait ends with background work running stops with `background_busy`, puts the held prompt back in the box (`held_restore: in_box`), clears nothing, and leaves a compacted old-session transcript. |
+| `restore-order-after-abandon` | #67 | Three prompts held during a wait that ends in a busy abandon come back to the box in typing order, before an unsent draft, as `held_restore: in_box`, and the draft is not sent. A prompt typed while the restore runs is not driven (the restore takes about 17 ms) and neither is an image prompt (a tmux session cannot attach one); the test kit covers both. |
 
 `held-prompt-box`, `held-prompt-origin` and `delivery-window-prompts` fail on a build that has the
 bug they track; once the fix is in they pass. `delivery-window-prompts` reproduced #63 in 4 of 15 runs on 2.1.302
