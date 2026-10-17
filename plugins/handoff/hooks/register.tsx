@@ -38,6 +38,7 @@ import {
   type SettledHandoff,
   type Trigger,
 } from './decision-record'
+import { debug, logFailure } from './engine-log'
 import { isUntestedEngine } from './engine-version'
 import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import {
@@ -163,8 +164,6 @@ const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): st
 
 // The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
-
-const debug = ($: EngineInterface, line: string) => $.ui.log(`handoff: ${line}`, { to: 'debug' })
 
 const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
   try {
@@ -295,11 +294,6 @@ const registerHandoffCommand = async ($: EngineInterface) => {
     debug($, `could not register /handoff: ${String(error)}`)
   }
 }
-
-// SAFETY: every current caller catches its own engine failures, so no test reaches this catch.
-// Keep it: it is the only guard against an unhandled rejection if a future caller forgets.
-const logFailure = ($: EngineInterface, work: Promise<unknown>) =>
-  work.catch(error => debug($, `background work failed: ${String(error)}`))
 
 type BoxPrompt = Pick<HeldPrompt, 'text' | 'boxText'>
 
