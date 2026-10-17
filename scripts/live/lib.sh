@@ -92,6 +92,7 @@ live_require() {
   for tool in tmux claude jq; do
     command -v "$tool" >/dev/null 2>&1 || live_abort "'$tool' is not installed or not on PATH"
   done
+  LIVE_CLAUDE_BIN=$(command -v claude)
 }
 
 # live_init: makes the run directory and its decision log location, and installs the exit traps.
@@ -137,6 +138,33 @@ debug_log_of() { echo "$LIVE_RUN/debug-$1.log"; }
 pane_target_of() { echo "=$(session_of "$1"):"; }
 pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 
+# Names of environment variables a session keeps. Everything else starting with CLAUDE is dropped, so
+# a run from inside Claude Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT, CLAUDE_CODE_EXECPATH,
+# CLAUDE_CODE_VERSION, the session and messaging ids) starts sessions like a run from a terminal. The
+# login and the provider choice stay: the config directory, the OAuth token, CLAUDE_CODE_USE_*
+# (Bedrock, Vertex, Foundry) and CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped variables on a
+# session is unverified; the point is not to inherit the owner's session by accident.
+LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH)$'
+
+# live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
+# command string, not an argument list: the tmux server (not this shell) decides the environment of a
+# new session, so the variables are dropped inside it, from the environment it actually has. The
+# binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
+# reason: a tmux server started earlier carries its own PATH.
+live_claude_command() {
+  local name=$1
+  shift
+  local drop_script='keep=$1; shift
+for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do
+  printf "%s\n" "$variable" | grep -Eq "$keep" || unset "$variable"
+done
+exec "$@"'
+  printf '%q ' sh -c "$drop_script" sh "$LIVE_KEPT_ENV" env \
+    "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
+    "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
+    --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"
+}
+
 # live_start <name> <claude-args...>: starts claude in a detached tmux session and clears the
 # start-up dialogs. The session reads project settings only (--setting-sources project), so the
 # owner's user settings, hooks and plugins stay out of the run, and the run writes none of them.
@@ -152,13 +180,7 @@ live_start() {
   local session
   session=$(session_of "$name")
   local claude_command
-  claude_command=$(printf '%q ' env \
-    -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION \
-    -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID \
-    -u CLAUDE_CODE_SESSION_ATTENDED \
-    "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
-    claude --name "$session" --setting-sources project --debug-file "$(debug_log_of "$name")" \
-    --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@")
+  claude_command=$(live_claude_command "$name" "$@")
   # Recorded before the call: a Ctrl-C during it must still find the session the server made.
   LIVE_SESSIONS+=("$session")
   tmux new-session -d -s "$session" -x 120 -y 40 -c "$LIVE_CWD" "$claude_command" \

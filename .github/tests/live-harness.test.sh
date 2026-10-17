@@ -408,8 +408,6 @@ test_live_start_isolates_the_session_from_the_owners_settings_memory_and_session
   assert_tmux_called '--setting-sources project'
   assert_tmux_called 'CLAUDE_CODE_DISABLE_AUTO_MEMORY=1'
   assert_tmux_called 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
-  assert_tmux_called '-u CLAUDECODE'
-  assert_tmux_called '-u CLAUDE_CODE_SESSION_ID'
   assert_tmux_called '--append-system-prompt'
   assert_tmux_called "THRIFT_HOME=$TEST_DIR/tmp"
   assert_tmux_called "--debug-file $TEST_DIR/tmp/debug-a.log"
@@ -568,6 +566,75 @@ test_box_shows_finds_the_typed_text_in_a_large_box() {
     for _ in 1 2 3 4 5 6 7 8 9 10; do box_shows a "hello there"; done
     check x detail true; live_verdict s'
   assert_exit_code 0
+}
+
+# live_claude_command is what the tmux server runs through sh. These tests run it as tmux would, with
+# a stub claude that prints its own path and environment.
+write_env_dumping_claude() { # write_env_dumping_claude <path>
+  mkdir -p "$(dirname "$1")"
+  printf '#!/bin/sh\necho "BIN=$0"\nenv\n' > "$1"
+  chmod +x "$1"
+}
+
+run_claude_command() { # run_claude_command <env assignments...> -- <bash-snippet>
+  local assignments=()
+  while [[ "$1" != -- ]]; do assignments+=("$1"); shift; done
+  shift
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" ${assignments[@]+"${assignments[@]}"} \
+    "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+
+test_the_session_command_drops_the_claude_variables_it_inherited() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_PID=4242 CLAUDE_EFFORT=high CLAUDE_CODE_EXECPATH=/x CLAUDE_CODE_VERSION=9 CLAUDECODE=1 CLAUDE_CODE_SESSION_ID=abc -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'BIN='
+  assert_out_lacks 'CLAUDE_PID='
+  assert_out_lacks 'CLAUDE_EFFORT='
+  assert_out_lacks 'CLAUDE_CODE_EXECPATH='
+  assert_out_lacks 'CLAUDE_CODE_VERSION='
+  assert_out_lacks 'CLAUDECODE='
+  assert_out_lacks 'CLAUDE_CODE_SESSION_ID='
+}
+
+test_the_session_command_keeps_the_login_and_the_variables_the_harness_sets() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_CONFIG_DIR=/cfg CLAUDE_CODE_OAUTH_TOKEN=tok CLAUDE_CODE_USE_BEDROCK=1 CLAUDE_PID=1 -- \
+    'LIVE_THRIFT_HOME=/thrift-home; LIVE_RUN=$TMPDIR; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'CLAUDE_CONFIG_DIR=/cfg'
+  assert_out_has 'CLAUDE_CODE_OAUTH_TOKEN=tok'
+  assert_out_has 'CLAUDE_CODE_USE_BEDROCK=1'
+  assert_out_has 'THRIFT_HOME=/thrift-home'
+  assert_out_has 'CLAUDE_CODE_DISABLE_AUTO_MEMORY=1'
+  assert_out_has 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
+}
+
+# A tmux server that was already running hands new sessions its own environment, so a bare `claude`
+# in the command can be another binary than the one live_require checked.
+test_the_session_command_runs_the_claude_that_live_require_checked() {
+  write_env_dumping_claude "$TEST_DIR/checked/claude"
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; PATH='"$TEST_DIR"'/checked:$PATH live_require
+     PATH=$TMPDIR/server-path:/usr/bin:/bin sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has "BIN=$TEST_DIR/checked/claude"
+}
+
+test_the_session_command_passes_the_path_the_harness_checked() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; live_require
+     PATH=/usr/bin:/bin sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has "PATH=$TEST_DIR/bin:"
 }
 
 run_tests "$@"
