@@ -31,9 +31,18 @@ mkdir -p -- "$dir" && cd -- "$dir" && claude
 Until then every scenario stops with ERROR at the trust dialog and prints this instruction.
 
 Exit status: `0` PASS, `1` FAIL (the plugin misbehaved), `2` ERROR (the harness could not reach the
-state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, or any
-harness command that failed before a verdict). A FAIL or ERROR keeps the run directory and prints
-its path: `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
+state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, a scenario
+that ran no checks, a decision log that exists but cannot be read as JSON lines, or any harness
+command that failed before a verdict). A FAIL or ERROR keeps the run directory and prints its path:
+`debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
+
+A run can show home paths, transcript session ids and, in a pane excerpt, the welcome banner. Pipe
+the output through the trimmer before pasting it into an issue or PR; it turns `$HOME` into `~` and
+every UUID into `<session-id>`, and changes nothing else. Read the result once anyway.
+
+```sh
+scripts/live/live.sh handoff held-prompt-box 2>&1 | scripts/live/trim-output.sh
+```
 
 Every wait is on a condition (pane text, a debug-log line, a decision record) with a
 `LIVE_TIMEOUT` of 90 seconds, set in the environment to change it. The only fixed delay is the
@@ -62,6 +71,21 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   owner's mode (auto). `dontAsk` denies any tool the scenario did not allow with `--allowedTools`:
   the first session of `busy-abandon` may run `Bash(sleep *)`, the peer may use `ToolSearch` and
   `SendMessage`, and no other session may use any tool. `busy-abandon` was run under this and passes.
+- **Inherited environment.** Each session's command first drops every `CLAUDE*` variable in the
+  environment it receives (`CLAUDE_PID`, `CLAUDE_EFFORT`, `CLAUDE_CODE_EXECPATH`,
+  `CLAUDE_CODE_VERSION`, the session and messaging ids), so a run from inside Claude Code's Bash
+  tool starts sessions like one from a terminal. It then sets the login and provider choice from
+  the harness's own environment (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is `LIVE_KEPT_ENV` in `lib.sh`), not
+  from a tmux server that was started earlier with other values. These values pass through an
+  owner-only file in the run directory that the session deletes once read, so the OAuth token is
+  never in the command text. The dropping happens inside the tmux session, so it also covers a tmux
+  server that was started from a Claude Code session. What the dropped variables do to a session is
+  unverified. The two `CLAUDE_CODE_DISABLE_*` variables above are set, not confirmed to work.
+- **Which `claude`.** A new tmux session gets its environment from the tmux server, which may
+  already be running with another `PATH`. The command runs `claude` by the absolute path that
+  `live_require` found and passes the harness's own `PATH`, so the binary that was checked is the
+  binary that runs.
 - **Decision log.** `THRIFT_HOME` points into the run directory, so
   `~/.claude/thrift/decisions.jsonl` is not written.
 - **The plugin.** A scenario runs a copy of the plugin made in the run directory. The copy differs
@@ -87,12 +111,15 @@ Not isolated:
   append every prompt they receive to `~/.claude/history.jsonl`, as any session does. The harness
   has no switch for either; the prompts are one-word test prompts. `~/.claude.json` also gains an
   entry for the working directory, the trust answer, and Claude Code's usual per-session counters.
-- **Processes.** On exit the harness kills only its own tmux sessions, each by exact name
-  (`live-<pid>-<label>`), and never the tmux server. Interrupting it with Ctrl-C, closing the
-  terminal (SIGHUP) or SIGTERM runs the same cleanup. A `kill -9` cannot: list leftovers with
-  `tmux ls` and remove them by name. Background work a scenario starts inside a session (the
-  `sleep 90` of `busy-abandon`) is not tracked by the harness and may outlive it:
-  `pgrep -fl 'sleep 90'` finds one.
+- **Processes.** On exit the harness kills only the tmux sessions this run started, each by exact
+  name (`live-<pid>-<nonce>-<label>`; the nonce is random per run, so a recycled pid cannot match a
+  session an earlier run left behind), and never the tmux server. These all run the same cleanup:
+  Ctrl-C, closing the terminal (SIGHUP), SIGTERM, Ctrl-\ (SIGQUIT), and a closed stdout pipe
+  (`live.sh ... | head`, which sends SIGPIPE). While the cleanup runs it ignores further signals, so
+  a second Ctrl-C cannot cut it short. A `kill -9` skips the cleanup: list leftovers with `tmux ls`
+  and remove them by name. Background work a scenario starts inside a session (the `sleep 90` of
+  `busy-abandon`) is not tracked by the harness and may outlive it: `pgrep -fl 'sleep 90'` finds
+  one.
 
 ## Scenarios
 

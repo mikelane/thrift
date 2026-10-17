@@ -94,7 +94,8 @@ mkdir -p -- "$LIVE_CWD" || {
   exit 2
 }
 # $HOME can itself be a work tree (dotfiles kept in a repository), which puts the default inside it.
-if git -C "$LIVE_CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# Inside a .git directory the command prints "false" and still exits 0, so the output is what counts.
+if [[ "$(git -C "$LIVE_CWD" rev-parse --is-inside-work-tree 2>/dev/null)" == true ]]; then
   echo "ERROR: the working directory $LIVE_CWD is inside a git work tree, so a session would see its branch and status. Set LIVE_CWD to a directory outside any work tree." >&2
   exit 2
 fi

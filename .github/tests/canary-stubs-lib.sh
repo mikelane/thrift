@@ -50,7 +50,11 @@ if [[ "${1:-}" = -p ]]; then
   config_state=missing
   [[ -d "${CLAUDE_CONFIG_DIR:-/nonexistent}" ]] && config_state=empty
   [[ -z "$(ls -A "${CLAUDE_CONFIG_DIR:-/nonexistent}" 2> /dev/null)" ]] || config_state=not-empty
-  echo "GENENV plugin=$plugin_name api_key=${ANTHROPIC_API_KEY-unset} oauth=${CLAUDE_CODE_OAUTH_TOKEN-unset} config=${CLAUDE_CONFIG_DIR-unset} config_state=$config_state" >> "$STUB_LOG"
+  # Whether each credential is set, never its value: this log is printed when a test fails.
+  api_key=unset oauth=unset
+  [[ -z "${ANTHROPIC_API_KEY+set}" ]] || api_key=set
+  [[ -z "${CLAUDE_CODE_OAUTH_TOKEN+set}" ]] || oauth=set
+  echo "GENENV plugin=$plugin_name api_key=$api_key oauth=$oauth config=${CLAUDE_CONFIG_DIR-unset} config_state=$config_state" >> "$STUB_LOG"
   is_listed "${STUB_NO_TYPE_DECLARATIONS:-}" "$plugin_name" || {
     mkdir -p "$plugin_dir/.claude-plugin/types/claude-code"
     : > "$plugin_dir/.claude-plugin/types/claude-code/index.d.ts"
