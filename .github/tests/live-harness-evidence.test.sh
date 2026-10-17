@@ -25,7 +25,7 @@ test_ts_before_orders_timestamps_and_refuses_empty_ones() {
 test_busy_abandon_waits_for_the_reason_not_for_any_none_record() {
   local scenario=$LIVE_DIR/handoff/scenarios/busy-abandon.sh
   assert_file_lacks "$scenario" 'record_exists none'
-  run_live 'source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
     live_init
     printf "%s\n" "{\"action\":\"none\",\"trigger_values\":{\"point\":\"turn-end\"}}" > "$LIVE_DECISIONS"
     check "no reason yet" detail eval "! record_has_reason background_busy"
@@ -33,6 +33,18 @@ test_busy_abandon_waits_for_the_reason_not_for_any_none_record() {
     check "the reason" detail record_has_reason background_busy
     live_verdict s'
   assert_exit_code 0
+}
+
+test_busy_abandon_prints_the_transcript_file_name_not_its_path() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
+    CLAUDE_CONFIG_DIR=$HOME/.claude
+    live_init
+    mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
+    echo "{\"type\":\"user\"}" > "$CLAUDE_CONFIG_DIR/projects/p/old.jsonl"
+    transcript_summary old
+    transcript_summary missing'
+  assert_out_has 'old.jsonl'
+  assert_out_lacks "$TEST_DIR/home"
 }
 
 test_busy_abandon_is_a_fail_when_the_old_transcript_has_no_compaction() {

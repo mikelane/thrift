@@ -62,8 +62,4 @@ person_turns_detail() {
 }
 # The prompt box on one line, each newline shown as "|", the padding and the indent of wrapped lines removed.
 box_in_one_line() { box_text "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | paste -sd'|' -; }
-record_has_reason() { records_with none | jq -e --arg reason "$1" 'select(.trigger_values.reason == $reason)' >/dev/null; }
-handoff_ended() { record_has_reason background_busy || record_exists cleared; }
 stopped_busy_without_clear() { record_has_reason background_busy && [[ "$(record_count cleared)" == 0 ]]; }
-held_restore_of_abandon() { records_with none | jq -r 'select(.trigger_values.reason == "background_busy") | .trigger_values.held_restore // "missing"' | tail -n 1; }
-held_prompt_in_box() { [[ "$(held_restore_of_abandon)" == in_box ]]; }
