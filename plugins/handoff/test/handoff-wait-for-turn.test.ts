@@ -318,3 +318,21 @@ test('It adds the turn-after-note line when a subagent turn started during the n
   await world.clock.settle()
   expect(world.appended).toEqual([LATE_TURN_MESSAGE])
 })
+
+test('It clears once the main turn ends when a subagent turn started inside it', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await finishNote()
+  await endTurn($, world)
+  expect(world.effects).toContain('clear')
+})
+
+test('It keeps waiting for the main turn when a subagent turn starts and ends inside it', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await startTurn($)
+  await finishNote()
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await endTurn($, world, { agentId: 'sub1' })
+  expect(world.effects).not.toContain('clear')
+})

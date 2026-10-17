@@ -12,6 +12,7 @@ import {
   beginNoteWindow,
   endMainTurn,
   startMainTurn,
+  startSubagentTurn,
   releaseTurnEndWaiter,
   waitForTurnEnd,
   resetForNewSession,
@@ -27,23 +28,37 @@ test('It marks a turn running and started since the note from startMainTurn', ()
   expect(state).toMatchObject({ isTurnRunning: true, hasTurnAfterNote: true })
 })
 
-test('It leaves isTurnRunning false for a subagent turn in startMainTurn', () => {
+test('It leaves isTurnRunning false from startSubagentTurn', () => {
   const state = createState(settings)
-  startMainTurn(state, '', true)
+  startSubagentTurn(state)
   expect(state.isTurnRunning).toBe(false)
 })
 
-test('It still marks a subagent turn after the note as missing from the note in startMainTurn', () => {
+test('It marks a subagent turn after the note as missing from the note in startSubagentTurn', () => {
   const state = createState(settings)
-  startMainTurn(state, '', true)
+  startSubagentTurn(state)
   expect(state.hasTurnAfterNote).toBe(true)
 })
 
-test('It still marks a subagent turn after beginOwnClear as late in startMainTurn', () => {
+test('It marks a subagent turn after beginOwnClear as late in startSubagentTurn', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  startMainTurn(state, '', true)
+  startSubagentTurn(state)
   expect(state.hasLateTurn).toBe(true)
+})
+
+test('It leaves hasTurnAfterNote false from startSubagentTurn after the session ended before the clear', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  startSubagentTurn(state)
+  expect(state.hasTurnAfterNote).toBe(false)
+})
+
+test('It leaves hasLateTurn false from startSubagentTurn when no clear is queued', () => {
+  const state = createState(settings)
+  startSubagentTurn(state)
+  expect(state.hasLateTurn).toBe(false)
 })
 
 test('It counts a turn already running when the note began as missing from the note in beginNoteWindow', () => {

@@ -256,15 +256,24 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
 
 // A turn in the session the person cleared to is not one the note missed, so it does not count. A turn that one of the
 // plugin's own submissions started takes that prompt's origin from the queue below.
-// Only a main-thread turn sets isTurnRunning: only its turn.complete clears it, and a subagent's turn.complete is skipped.
-export const startMainTurn = (state: SessionState, turnText: string, isSubagentTurn = false): void => {
-  if (!isSubagentTurn) state.isTurnRunning = true
+export const startMainTurn = (state: SessionState, turnText: string): void => {
+  state.isTurnRunning = true
   const matchIndex = state.resubmittedPrompts.findIndex(prompt => turnText.includes(prompt.text))
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
+  noteTurnStarted(state)
+}
+
+// A subagent's or teammate's turn is work the note missed, whoever started it, so it counts toward both lines. It is not a
+// main-thread turn: only the main thread's turn.complete clears isTurnRunning, so setting it here would hold a handoff for
+// good. Nor can it be one of the plugin's own submissions, which only start main-thread turns, so it leaves the queue and
+// the turn's origin alone even when its prompt quotes a queued one.
+export const startSubagentTurn = (state: SessionState): void => {
+  noteTurnStarted(state)
+}
+
+const noteTurnStarted = (state: SessionState): void => {
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
-  // SAFETY: a subagent's turn also lands here, as it does for hasTurnAfterNote: work that ran after the note was written is
-  // work the note missed, whoever started it. No guard.
   if (state.isOwnClearQueued) state.hasLateTurn = true
 }
 
