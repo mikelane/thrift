@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, entered, lastRecord, startTurn, submitPerson, writingTheNote } from './helpers'
+import { dropOf, entered, lastRecord, runCommand, startTurn, submitPerson, writingTheNote } from './helpers'
 import { ASK, HELD_FOR_HANDOFF, NOTE_MESSAGE, unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 
 const HELD_BACK_PERSON = 'log:Your prompt was held back after the handoff note, so read the note first. Here it is:\nnext thing'
+const TURN_AFTER_NOTE_LINE = 'A turn ran in the previous session while or after this note was written'
 
 describe('submitOrKeepInTranscript', () => {
   test('It submits a held prompt from another sender when the handoff fails', async ($, on) => {
@@ -190,7 +191,29 @@ describe('the late-turn check in continueInFreshSession', () => {
       await startTurn($, 'queued before the clear ran')
     }
     await finishNote()
-    expect(world.appended.join('\n')).not.toContain('A turn ran in the previous session while or after this note was written')
+    expect(world.appended.join('\n')).not.toContain(TURN_AFTER_NOTE_LINE)
+  })
+
+  // The person's /clear was counted ahead of the handoff's but has not ended, so the handoff's clear still counts as queued.
+  test('It puts the turn-after-note line in when a turn starts while /handoff is being registered with the clear still queued', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    let endPersonClear = () => {}
+    const personClearRunning = new Promise<void>(resolve => {
+      endPersonClear = resolve
+    })
+    let personClear: Promise<unknown> = Promise.resolve()
+    world.onClearIssued = async () => {
+      world.onClearIssued = () => personClearRunning
+      personClear = runCommand($, 'clear')
+    }
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      await startTurn($, 'queued behind the person clear')
+    }
+    await finishNote()
+    endPersonClear()
+    await personClear
+    expect(world.appended.join('\n')).toContain(TURN_AFTER_NOTE_LINE)
   })
 })
 
