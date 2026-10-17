@@ -1,4 +1,4 @@
-import type { EngineInterface, Register, PromptSubmitInput, TurnCompleteInput } from 'claude-code'
+import type { EngineInterface, On, Register, PromptSubmitInput, TurnCompleteInput } from 'claude-code'
 
 import {
   claimAndRunPress,
@@ -45,7 +45,7 @@ import {
   endSubagentTurn,
   type SessionState,
 } from './session-state'
-import { asMode, asThreshold, contextFromStep } from './signals'
+import { asMode, asThreshold, contextFromStep, type Mode } from './signals'
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
@@ -182,24 +182,7 @@ const pressActionsFor = ($: EngineInterface): PressActions => ({
   scheduleCompaction: (state, trigger) => scheduleCompaction($, state, trigger),
 })
 
-// Long because every on(...) call lives here. The engine follows $ into a top-level function of this file, and past an
-// import only into a function declaration.
-export const register: Register = (on, options) => {
-  const setting = asMode(options.handoffMode)
-  // SAFETY: a reload that runs register again gives the new state pending null and nothing held. On 2.1.299 a setting
-  // changed in /config did so (a handoff right after one recorded context_tokens 0); /reload-plugins kept the old
-  // state. A handoff already running keeps the old state and its old closures. Its prompts are no longer held, so they
-  // pass through and /clear can land inside their turn. The old hooks are gone too, so nothing releases a wait for a
-  // turn to end, and that handoff waits forever and never clears. Both need a reload while a handoff runs, from the
-  // note being written until its prompts are delivered. No guard: carrying the state across a reload would need it in
-  // an atom.
-  // After a reload, run /handoff again.
-  const state = createState({
-    setting,
-    threshold: asThreshold(options.handoffContextTokens),
-    compactBeforeClear: options.compactBeforeClear === true,
-  })
-
+const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await takeDownBandFromBeforeReload($, state)
@@ -216,6 +199,41 @@ export const register: Register = (on, options) => {
     return started
   }).catch(($, e, next) => next(e))
 
+  // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
+  // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
+  // Counted from the note on, before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
+  // hook beneath that answers in the clear's place leaves it off, and a clear that throws ran nothing: no end is coming.
+  // SAFETY: a hook beneath that calls next and then rewrites the output also leaves ref off. The end already spent the count,
+  // so forgetting is a no-op, unless a second foreign clear is still pending, whose count it eats: that clear's end is then
+  // taken for the handoff's, and a late turn after it goes unreported. Needs two queued clears and such a hook. No guard.
+  on('command.run', { command: 'clear' }, async ($, e, next) => {
+    recordForeignClear(state, e.origin)
+    try {
+      const clearOutput = await next(e)
+      if (clearOutput.ref === undefined) forgetForeignClear(state)
+      return clearOutput
+    } catch (error) {
+      forgetForeignClear(state)
+      throw error
+    }
+  }).catch(($, e, next) => next(e))
+
+  on('session.end', async ($, e, next) => {
+    recordSessionEnd(state, e.reason)
+    await takeDownBand($, state)
+    resetForNewSession(state)
+    // A handoff waiting on a turn resumes in a later tick, so it never runs inside this hook.
+    $.clock.after(0, () => releaseTurnEndWaiter(state))
+    if (e.reason === 'clear') {
+      $.clock.after(0, () => {
+        void logFailure($, registerHandoffCommand($))
+      })
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+}
+
+const registerTurnHooks = (on: On, state: SessionState) => {
   on('turn.step', async function* ($, e, next) {
     const step = yield* next(e)
     if (e.agentId === undefined && step.usage) {
@@ -239,17 +257,6 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) noteToolCall(state, e, ran)
     return ran
   }).catch(($, e, next) => next<string>(e))
-
-  on('prompt.submit', async ($, e, next) => {
-    if (state.heldPrompt !== null && isPersonOrigin(e.origin.kind)) await takeDownBand($, state)
-    const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
-    if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
-    // Only the person origins are held or refused during a handoff. A task notification or a peer prompt passes through, in
-    // every phase including the delivery, on purpose (decided on #6): it does not come from the person, so it has no place in
-    // the order of their prompts.
-    const dropped = isPersonOrigin(e.origin.kind) ? await decidePrompt($, state, e) : null
-    return dropped ?? next(e)
-  }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) startMainTurn(state, e.text)
@@ -284,6 +291,19 @@ export const register: Register = (on, options) => {
     }
     return result
   }).catch(($, e, next) => next(e))
+}
+
+const registerPromptHooks = (on: On, state: SessionState) => {
+  on('prompt.submit', async ($, e, next) => {
+    if (state.heldPrompt !== null && isPersonOrigin(e.origin.kind)) await takeDownBand($, state)
+    const finishedTaskId = e.origin.kind === 'task-notification' ? notifiedTaskId(e.text) : null
+    if (finishedTaskId !== null) state.backgroundTasks.delete(finishedTaskId)
+    // Only the person origins are held or refused during a handoff. A task notification or a peer prompt passes through, in
+    // every phase including the delivery, on purpose (decided on #6): it does not come from the person, so it has no place in
+    // the order of their prompts.
+    const dropped = isPersonOrigin(e.origin.kind) ? await decidePrompt($, state, e) : null
+    return dropped ?? next(e)
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const band = await readBand($)
@@ -296,37 +316,25 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
     text: 'Could not start a handoff.',
   }))
+}
 
-  // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
-  // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
-  // Counted from the note on, before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
-  // hook beneath that answers in the clear's place leaves it off, and a clear that throws ran nothing: no end is coming.
-  // SAFETY: a hook beneath that calls next and then rewrites the output also leaves ref off. The end already spent the count,
-  // so forgetting is a no-op, unless a second foreign clear is still pending, whose count it eats: that clear's end is then
-  // taken for the handoff's, and a late turn after it goes unreported. Needs two queued clears and such a hook. No guard.
-  on('command.run', { command: 'clear' }, async ($, e, next) => {
-    recordForeignClear(state, e.origin)
-    try {
-      const clearOutput = await next(e)
-      if (clearOutput.ref === undefined) forgetForeignClear(state)
-      return clearOutput
-    } catch (error) {
-      forgetForeignClear(state)
-      throw error
-    }
-  }).catch(($, e, next) => next(e))
+export const register: Register = (on, options) => {
+  const setting = asMode(options.handoffMode)
+  // SAFETY: a reload that runs register again gives the new state pending null and nothing held. On 2.1.299 a setting
+  // changed in /config did so (a handoff right after one recorded context_tokens 0); /reload-plugins kept the old
+  // state. A handoff already running keeps the old state and its old closures. Its prompts are no longer held, so they
+  // pass through and /clear can land inside their turn. The old hooks are gone too, so nothing releases a wait for a
+  // turn to end, and that handoff waits forever and never clears. Both need a reload while a handoff runs, from the
+  // note being written until its prompts are delivered. No guard: carrying the state across a reload would need it in
+  // an atom.
+  // After a reload, run /handoff again.
+  const state = createState({
+    setting,
+    threshold: asThreshold(options.handoffContextTokens),
+    compactBeforeClear: options.compactBeforeClear === true,
+  })
 
-  on('session.end', async ($, e, next) => {
-    recordSessionEnd(state, e.reason)
-    await takeDownBand($, state)
-    resetForNewSession(state)
-    // A handoff waiting on a turn resumes in a later tick, so it never runs inside this hook.
-    $.clock.after(0, () => releaseTurnEndWaiter(state))
-    if (e.reason === 'clear') {
-      $.clock.after(0, () => {
-        void logFailure($, registerHandoffCommand($))
-      })
-    }
-    return next(e)
-  }).catch(($, e, next) => next(e))
+  registerLifecycleHooks(on, state, setting)
+  registerTurnHooks(on, state)
+  registerPromptHooks(on, state)
 }
