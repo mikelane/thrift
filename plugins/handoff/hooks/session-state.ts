@@ -254,8 +254,7 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
 
-// A turn in the session the person cleared to is not one the note missed, so it does not count. A turn that one of the
-// plugin's own submissions started takes that prompt's origin from the queue below.
+// A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {
   state.isTurnRunning = true
   const matchIndex = state.resubmittedPrompts.findIndex(prompt => turnText.includes(prompt.text))
@@ -272,6 +271,7 @@ export const startSubagentTurn = (state: SessionState): void => {
   noteTurnStarted(state)
 }
 
+// A turn in the session the person cleared to is not one the note missed, so it does not count.
 const noteTurnStarted = (state: SessionState): void => {
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
   if (state.isOwnClearQueued) state.hasLateTurn = true
