@@ -302,15 +302,15 @@ turns_done_above() { (($(turns_done "$1") > $2)); }
 # not "0 records": `! record_exists cleared` would pass on it. These run in command substitutions and
 # cannot stop the harness, so they note the problem and live_raise_noted_error (run by wait_for,
 # check and live_verdict) ends the run with an ERROR.
+live_note_unreadable_decisions() { live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"; }
 record_count() {
   [[ -f "$LIVE_DECISIONS" ]] || { echo 0; return 0; }
   jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" 2>/dev/null \
-    || { live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"; echo 0; }
+    || { live_note_unreadable_decisions; echo 0; }
 }
 records_with() {
   [[ -f "$LIVE_DECISIONS" ]] || return 0
-  jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" 2>/dev/null \
-    || live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"
+  jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" 2>/dev/null || live_note_unreadable_decisions
   return 0
 }
 record_exists() { (($(record_count "$1") > ${2:-0})); }

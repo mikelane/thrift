@@ -767,13 +767,18 @@ test_a_working_directory_inside_a_work_tree_is_an_error() {
   assert_tmux_not_called 'new-session'
 }
 
-test_trim_output_replaces_the_home_directory_and_session_ids() {
-  write_live_stubs
+# trim_with_home <home> <line...>: runs trim-output.sh on the lines with HOME set to <home>.
+trim_with_home() {
+  local home=$1
+  shift
   EXIT_CODE=0
-  printf '%s\n' "run $TEST_DIR/home/.cache/x and $TEST_DIR/home" \
+  printf '%s\n' "$@" | HOME="$home" "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+
+test_trim_output_replaces_the_home_directory_and_session_ids() {
+  trim_with_home "$TEST_DIR/home" "run $TEST_DIR/home/.cache/x and $TEST_DIR/home" \
     'session 0a1b2c3d-4e5f-6789-abcd-ef0123456789 and 0A1B2C3D-4E5F-6789-ABCD-EF0123456789' \
-    'PASS held-prompt-box (3 checks)' \
-    | HOME="$TEST_DIR/home" "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+    'PASS held-prompt-box (3 checks)'
   assert_exit_code 0
   assert_out_has 'run ~/.cache/x and ~'
   assert_out_has 'session <session-id> and <session-id>'
@@ -782,31 +787,27 @@ test_trim_output_replaces_the_home_directory_and_session_ids() {
 }
 
 test_trim_output_leaves_other_text_alone_when_home_has_sed_special_characters() {
-  EXIT_CODE=0
-  printf '%s\n' '/a.b&c/x /aXb&c' | HOME='/a.b&c' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  trim_with_home '/a.b&c' '/a.b&c/x /aXb&c'
   assert_exit_code 0
   assert_out_has '~/x /aXb&c'
 }
 
 # A home of /Users/mike must not turn /Users/mikelane into ~lane.
 test_trim_output_leaves_a_longer_name_that_starts_with_the_home_directory() {
-  EXIT_CODE=0
-  printf '%s\n' '/Users/mikelane/x and /Users/mike/y and /Users/mike' | HOME='/Users/mike' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  trim_with_home '/Users/mike' '/Users/mikelane/x and /Users/mike/y and /Users/mike'
   assert_exit_code 0
   assert_out_has '/Users/mikelane/x and ~/y and ~'
 }
 
 test_trim_output_takes_a_home_directory_with_a_trailing_slash() {
-  EXIT_CODE=0
-  printf '%s\n' '/h/x/foo and /h/x' | HOME='/h/x/' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  trim_with_home '/h/x/' '/h/x/foo and /h/x'
   assert_exit_code 0
   assert_out_has '~/foo and ~'
 }
 
 # awk -v reads escape sequences, so a backslash in the home directory would not match itself.
 test_trim_output_takes_a_home_directory_with_a_backslash() {
-  EXIT_CODE=0
-  printf '%s\n' '/a\tb/x' | HOME='/a\tb' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  trim_with_home '/a\tb' '/a\tb/x'
   assert_exit_code 0
   assert_out_has '~/x'
 }
