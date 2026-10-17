@@ -172,6 +172,22 @@ test_the_session_command_drops_the_anthropic_variables_of_the_tmux_server() {
   assert_out_lacks 'server-key'
 }
 
+# adversarial-qa: the tmux server's environment can hold a variable that is not valid UTF-8 (a Latin-1
+# path, a binary blob). Under a UTF-8 locale BSD sed (macOS, where the harness runs) stops on it with
+# "illegal byte sequence", the drop loop gets no names, and the server's keys reach the session.
+test_the_session_command_drops_the_tmux_servers_variables_when_another_variable_is_not_utf8() {
+  write_live_stubs
+  printf '#!/bin/sh\necho "BIN=$0"\nenv | LC_ALL=C grep -aE "^(CLAUDE|ANTHROPIC)" || true\n' > "$TEST_DIR/bin/claude"
+  chmod +x "$TEST_DIR/bin/claude"
+  run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     env LC_ALL=en_US.UTF-8 NOT_UTF8=$'"'"'\xff'"'"' ANTHROPIC_API_KEY=server-key CLAUDE_PID=4242 sh -c "$command"'
+  assert_exit_code 0
+  assert_out_has 'BIN='
+  assert_out_lacks 'server-key'
+  assert_out_lacks 'CLAUDE_PID='
+}
+
 # The harness's own ANTHROPIC* values (an API key, a Vertex project, a base URL) reach the session in
 # place of the server's, so a login that is not an OAuth token still works.
 test_the_session_command_takes_the_anthropic_variables_from_the_harness_not_the_tmux_server() {

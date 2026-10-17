@@ -60,7 +60,7 @@ live_claude_command() {
   local env_file="$LIVE_RUN/session-env-$name"
   (umask 077 && live_kept_env >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
-  local session_launch_script='env_file=$1; shift; for variable in $(env | sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
+  local session_launch_script='env_file=$1; shift; for variable in $(env | LC_ALL=C sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
   live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
