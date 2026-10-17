@@ -71,10 +71,10 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   owner's mode (auto). `dontAsk` denies any tool the scenario did not allow with `--allowedTools`:
   the first session of `busy-abandon` may run `Bash(sleep *)`, the peer may use `ToolSearch` and
   `SendMessage`, and no other session may use any tool. `busy-abandon` was run under this and passes.
-- **Inherited environment.** Each session's command first drops every `CLAUDE*` variable in the
-  environment it receives (`CLAUDE_PID`, `CLAUDE_EFFORT`, `CLAUDE_CODE_EXECPATH`,
-  `CLAUDE_CODE_VERSION`, the session and messaging ids), so a run from inside Claude Code's Bash
-  tool starts sessions like one from a terminal. It then sets the login and provider choice from
+- **Inherited environment.** Each session's command first drops every `CLAUDE*` and `ANTHROPIC*`
+  variable in the environment it receives (`CLAUDE_PID`, `CLAUDE_EFFORT`, `CLAUDE_CODE_EXECPATH`,
+  `CLAUDE_CODE_VERSION`, the session and messaging ids, a tmux server's `ANTHROPIC_API_KEY`), so a
+  run from inside Claude Code's Bash tool starts sessions like one from a terminal. It then sets the login and provider choice from
   the harness's own environment (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`,
   `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is `LIVE_KEPT_ENV` in `session.sh`), not
   from a tmux server that was started earlier with other values. These values pass through an

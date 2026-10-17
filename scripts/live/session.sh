@@ -16,11 +16,12 @@ pane_target_of() { echo "=$(session_of "$1"):"; }
 pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 
 # Names of environment variables a session keeps from this shell. Everything else starting with CLAUDE
-# is dropped, so a run from inside Claude Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT,
-# CLAUDE_CODE_EXECPATH, CLAUDE_CODE_VERSION, the session and messaging ids) starts sessions like a run
-# from a terminal. The login and the provider choice stay: the config directory, the OAuth token,
-# CLAUDE_CODE_USE_* (Bedrock, Vertex, Foundry) and CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped
-# variables on a session is unverified; the point is not to inherit the owner's session by accident.
+# is dropped, and so is every ANTHROPIC* variable (nothing keeps one), so a run from inside Claude
+# Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT, CLAUDE_CODE_EXECPATH, CLAUDE_CODE_VERSION, the session
+# and messaging ids) starts sessions like a run from a terminal. The login and the provider choice
+# stay: the config directory, the OAuth token, CLAUDE_CODE_USE_* (Bedrock, Vertex, Foundry) and
+# CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped variables on a session is unverified; the point
+# is not to inherit the owner's session by accident.
 LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH)$'
 
 # live_sh_words <words...>: the words as one POSIX sh command line, each in single quotes, which every
@@ -57,7 +58,7 @@ live_claude_command() {
   local env_file="$LIVE_RUN/session-env-$name"
   (umask 077 && live_kept_env >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
-  local session_launch_script='env_file=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
+  local session_launch_script='env_file=$1; shift; for variable in $(env | sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
   live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \

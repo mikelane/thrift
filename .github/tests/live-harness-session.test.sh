@@ -66,7 +66,7 @@ test_start_dialogs_cleared_succeeds_once_the_prompt_box_is_up() {
 # failing test prints its output, and the rest of the owner's environment can hold keys.
 write_env_dumping_claude() { # write_env_dumping_claude <path>
   mkdir -p "$(dirname "$1")"
-  printf '#!/bin/sh\necho "BIN=$0"\nenv | grep -E "^(CLAUDE|THRIFT_HOME=|PATH=)" || true\n' > "$1"
+  printf '#!/bin/sh\necho "BIN=$0"\nenv | grep -E "^(CLAUDE|ANTHROPIC|THRIFT_HOME=|PATH=)" || true\n' > "$1"
   chmod +x "$1"
 }
 
@@ -156,6 +156,20 @@ test_the_session_command_takes_the_kept_variables_from_the_harness_not_the_tmux_
   assert_out_has 'CLAUDE_CODE_OAUTH_TOKEN=harness-tok'
   assert_out_lacks 'CLAUDE_CONFIG_DIR='
   assert_out_lacks 'CLAUDE_CODE_USE_VERTEX='
+}
+
+# A tmux server that was already running can hold its own provider keys and endpoint; none of them
+# reaches the session, as none of the owner's CLAUDE* variables do.
+test_the_session_command_drops_the_anthropic_variables_of_the_tmux_server() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     env ANTHROPIC_API_KEY=server-key ANTHROPIC_BASE_URL=http://server ANTHROPIC_MODEL=m sh -c "$command"'
+  assert_exit_code 0
+  assert_out_has 'BIN='
+  assert_out_lacks 'ANTHROPIC_'
+  assert_out_lacks 'server-key'
 }
 
 # The command text shows in `ps` and in tmux; the token reaches the session another way, and does not
