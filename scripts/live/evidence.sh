@@ -9,7 +9,12 @@ pane_has() {
   screen=$(pane "$1") || return 1
   text_matches "$2" "$screen"
 }
-pane_count() { pane "$1" | grep -cE -- "$2" || true; }
+# A pane that cannot be read fails, as in pane_has: it must not read as zero matching lines.
+pane_count() {
+  local screen
+  screen=$(pane "$1") || return 1
+  grep -cE -- "$2" <<<"$screen" || true
+}
 log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
 # grep -c prints nothing when the file does not exist yet, which would break the arithmetic callers.
 log_count() { local count; count=$(grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null) || true; echo "${count:-0}"; }
@@ -26,7 +31,11 @@ ts_before() {
 
 # A finished turn leaves a "✻ <verb> for <n>s" line behind.
 turns_done() { pane_count "$1" '^✻ [^(]+ for ([0-9]+m )?[0-9]+s'; }
-turns_done_above() { (($(turns_done "$1") > $2)); }
+turns_done_above() {
+  local turns
+  turns=$(turns_done "$1") || return 1
+  ((turns > $2))
+}
 
 # A log that does not exist yet has no records. One that exists and cannot be read as JSON lines is
 # not "0 records": `! record_exists cleared` would pass on it. These run in command substitutions and

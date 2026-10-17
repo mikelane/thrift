@@ -174,6 +174,32 @@ test_pane_has_is_false_when_the_pane_cannot_be_read() {
   assert_exit_code 0
 }
 
+test_pane_count_counts_the_matching_lines() {
+  run_live 'live_init; pane() { printf "%s\n" "one" "two" "one"; }
+    echo "COUNT=$(pane_count a one)"
+    check x detail true; live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'COUNT=2'
+}
+
+test_pane_count_is_zero_when_nothing_matches() {
+  run_live 'live_init; pane() { echo one; }
+    echo "COUNT=$(pane_count a nothing)"
+    check "pane_count succeeds" detail pane_count a nothing
+    live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'COUNT=0'
+}
+
+# A dead session reads as 0 turns done when pane_count swallows the failed capture.
+test_pane_count_fails_when_the_pane_cannot_be_read() {
+  run_live 'live_init; pane() { echo anything; return 1; }
+    check "pane_count fails" detail eval "! pane_count a anything"
+    check "turns_done_above fails" detail eval "! turns_done_above a -1"
+    live_verdict s'
+  assert_exit_code 0
+}
+
 test_box_shows_finds_the_typed_text_in_a_large_box() {
   run_live 'live_init
     box_text() { echo "hello there"; head -c 400000 /dev/zero | tr "\\0" x; echo; }
