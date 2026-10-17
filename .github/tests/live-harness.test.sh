@@ -700,6 +700,15 @@ test_the_session_command_runs_the_claude_that_live_require_checked() {
   assert_out_has "BIN=$TEST_DIR/checked/claude"
 }
 
+# command -v answers bin/claude for a relative PATH entry, and the session starts in LIVE_CWD.
+test_live_require_records_claude_by_an_absolute_path_when_path_has_a_relative_entry() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/rel/bin/claude"
+  run_claude_command -- 'cd "$TMPDIR/../rel"; PATH=bin:$PATH; live_require; echo "CLAUDE_BIN=$LIVE_CLAUDE_BIN"'
+  assert_exit_code 0
+  assert_out_has "CLAUDE_BIN=$TEST_DIR/rel/bin/claude"
+}
+
 test_the_session_command_passes_the_path_the_harness_checked() {
   write_live_stubs
   write_env_dumping_claude "$TEST_DIR/bin/claude"

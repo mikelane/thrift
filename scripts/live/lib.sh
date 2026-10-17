@@ -103,6 +103,8 @@ live_require() {
     command -v "$tool" >/dev/null 2>&1 || live_abort "'$tool' is not installed or not on PATH"
   done
   LIVE_CLAUDE_BIN=$(command -v claude)
+  # A relative PATH entry gives a relative answer, and the session starts in another directory.
+  [[ "$LIVE_CLAUDE_BIN" == /* ]] || LIVE_CLAUDE_BIN="$PWD/$LIVE_CLAUDE_BIN"
 }
 
 # live_init: makes the run directory and its decision log location, and installs the exit traps.
