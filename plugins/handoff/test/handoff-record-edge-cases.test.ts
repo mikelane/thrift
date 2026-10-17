@@ -1,6 +1,5 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
 
 import { answered, completeTurn, growTo200k, holdFork, install, lastRecord, runCommand, startSession, startTurn, type World } from './helpers'
 

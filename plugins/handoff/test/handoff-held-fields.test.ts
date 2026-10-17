@@ -61,9 +61,6 @@ const expectSecretTravelled = (world: World) => {
   expect(world.effects.join('\n')).toContain('zebra-quartz-7731')
 }
 
-const enteredTexts = (world: World): string[] =>
-  world.effects.filter(effect => /^entered:plugin(\+asUser)?:/.test(effect)).map(effect => effect.replace(/^entered:plugin(\+asUser)?:/, ''))
-
 const lastRecordOf = (world: World, action: DecisionAction): LogRecord => {
   const record = world.records.filter(candidate => candidate.action === action).at(-1)
   if (record === undefined) throw new Error(`no ${action} record was written`)

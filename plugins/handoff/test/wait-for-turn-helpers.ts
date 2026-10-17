@@ -2,7 +2,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On, SessionCompactResult } from 'claude-code'
 
 import { turnAfterNoteLine } from '../hooks/handoff-note'
-import { answered, bash, compacted, completeTurn, growTo200k, holdFork, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson, writingTheNote, type World } from './helpers'
+import { answered, bash, completeTurn, growTo200k, holdFork, install, mountBand, notify, runCommand, startSession, startTurn, writingTheNote, type World } from './helpers'
 
 export { holdFork, writingTheNote } from './helpers'
 
