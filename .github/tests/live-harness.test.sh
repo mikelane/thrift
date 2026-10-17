@@ -788,4 +788,27 @@ test_trim_output_leaves_other_text_alone_when_home_has_sed_special_characters() 
   assert_out_has '~/x /aXb&c'
 }
 
+# A home of /Users/mike must not turn /Users/mikelane into ~lane.
+test_trim_output_leaves_a_longer_name_that_starts_with_the_home_directory() {
+  EXIT_CODE=0
+  printf '%s\n' '/Users/mikelane/x and /Users/mike/y and /Users/mike' | HOME='/Users/mike' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has '/Users/mikelane/x and ~/y and ~'
+}
+
+test_trim_output_takes_a_home_directory_with_a_trailing_slash() {
+  EXIT_CODE=0
+  printf '%s\n' '/h/x/foo and /h/x' | HOME='/h/x/' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has '~/foo and ~'
+}
+
+# awk -v reads escape sequences, so a backslash in the home directory would not match itself.
+test_trim_output_takes_a_home_directory_with_a_backslash() {
+  EXIT_CODE=0
+  printf '%s\n' '/a\tb/x' | HOME='/a\tb' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has '~/x'
+}
+
 run_tests "$@"

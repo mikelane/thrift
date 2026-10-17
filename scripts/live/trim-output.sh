@@ -8,15 +8,22 @@
 # your user name outside $HOME, other paths, or the welcome banner a pane excerpt can show.
 set -euo pipefail
 
-home=${HOME:-}
-# The home directory is replaced as plain text (index/substr), so no character in it is special.
-awk -v home="$home" '
-  home == "" || home == "/" { print; next }
+# The home directory is replaced as plain text (index/substr), so no character in it is special. It
+# travels in the environment because awk -v would read its backslashes as escapes. A trailing slash is
+# dropped, and a match counts only where the name ends, so a home of /Users/mike leaves /Users/mikelane.
+LIVE_TRIM_HOME=${HOME:-} awk '
+  BEGIN { home = ENVIRON["LIVE_TRIM_HOME"]; sub(/\/+$/, "", home) }
+  home == "" { print; next }
   {
     line = $0
     out = ""
     while ((position = index(line, home)) > 0) {
-      out = out substr(line, 1, position - 1) "~"
+      after = substr(line, position + length(home), 1)
+      if (after ~ /[A-Za-z0-9._-]/) {
+        out = out substr(line, 1, position + length(home) - 1)
+      } else {
+        out = out substr(line, 1, position - 1) "~"
+      }
       line = substr(line, position + length(home))
     }
     print out line
