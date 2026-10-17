@@ -45,7 +45,7 @@ export const clearFailedMessage = (hasCompacted: boolean): string =>
   `The handoff was written but /clear failed. ${sessionLeftLine(hasCompacted)} Type /handoff to try again.`
 
 export const busyRefusalMessage = (hasCompacted: boolean): string =>
-  `Background work is running, and a handoff would cut it off. ${sessionLeftLine(hasCompacted)} Type /handoff to hand off anyway.`
+  `Background work is running, and its results would reach a fresh session without this conversation. ${sessionLeftLine(hasCompacted)} Type /handoff to hand off anyway.`
 
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 

@@ -8,7 +8,7 @@ export { holdFork, writingTheNote } from './helpers'
 
 export const ACT = { options: { handoffMode: 'act' } } as const
 
-export const BUSY_MESSAGE = 'Background work is running, and a handoff would cut it off. This session is unchanged. Type /handoff to hand off anyway.'
+export const BUSY_MESSAGE = 'Background work is running, and its results would reach a fresh session without this conversation. This session is unchanged. Type /handoff to hand off anyway.'
 
 export const BUSY_TOAST = `toast:${BUSY_MESSAGE}`
 
@@ -161,5 +161,5 @@ export const firstHandoffEndsByPersonClear = async ($: Engine, on: On) => {
 export const ACT_COMPACTING = { options: { handoffMode: 'act', compactBeforeClear: true } } as const
 
 export const BUSY_COMPACTED_MESSAGE =
-  'Background work is running, and a handoff would cut it off. This session was compacted, not cleared. Type /handoff to hand off anyway.'
+  'Background work is running, and its results would reach a fresh session without this conversation. This session was compacted, not cleared. Type /handoff to hand off anyway.'
 

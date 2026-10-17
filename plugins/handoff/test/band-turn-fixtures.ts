@@ -17,4 +17,4 @@ export const weakBand = async ($: Engine, world: World) => {
   return mountBand($)
 }
 
-export const BUSY_REFUSAL = 'Background work is running, and a handoff would cut it off. This session is unchanged. Type /handoff to hand off anyway.'
+export const BUSY_REFUSAL = 'Background work is running, and its results would reach a fresh session without this conversation. This session is unchanged. Type /handoff to hand off anyway.'
