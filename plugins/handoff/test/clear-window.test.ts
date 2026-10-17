@@ -100,10 +100,11 @@ describe('clearSession', () => {
 })
 
 describe('waitForClearWindow', () => {
-  test('It clears without waiting when no turn is running', async ($, on) => {
+  test('It clears without showing the waiting status when no turn is running', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await finishNote()
     expect(world.effects).toContain('clear')
+    expect(world.effects).not.toContain(WAITING_TOAST)
   })
 
   test('It holds the clear until the running turn ends', async ($, on) => {

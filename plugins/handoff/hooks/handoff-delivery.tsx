@@ -1,7 +1,9 @@
 import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
-import { announce, debug, registerHandoffCommand } from './engine-log'
+import { announce } from './announcement'
+import { registerHandoffCommand } from './command-registration'
+import { debug } from './engine-log'
 import {
   FINAL_MESSAGES,
   boxCopyOf,

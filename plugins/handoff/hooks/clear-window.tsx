@@ -11,7 +11,7 @@ import { beginOwnClear, preClearOutcome, waitForTurnEnd, type PreClearOutcome, t
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
-export type RedrawBand = (band: BandState) => Promise<void>
+type RedrawBand = (band: BandState) => Promise<void>
 export type AbandonHandoff = (settledHandoff: SettledHandoff, reason: DecisionReason, message: string, sessionId: string) => Promise<void>
 
 // Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
@@ -20,7 +20,7 @@ export const CLEARED_BY = {
   deliver_to_person_clear: 'person',
 } as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy'>, ClearedBy>
 
-export type ClearWindow = {
+type ClearWindow = {
   outcome: PreClearOutcome
   hasCompactedBeforeClear: boolean
   // Read in the same synchronous run that starts the clear, so a turn that the clear lets in cannot change it.

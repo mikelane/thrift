@@ -35,6 +35,8 @@ export const sessionEndedMessage = (hasCompacted: boolean, oldSessionId: string)
   return hasCompacted ? `${message} The previous session was compacted. To reopen it: ${resumeCommand(oldSessionId)}` : message
 }
 
+export const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
+
 export const NO_HANDOFF_MESSAGE = 'No handoff was written. This session is unchanged.'
 
 export const NO_REPLY_MESSAGE = "Nothing to hand off yet: Claude hasn't finished a reply in this session. Type /handoff again once it has."
