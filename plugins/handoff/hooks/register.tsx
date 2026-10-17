@@ -343,7 +343,7 @@ const emptySentPromptFromBox = async ($: EngineInterface, state: SessionState, p
 }
 
 // A held prompt kept in the box for the person to send: text typed after it is sent with it on purpose.
-const keptInBox = (state: SessionState): Carried => {
+const markKeptInBox = (state: SessionState): Carried => {
   forgetBoxLeftover(state)
   return 'in_box'
 }
@@ -394,7 +394,7 @@ const restorePrompt = async (
   prompt: HeldPrompt,
   placement: BoxPlacement = 'before_draft',
 ): Promise<Carried> => {
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return keptInBox(state)
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
   const carried = await submitOrKeepInTranscript($, state, prompt)
   if (carried === 'submitted') await emptySentPromptFromBox($, state, prompt)
   return carried
@@ -546,7 +546,7 @@ const sendOrKeepInBox = async (
     await emptySentPromptFromBox($, state, prompt)
     return 'submitted'
   }
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return keptInBox(state)
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
   keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
   return 'not_carried'
 }
@@ -780,7 +780,8 @@ const runHandoff = async (
   beforeRun?: () => Promise<unknown>,
 ) => {
   try {
-    // SAFETY: beforeRun is emptyBoxIfHolding, which catches its own failures, so no test can make it throw.
+    // SAFETY: beforeRun is clearBoxCopyWhileHeld on the prompt path (it wraps emptyBoxIfHolding) and emptyBoxIfHolding
+    // on the command path. emptyBoxIfHolding catches its own failures, so no test can make it throw.
     // It runs inside the try so a future beforeRun that throws still releases the claim.
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)

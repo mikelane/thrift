@@ -134,8 +134,9 @@ Not isolated:
 | `busy-abandon` | #43 | A handoff whose wait ends with background work running stops with `background_busy`, puts the held prompt back in the box (`held_restore: in_box`), clears nothing, and leaves a compacted old-session transcript. |
 
 `held-prompt-box`, `held-prompt-origin` and `delivery-window-prompts` fail on a build that has the
-bug they track; once the fix is in they pass. `delivery-window-prompts` only fails when it wins a race
-(4 of 15 runs on 2.1.302 while #63 is open), so its PASS is not evidence of a fix. `busy-abandon` passes on main: it guards the abandon path the fixes touch.
+bug they track; once the fix is in they pass. `delivery-window-prompts` reproduced #63 in 4 of 15 runs on 2.1.302
+before the fix, so a single PASS does not prove the fix holds.
+`busy-abandon` passes on main: it guards the abandon path the fixes touch.
 
 `peer-during-compaction` checks prevention: that no peer turn starts between the queued `/clear`
 and the clear. #57 was fixed by detecting and reporting that turn instead (#62), so the scenario

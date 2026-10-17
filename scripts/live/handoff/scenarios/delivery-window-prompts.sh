@@ -9,13 +9,13 @@
 # the harness's usual 0.25 s poll would miss the window.
 #
 # The join is a race, so a PASS does not prove the bug is gone. On 2.1.302 the second prompt was held
-# as "fivesix" in 4 of 15 runs, each time when its hold landed within about 5 ms of the plugin's submit
-# of "five"; all 4 had a pause of 20 to 60 ms before the second prompt. Runs with no pause (9) never
-# joined, and runs with a 10 or 40 ms pause joined in neither of 2.
+# as "fivesix" in 4 of 15 runs. In each of the 4 runs whose debug logs were kept, the hold of "five" was
+# logged within 5 ms of the plugin's submit of "five". Those logs do not record the pause before the
+# second prompt, so no pause range is established for the joined runs.
 # It exits ERROR, not FAIL, when the second prompt misses the window.
 
 CLEAR_QUEUED='command\.run \(handoff\): 6 chars queued'
-# The pause between the first late Enter and the second prompt; every run that joined had one.
+# The pause between the first late Enter and the second prompt. Not measured: the value is a choice.
 SECOND_PROMPT_PAUSE=0.04
 TIGHT_POLL=0.005
 

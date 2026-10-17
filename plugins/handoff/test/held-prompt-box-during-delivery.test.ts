@@ -46,6 +46,18 @@ describe('the prompt box while the held prompts are being delivered', () => {
     expect(world.box.text).toBe('')
   })
 
+  // The clear for `six` also finds an empty box, and the engine puts the joined `fivesix` back late: only the held prompt's
+  // record of what the box held lets the delivery take that copy out.
+  test('It leaves the box empty when the joined text came back late and the prompt typed after an uncleared one is sent', async ($, on) => {
+    const { world, typeNext, finishDelivery } = await typingDuringDelivery($, on, LATE)
+    await typeNext('six')
+    world.box = { text: '', cursor: 0 }
+    await world.clock.settle()
+    world.box = { text: 'fivesix', cursor: 7 }
+    await finishDelivery()
+    expect(world.box.text).toBe('')
+  })
+
   test('It holds a third prompt typed before the earlier ones were cleared as typed', async ($, on) => {
     const { world, typeNext, finishDelivery } = await typingDuringDelivery($, on, LATE)
     await typeNext('six')

@@ -155,13 +155,13 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         The clear can run before Claude Code has put the text back, so the plugin also remembers the
         text it left until a clear finds and removes it. If the next prompt arrives as that text
         followed by the new one (`five`, then `fivesix`), only the part after it is held (`six`).
-        A prompt that merely starts like the earlier one is kept whole once a clear has removed it, or once
-        the plugin has put a held prompt back in the box for the person to send.
+        A prompt that merely starts like the earlier one is kept whole once a clear has removed the
+        leftover, or once the plugin has put a held prompt back in the box for the person to send.
         One case is stripped wrongly: the clear never found the leftover, the person cleared the box
         by hand, and the next prompt really does start with the same text. `yes` is held, the box is
-        cleared by hand, then `yes please` is typed, and it is held as ` please`, space first. The plugin cannot tell
-        that from a joined prompt. `leftover_strips` in the record that ends the handoff counts every
-        strip, so a handoff where this may have happened shows a value above 0.
+        cleared by hand, then `yes please` is typed, and it is held as ` please`, space first. The
+        plugin cannot tell that from a joined prompt. `leftover_strips` in the record that ends the
+        handoff counts every strip, so a handoff where this may have happened shows a value above 0.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
         This clear can also run before Claude Code has put the text back, so the prompt is remembered
         and stripped from the front of the next one the same way, and counted in `leftover_strips`.
