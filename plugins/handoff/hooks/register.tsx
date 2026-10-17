@@ -41,6 +41,7 @@ import {
   sendOrKeepInBox,
   submitOrKeepInTranscript,
 } from './handoff-delivery'
+import { isBackgroundBusy } from './background-busy'
 import { inspectPrompt } from './prompt-inspection'
 import { writeRecord } from './record-writer'
 import { decideDuringHandoff } from './handoff-hold'
@@ -105,7 +106,6 @@ import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
 import { waitStartedLine } from './wait-started-line'
 
-const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
@@ -119,16 +119,6 @@ const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): st
 
 // The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
-
-const isBackgroundBusy = async ($: EngineInterface, state: SessionState): Promise<boolean> => {
-  if (state.backgroundTasks.size > 0) return true
-  try {
-    return (await $.agent.list()).some(agent => BUSY_AGENT_STATUSES.has(agent.status))
-  } catch (error) {
-    debug($, `could not list agents, treating background work as busy: ${String(error)}`)
-    return true
-  }
-}
 
 const readVersion = async ($: EngineInterface) => {
   try {
