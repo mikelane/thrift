@@ -569,10 +569,11 @@ test_box_shows_finds_the_typed_text_in_a_large_box() {
 }
 
 # live_claude_command is what the tmux server runs through sh. These tests run it as tmux would, with
-# a stub claude that prints its own path and environment.
+# a stub claude that prints its own path and the variables the harness sets or drops. Only those: a
+# failing test prints its output, and the rest of the owner's environment can hold keys.
 write_env_dumping_claude() { # write_env_dumping_claude <path>
   mkdir -p "$(dirname "$1")"
-  printf '#!/bin/sh\necho "BIN=$0"\nenv\n' > "$1"
+  printf '#!/bin/sh\necho "BIN=$0"\nenv | grep -E "^(CLAUDE|THRIFT_HOME=|PATH=)" || true\n' > "$1"
   chmod +x "$1"
 }
 
