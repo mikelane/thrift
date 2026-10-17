@@ -7,6 +7,9 @@
 # It is a filter and changes nothing else. Read the result once before pasting it: it does not know
 # your user name outside $HOME, other paths, or the welcome banner a pane excerpt can show.
 set -euo pipefail
+# Byte by byte: the home match is plain text and the id pattern is ASCII. In a UTF-8 locale a BSD sed
+# stops at a byte that is not UTF-8 (GNU cut -c can split a character) and drops every later line.
+export LC_ALL=C
 
 # The home directory is replaced as plain text (index/substr), so no character in it is special. It
 # travels in the environment because awk -v would read its backslashes as escapes. A trailing slash is

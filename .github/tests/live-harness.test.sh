@@ -813,4 +813,17 @@ test_trim_output_takes_a_home_directory_with_a_backslash() {
   assert_out_has '~/x'
 }
 
+
+# GNU cut -c splits a multibyte character; a BSD sed in a UTF-8 locale then stops at that byte and
+# drops every line after it, the verdict included.
+test_trim_output_keeps_every_line_after_a_byte_that_is_not_utf8() {
+  local home=$TEST_DIR/home
+  EXIT_CODE=0
+  printf '%s\n' $'split \xc3' "$home/x" 'PASS held-prompt-box (3 checks)' \
+    | LC_ALL=en_US.UTF-8 HOME="$home" "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has '~/x'
+  assert_out_has 'PASS held-prompt-box (3 checks)'
+}
+
 run_tests "$@"
