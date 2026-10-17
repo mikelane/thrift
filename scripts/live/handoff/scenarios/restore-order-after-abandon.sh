@@ -47,14 +47,19 @@ scenario_run() {
     "the box reads [$restored] (expected [$RESTORED], newlines shown as |)" \
     same_text "$restored" "$RESTORED"
   check 'the draft was not sent: no person turn started in the old session after the wait' \
-    "$(person_turns_after_wait a) person turn(s) started after the wait ended" \
-    no_person_turn_after_wait a
+    "$(person_turns_detail a)" no_person_turn_after_wait a
 }
 
 same_text() { [[ "$1" == "$2" ]]; }
 # Counted from the debug log lines after the wait ended; a request is logged once per model call, so a turn can show twice.
-person_turns_after_wait() { sed -n '/resumed after the wait/,$p' "$(debug_log_of "$1")" | grep -c 'cc_turn_origin=human' || true; }
-no_person_turn_after_wait() { [[ "$(person_turns_after_wait "$1")" == 0 ]]; }
+# A log without the wait's end has no "after the wait", so it can show no turn there and must not pass.
+WAIT_ENDED_LINE='resumed after the wait'
+person_turns_after_wait() { sed -n "/$WAIT_ENDED_LINE/,\$p" "$(debug_log_of "$1")" | grep -c 'cc_turn_origin=human' || true; }
+no_person_turn_after_wait() { log_has "$1" "$WAIT_ENDED_LINE" && [[ "$(person_turns_after_wait "$1")" == 0 ]]; }
+person_turns_detail() {
+  log_has "$1" "$WAIT_ENDED_LINE" || { echo "the debug log never shows the wait ending ('$WAIT_ENDED_LINE')"; return 0; }
+  echo "$(person_turns_after_wait "$1") person turn(s) started after the wait ended"
+}
 # The prompt box on one line, each newline shown as "|", the padding and the indent of wrapped lines removed.
 box_in_one_line() { box_text "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | paste -sd'|' -; }
 record_has_reason() { records_with none | jq -e --arg reason "$1" 'select(.trigger_values.reason == $reason)' >/dev/null; }

@@ -20,15 +20,17 @@ test_start_waiting_handoff_types_the_peer_message_before_it_presses_the_band_and
 }
 
 # run_restore_order <screen> <debug-log-lines>: the scenario with the screen, the debug log and one
-# background_busy abandon record fixed, and every engine-facing helper a no-op.
+# background_busy abandon record fixed, and every engine-facing helper a no-op. The debug log starts
+# with the three held-prompt lines the scenario waits for, then the given lines.
 run_restore_order() {
   local screen=$1 log_lines=$2
-  printf '%s\n' "$log_lines" > "$TEST_DIR/debug-a.log"
+  printf 'held a prompt for the handoff (%s held)\n' 1 2 3 > "$TEST_DIR/debug-a.log"
+  printf '%s\n' "$log_lines" >> "$TEST_DIR/debug-a.log"
   printf '%s\n' "$screen" > "$TEST_DIR/box"
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/restore-order-after-abandon.sh"
     live_init
     handoff_prepare() { :; }; start_peer_messenger() { :; }; start_waiting_handoff() { :; }
-    submit() { :; }; type_text() { :; }; log_has() { :; }; box_shows() { :; }
+    submit() { :; }; type_text() { :; }; box_shows() { :; }
     show_pane() { :; }; show_box() { :; }; show_log() { :; }
     pane() { cat "'"$TEST_DIR"'/box"; }
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
@@ -57,6 +59,13 @@ test_restore_order_is_a_fail_when_the_prompts_are_restored_out_of_order() {
   run_restore_order "$(printf '%s\n' '──────' '❯ one' '' 'three' '' 'two' 'draft' '──────')" "$WAIT_ENDED_LOG"
   assert_exit_code 1
   assert_out_has 'FAIL  the restored prompts are in typing order'
+}
+
+test_restore_order_is_a_fail_when_the_debug_log_never_shows_the_wait_ending() {
+  run_restore_order "$(printf '%s\n%s\n' '──────' "$RESTORED_BOX"; echo '──────')" 'cc_turn_origin=peer'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the draft was not sent: no person turn started in the old session after the wait'
+  assert_out_has 'the debug log never shows the wait ending'
 }
 
 test_restore_order_is_a_fail_when_a_person_turn_starts_after_the_wait() {
@@ -97,13 +106,15 @@ test_clear_resume_passes_one_person_clear_that_names_the_session_and_the_mode() 
   assert_out_has 'PASS s (7 checks)'
 }
 
-test_clear_resume_accepts_a_session_ended_record_for_a_resume() {
-  run_judge any_ending 2 "$(session_ended_record)"
+test_clear_resume_prints_the_path_a_resume_took_without_judging_it() {
+  run_judge show_ending_path 2 "$(session_ended_record)"
   assert_exit_code 0
+  assert_out_has 'PASS s (6 checks)'
+  assert_out_has 'case: ended with action none, reason session_ended, cleared_by missing'
 }
 
 test_clear_resume_is_a_fail_when_two_records_end_the_handoff() {
-  run_judge any_ending 2 "$(cleared_record old1 handoff)"$'\n'"$(session_ended_record)"
+  run_judge show_ending_path 2 "$(cleared_record old1 handoff)"$'\n'"$(session_ended_record)"
   assert_exit_code 1
   assert_out_has 'FAIL  case: exactly one record ends the handoff'
 }
@@ -147,6 +158,8 @@ test_clear_resume_is_a_fail_when_the_note_reached_the_resumed_session() {
   NOTE_FILE=resumed run_judge cleared_by_person 2 "$(cleared_record)"
   assert_exit_code 1
   assert_out_has 'FAIL  case: the handoff note reached exactly one transcript, not the resumed session'"'"'s'
+  assert_out_has 'transcripts holding the note: resumed.jsonl'
+  assert_out_lacks "$TEST_DIR/home"
 }
 
 test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {

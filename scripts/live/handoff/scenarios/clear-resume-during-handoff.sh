@@ -34,9 +34,9 @@ scenario_run() {
   start_peer_messenger b
   start_resume_target r
   run_case 'clear during the compaction' c1 compaction '/clear' cleared_by_handoff 2
-  run_case 'resume during the compaction' c2 compaction "/resume $RESUME_TARGET_ID" any_ending 2
+  run_case 'resume during the compaction' c2 compaction "/resume $RESUME_TARGET_ID" show_ending_path 2
   run_case 'clear during the wait' c3 wait '/clear' cleared_by_person 1
-  run_case 'resume during the wait' c4 wait "/resume $RESUME_TARGET_ID" any_ending 2
+  run_case 'resume during the wait' c4 wait "/resume $RESUME_TARGET_ID" show_ending_path 2
 }
 
 new_session_id() { uuidgen | tr '[:upper:]' '[:lower:]'; }
@@ -114,7 +114,7 @@ judge_case() {
   check "$CASE_LABEL: the session ended $expected_ends time(s), once per clear or resume that ran" "it ended $(session_ends "$name") time(s)" \
     session_ends_are "$name" "$expected_ends"
   check "$CASE_LABEL: the handoff note reached exactly one transcript, not the resumed session's" \
-    "transcripts holding the note: $(note_transcripts | tr '\n' ' ')" \
+    "transcripts holding the note: $(note_transcripts | sed 's|.*/||' | tr '\n' ' ')" \
     note_in_one_transcript_not_the_resumed_one
   "$expectation"
 }
@@ -154,11 +154,8 @@ ending_is_cleared_by() {
 ending_is_compacted_clear_by_handoff() {
   ending_is_cleared_by handoff && [[ "$(ending_field .trigger_values.compacted_before_clear)" == true ]]
 }
-# Which path the engine took is printed with the records; either is a correct end.
-any_ending() {
-  check "$CASE_LABEL: it ended as a handoff clear or as session_ended" "the ending record: $(ending_records | tr '\n' ' ')" \
-    ending_is_a_clear_or_session_end
-}
-ending_is_a_clear_or_session_end() {
-  [[ "$(ending_field .action)" == cleared || "$(ending_field .trigger_values.reason)" == session_ended ]]
+# Which path the engine took is printed, not judged: ENDING_RECORD already admits only the two correct ends.
+show_ending_path() {
+  printf '        %s: ended with action %s, reason %s, cleared_by %s\n' "$CASE_LABEL" "$(ending_field .action)" \
+    "$(ending_field .trigger_values.reason)" "$(ending_field .trigger_values.cleared_by)"
 }
