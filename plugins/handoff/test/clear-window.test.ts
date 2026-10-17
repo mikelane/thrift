@@ -23,11 +23,14 @@ const WAITING_WRITE = JSON.stringify({ shape: 'offer-has-held-prompt', value: WA
 
 // Ends the running turn inside the write that draws the waiting status, while the plugin awaits that write.
 const endTurnWhileWaitingIsDrawn = ($: Engine, world: World) => {
+  const drawn = { count: 0 }
   world.onOfferWrite = async value => {
     if (JSON.stringify(value) !== WAITING_WRITE) return
+    drawn.count += 1
     await completeTurn($)
     await world.clock.settle()
   }
+  return drawn
 }
 
 const settledHandoff: SettledHandoff = {
@@ -60,6 +63,16 @@ describe('showWaitingStatus', () => {
     await startTurn($)
     await finishNote()
     expect(await shownText(await mountBand($))).toEqual([WAITING])
+  })
+
+  test('It draws the waiting status on the band before it shows the toast', async ($, on) => {
+    const { world, finishNote } = await turnRunningWhenTheNoteIsWritten($, on)
+    const toastShownAtDraw: boolean[] = []
+    world.onOfferWrite = async value => {
+      if (JSON.stringify(value) === WAITING_WRITE) toastShownAtDraw.push(world.effects.includes(WAITING_TOAST))
+    }
+    await finishNote()
+    expect(toastShownAtDraw).toEqual([false])
   })
 
   test('It leaves the band and the toast alone once a session end decided the outcome', async ($, on) => {
@@ -131,8 +144,9 @@ describe('waitForClearWindow', () => {
 
   test('It clears when the running turn ends while the waiting status is being drawn', async ($, on) => {
     const { world, finishNote } = await turnRunningWhenTheNoteIsWritten($, on)
-    endTurnWhileWaitingIsDrawn($, world)
+    const drawn = endTurnWhileWaitingIsDrawn($, world)
     await finishNote()
+    expect(drawn.count).toBe(1)
     expect(world.effects).toContain('clear')
   })
 

@@ -5,7 +5,6 @@ import {
   buttonLabels,
   clears,
   completeTurn,
-  dropOf,
   entered,
   growTo200k,
   install,
@@ -17,18 +16,7 @@ import {
   submitPerson,
   usageOf,
 } from './helpers'
-import { ASK, weakBand } from './band-turn-fixtures'
-
-const HELD = 'now ENG-2'
-
-const heldPromptBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
-  world.branch = 'alice/eng-1-start'
-  await growTo200k($, world)
-  await submitPerson($, 'start on ENG-1')
-  const dropped = await submitPerson($, HELD)
-  expect(dropOf(dropped)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
-  return mountBand($)
-}
+import { ASK, HELD_PROMPT as HELD, heldPromptBand, holdFill, weakBand } from './band-turn-fixtures'
 
 test('It keeps a held-prompt band up when a task notification starts a turn', ASK, async ($, on) => {
   const world = install($, on)
@@ -134,8 +122,34 @@ describe('pressHeldPromptButton', () => {
     await startSession($)
     const band = await heldPromptBand($, world)
     await world.clock.settle()
+    expect(world.box.text).toContain(HELD)
     await band.press({ key: 'handoff-send' })
     expect(world.box.text).not.toContain(HELD)
+  })
+
+  test('It sends nothing for Send here until the box has been emptied', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await heldPromptBand($, world)
+    const fill = holdFill(world)
+    void band.press({ key: 'send-here' })
+    await world.clock.settle()
+    expect(entered(world).filter(effect => effect.includes(HELD))).toHaveLength(0)
+    fill.release()
+    await world.clock.settle()
+    expect(entered(world).filter(effect => effect.includes(HELD))).toHaveLength(1)
+  })
+
+  test('It takes the band down before it empties the box', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await heldPromptBand($, world)
+    const boxHeldPromptAtTakedown: boolean[] = []
+    world.onOfferWrite = async () => {
+      boxHeldPromptAtTakedown.push(world.box.text.includes(HELD))
+    }
+    await band.press({ key: 'send-here' })
+    expect(boxHeldPromptAtTakedown).toEqual([true])
   })
 
   test('It does not carry a prompt Send here already sent into a later /handoff', ASK, async ($, on) => {

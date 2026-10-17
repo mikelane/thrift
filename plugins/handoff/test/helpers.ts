@@ -73,6 +73,7 @@ const defaultWorld = (clock: MockClock): World => ({
   stateSetThrows: false,
   offerWrites: [],
   onOfferWrite: undefined,
+  onFill: undefined,
   usageDenied: false,
   boxReadDenied: false,
   sessionIdDenials: 0,

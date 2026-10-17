@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { WRITING_STATUS } from '../hooks/band-text'
-import { bash, buttonLabels, completeTurn, install, mountBand, runCommand, startSession, startTurn, writingTheNote } from './helpers'
+import { answered, bash, buttonLabels, completeTurn, growTo200k, holdFork, install, mountBand, runCommand, startSession, startTurn, writingTheNote } from './helpers'
 import { ASK, bandAfterFinishedTask, weakBand } from './band-turn-fixtures'
 import { shownText } from './wait-for-turn-helpers'
 
@@ -46,10 +46,11 @@ describe('takeDownBand', () => {
     const world = install($, on)
     await startSession($)
     const band = await weakBand($, world)
+    const writesBeforePress = world.offerWrites.length
     await band.press({ key: 'not-now' })
     await startTurn($)
     await completeTurn($)
-    expect(world.offerWrites.slice(1)).toEqual([TAKEDOWN])
+    expect(world.offerWrites.slice(writesBeforePress)).toEqual([TAKEDOWN])
   })
 })
 
@@ -72,6 +73,19 @@ describe('offerBand', () => {
   })
 })
 
+describe('offerBand failures', () => {
+  test('It writes no takedown for a band whose offer was never stored', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    world.stateSetThrows = true
+    await growTo200k($, world)
+    await completeTurn($)
+    world.stateSetThrows = false
+    await $.session.end({ reason: 'other', sessionId: 'old-session', resume: { id: 'old-session' } })
+    expect(world.offerWrites).toEqual([])
+  })
+})
+
 describe('redrawBand', () => {
   test('It says why when the band cannot be redrawn and still writes the note', ASK, async ($, on) => {
     const world = install($, on)
@@ -81,6 +95,19 @@ describe('redrawBand', () => {
     await world.clock.settle()
     expect(world.debugLines.join('\n')).toContain('could not redraw the band')
     expect(world.effects).toContain('fork')
+  })
+
+  test('It writes no takedown for a writing status that was never stored', ASK, async ($, on) => {
+    const world = install($, on)
+    const fork = holdFork(world)
+    await startSession($)
+    world.stateSetThrows = true
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    world.stateSetThrows = false
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    expect(world.offerWrites).not.toContainEqual(TAKEDOWN)
   })
 })
 
