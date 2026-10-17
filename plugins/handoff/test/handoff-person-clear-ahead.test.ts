@@ -43,6 +43,25 @@ describe('the handoff clear alone, with a turn in the fresh session', () => {
   })
 })
 
+// A hook beneath answered the person's /clear in its place, then the handoff's clear ran and a turn started in its session.
+const answeredPersonClearThenOwnClear = (world: World, $: Parameters<typeof startTurn>[0]) => {
+  world.answersPersonClear = true
+  world.onClearIssued = async () => {
+    world.onClearIssued = undefined
+    await runCommand($, 'clear')
+  }
+  turnRunsAfterOwnClear(world, $)
+}
+
+describe('a person clear answered in its place while the handoff clear waits', () => {
+  test('It leaves late_turn off when the turn started after the handoff clear ended the session', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    answeredPersonClearThenOwnClear(world, $)
+    await finishNote()
+    expect(lastRecord(world).trigger_values.late_turn).toBeUndefined()
+  })
+})
+
 describe('a person clear queued ahead of the handoff clear', () => {
   test('It adds the turn-after-note line when a turn ran in the session the person cleared to', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)

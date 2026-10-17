@@ -261,6 +261,11 @@ export const recordForeignClear = (state: SessionState, origin: PromptOrigin): v
   if (state.isOwnClearQueued) state.foreignClearsAhead += 1
 }
 
+// A foreign clear a hook answered in its place: it ran nothing and ends no session, so no end is owed to it.
+export const forgetForeignClear = (state: SessionState): void => {
+  if (state.foreignClearsAhead > 0) state.foreignClearsAhead -= 1
+}
+
 // The ends of foreign clears come first; the first end after them is the handoff's own. Any other reason ends it outright.
 const endQueuedClear = (state: SessionState, reason: string): void => {
   if (reason === 'clear' && state.foreignClearsAhead > 0) {

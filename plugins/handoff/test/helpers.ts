@@ -57,6 +57,7 @@ const defaultWorld = (clock: MockClock): World => ({
   onClearIssued: undefined,
   onClearEnded: undefined,
   clearOrigins: [],
+  answersPersonClear: false,
   box: { text: '', cursor: 0 },
   isRunningSubmitHook: false,
   fillRefusal: undefined,

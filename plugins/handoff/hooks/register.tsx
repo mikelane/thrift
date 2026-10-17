@@ -92,6 +92,7 @@ import {
   isCarriedByHandoff,
   isHoldingForHandoff,
   noteCacheReads,
+  forgetForeignClear,
   recordForeignClear,
   recordSessionEnd,
   releaseCarried,
@@ -1242,9 +1243,13 @@ export const register: Register = (on, options) => {
 
   // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
   // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
-  on('command.run', { command: 'clear' }, ($, e, next) => {
+  // Counted before next: the clear's session end comes inside it. Core sets ref on a run it made; a hook beneath that answers
+  // in the clear's place leaves it off, and then no end is coming.
+  on('command.run', { command: 'clear' }, async ($, e, next) => {
     recordForeignClear(state, e.origin)
-    return next(e)
+    const result = await next(e)
+    if (result.ref === undefined) forgetForeignClear(state)
+    return result
   }).catch(($, e, next) => next(e))
 
   on('session.end', async ($, e, next) => {

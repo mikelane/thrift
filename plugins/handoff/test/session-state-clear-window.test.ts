@@ -6,6 +6,7 @@ import {
   beginOwnClear,
   claimPending,
   noteCacheReads,
+  forgetForeignClear,
   recordForeignClear,
   recordSessionEnd,
   createState,
@@ -338,6 +339,22 @@ test('It ignores the handoff plugin own clear in recordForeignClear', () => {
   recordForeignClear(state, { kind: 'plugin', name: 'handoff' })
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It drops a counted foreign clear that ended no session in forgetForeignClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state, PERSON)
+  forgetForeignClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It leaves the count at zero when no foreign clear is counted in forgetForeignClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  forgetForeignClear(state)
+  expect(state.foreignClearsAhead).toBe(0)
 })
 
 test('It counts another plugin clear as foreign in recordForeignClear', () => {
