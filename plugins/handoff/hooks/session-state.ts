@@ -83,6 +83,7 @@ export type SessionState = Settings & {
   deferredPress: ButtonPress | null
   hasTurnAfterNote: boolean
   isOwnClearQueued: boolean
+  foreignClearsAhead: number
   hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
   handoffStage: HandoffStage
@@ -112,6 +113,7 @@ export const createState = (settings: Settings): SessionState => ({
   deferredPress: null,
   hasTurnAfterNote: false,
   isOwnClearQueued: false,
+  foreignClearsAhead: 0,
   hasLateTurn: false,
   turnEndWaiter: null,
   handoffStage: 'idle',
@@ -230,6 +232,7 @@ export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
   state.handoffStage = 'idle'
   state.isOwnClearQueued = false
+  state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
 
@@ -243,12 +246,28 @@ export const beginBeforeClear = (state: SessionState): void => {
 export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
   state.isOwnClearQueued = true
+  state.foreignClearsAhead = 0
   state.hasLateTurn = false
+}
+
+// A clear someone else queued ahead of the handoff's own: the engine runs a command.run hook for every clear but the plugin's
+// own, so a clear seen here while ours waits is the person's. Its session end is not the end of ours.
+export const recordForeignClear = (state: SessionState): void => {
+  if (state.isOwnClearQueued) state.foreignClearsAhead += 1
+}
+
+// The ends of foreign clears come first; the first end after them is the handoff's own. Any other reason ends it outright.
+const endQueuedClear = (state: SessionState, reason: string): void => {
+  if (reason === 'clear' && state.foreignClearsAhead > 0) {
+    state.foreignClearsAhead -= 1
+    return
+  }
+  state.isOwnClearQueued = false
 }
 
 // Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
 export const recordSessionEnd = (state: SessionState, reason: string): void => {
-  if (state.handoffStage === 'own_clear') state.isOwnClearQueued = false
+  if (state.handoffStage === 'own_clear') endQueuedClear(state, reason)
   if (state.handoffStage !== 'before_clear') return
   if (state.sessionEndBeforeClear === 'other') return
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'

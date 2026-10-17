@@ -31,6 +31,8 @@ export type World = {
   agentListThrows: boolean
   // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
   onAgentList: (() => Promise<void>) | undefined
+  // Runs when a clear is issued, before it ends the session: what the engine ran ahead of it, in the order it ran.
+  onClearIssued: (() => Promise<void>) | undefined
   box: Box
   // True while a submitHooks callback runs: a prompt that arrives then is typed after what the plugin just put in the box.
   isRunningSubmitHook: boolean
@@ -155,6 +157,7 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
     world.effects.push('clear')
+    await world.onClearIssued?.()
     const ended = world.sessionId
     world.sessionId = world.nextSessionId
     await $.session.end({ reason: 'clear', sessionId: ended, resume: { id: ended } })

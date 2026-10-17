@@ -6,6 +6,7 @@ import {
   beginOwnClear,
   claimPending,
   noteCacheReads,
+  recordForeignClear,
   recordSessionEnd,
   createState,
   endHandoff,
@@ -253,4 +254,77 @@ test('It clears the queued-clear and late-turn marks from endHandoff', () => {
   startMainTurn(state, '')
   endHandoff(state)
   expect(state).toMatchObject({ isOwnClearQueued: false, hasLateTurn: false })
+})
+
+test('It keeps the own clear queued when a foreign clear ended the session first in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(true)
+})
+
+test('It marks a turn between a foreign clear and the own clear as late in startMainTurn', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  recordSessionEnd(state, 'clear')
+  startMainTurn(state, '')
+  expect(state.hasLateTurn).toBe(true)
+})
+
+test('It treats the second clear as the own clear after one foreign clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  recordSessionEnd(state, 'clear')
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It treats the second clear as the own clear after two foreign clears in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  recordForeignClear(state)
+  recordSessionEnd(state, 'clear')
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(true)
+})
+
+test('It takes a session end that is not a clear as the end of the queued clear despite a foreign clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  recordSessionEnd(state, 'resume')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It ignores a foreign clear before the own clear is queued in recordForeignClear', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordForeignClear(state)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It ignores a foreign clear after the own clear ended the session in recordForeignClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  recordForeignClear(state)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It forgets a foreign clear from endHandoff', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state)
+  endHandoff(state)
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
 })

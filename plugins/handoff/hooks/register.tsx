@@ -92,6 +92,7 @@ import {
   isCarriedByHandoff,
   isHoldingForHandoff,
   noteCacheReads,
+  recordForeignClear,
   recordSessionEnd,
   releaseCarried,
   queueResubmittedPrompt,
@@ -1238,6 +1239,15 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'handoff' }, $ => startHandoffCommand($, state)).catch(() => ({
     text: 'Could not start a handoff.',
   }))
+
+  // SAFETY: the declarations say a plugin's $.command.run skips the calling plugin's own hooks, so this sees only clears
+  // someone else ran. Unverified live. If the engine did run it for the handoff's own clear, that clear would be counted as
+  // foreign and its end taken for one, so a turn that starts in the fresh session before the note is delivered would be
+  // flagged late: a spurious line in the note, never a missing one.
+  on('command.run', { command: 'clear' }, ($, e, next) => {
+    recordForeignClear(state)
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   on('session.end', async ($, e, next) => {
     recordSessionEnd(state, e.reason)
