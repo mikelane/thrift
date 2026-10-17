@@ -201,6 +201,12 @@ export const noteLeftoverStrip = (state: SessionState): void => {
   state.leftoverStrips += 1
 }
 
+// Once the plugin has put a prompt in the box for the person to send, or found it already there, the box holds that prompt and
+// not a leftover: text typed after it is sent with it on purpose, and is not stripped.
+export const forgetBoxLeftover = (state: SessionState): void => {
+  state.boxLeftover = null
+}
+
 export const noteBoxCleared = (state: SessionState, boxText: string): void => {
   if (state.boxLeftover === boxText) state.boxLeftover = null
 }
@@ -239,7 +245,6 @@ export const takeHeldPrompts = (state: SessionState): HeldPrompt[] => {
 // between the two. Holding stays on until takeLateArrivalsOrEndSending finds nothing left.
 export const beginSending = (state: SessionState): void => {
   const hold = state.handoffHold
-  state.boxLeftover = null
   state.handoffHold = {
     phase: 'sending',
     promptCarriedByHandoff: hold.phase === 'idle' ? null : hold.promptCarriedByHandoff,

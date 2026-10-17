@@ -155,7 +155,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         The clear can run before Claude Code has put the text back, so the plugin also remembers the
         text it left until a clear finds and removes it. If the next prompt arrives as that text
         followed by the new one (`five`, then `fivesix`), only the part after it is held (`six`).
-        A prompt that merely starts like the earlier one is kept whole once a clear has removed it.
+        A prompt that merely starts like the earlier one is kept whole once a clear has removed it, or once
+        the plugin has put a held prompt back in the box for the person to send.
         One case is stripped wrongly: the clear never found the leftover, the person cleared the box
         by hand, and the next prompt really does start with the same text. `yes` is held, the box is
         cleared by hand, then `yes please` is typed, and it is held as `please`. The plugin cannot tell

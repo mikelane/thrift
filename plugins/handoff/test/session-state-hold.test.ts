@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  forgetBoxLeftover,
   addHeldPrompt,
   beginHandoffHold,
   beginSending,
@@ -334,10 +335,19 @@ test('It returns the submitted text whole from typedAfterBoxLeftover when no han
   expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
 })
 
-test('It forgets the leftover when beginSending starts a new hold', () => {
+test('It keeps the leftover when beginSending starts the delivery', () => {
   const state = createState(settings)
+  beginHandoffHold(state, null)
   noteBoxLeftover(state, 'five')
   beginSending(state)
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('six')
+})
+
+test('It forgets the leftover when forgetBoxLeftover is called', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  noteBoxLeftover(state, 'five')
+  forgetBoxLeftover(state)
   expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
 })
 

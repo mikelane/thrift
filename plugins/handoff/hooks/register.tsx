@@ -107,6 +107,7 @@ import {
   endSubagentTurn,
   takeHeldPrompts,
   isAwaitingDelivery,
+  forgetBoxLeftover,
   noteBoxCleared,
   noteBoxLeftover,
   noteLeftoverStrip,
@@ -339,6 +340,12 @@ const emptySentPromptFromBox = async ($: EngineInterface, state: SessionState, p
   }
 }
 
+// A held prompt kept in the box for the person to send: text typed after it is sent with it on purpose.
+const keptInBox = (state: SessionState): Carried => {
+  forgetBoxLeftover(state)
+  return 'in_box'
+}
+
 const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer', author: 'person' })
 
 // Only a prompt typed at this terminal is offered to the box. The sender of any other prompt is somewhere else, and filling
@@ -385,7 +392,7 @@ const restorePrompt = async (
   prompt: HeldPrompt,
   placement: BoxPlacement = 'before_draft',
 ): Promise<Carried> => {
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return keptInBox(state)
   const carried = await submitOrKeepInTranscript($, state, prompt)
   if (carried === 'submitted') await emptySentPromptFromBox($, state, prompt)
   return carried
@@ -537,7 +544,7 @@ const sendOrKeepInBox = async (
     await emptySentPromptFromBox($, state, prompt)
     return 'submitted'
   }
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return keptInBox(state)
   keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
   return 'not_carried'
 }
