@@ -177,6 +177,7 @@ LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0
 live_claude_command() {
   local name=$1
   shift
+  # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
   local drop_script='keep=$1; shift
 for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do
   printf "%s\n" "$variable" | grep -Eq "$keep" || unset "$variable"

@@ -36,6 +36,14 @@ ran no checks, a decision log that exists but cannot be read as JSON lines, or a
 that failed before a verdict). A FAIL or ERROR keeps the run directory and prints
 its path: `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
 
+A run can show home paths, transcript session ids and, in a pane excerpt, the welcome banner. Pipe
+the output through the trimmer before pasting it into an issue or PR; it turns `$HOME` into `~` and
+every UUID into `<session-id>`, and changes nothing else. Read the result once anyway.
+
+```sh
+scripts/live/live.sh handoff held-prompt-box 2>&1 | scripts/live/trim-output.sh
+```
+
 Every wait is on a condition (pane text, a debug-log line, a decision record) with a
 `LIVE_TIMEOUT` of 90 seconds, set in the environment to change it. The only fixed delay is the
 0.25 s polling interval.

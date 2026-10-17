@@ -754,4 +754,25 @@ test_a_working_directory_inside_a_work_tree_is_an_error() {
   assert_tmux_not_called 'new-session'
 }
 
+test_trim_output_replaces_the_home_directory_and_session_ids() {
+  write_live_stubs
+  EXIT_CODE=0
+  printf '%s\n' "run $TEST_DIR/home/.cache/x and $TEST_DIR/home" \
+    'session 0a1b2c3d-4e5f-6789-abcd-ef0123456789 and 0A1B2C3D-4E5F-6789-ABCD-EF0123456789' \
+    'PASS held-prompt-box (3 checks)' \
+    | HOME="$TEST_DIR/home" "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has 'run ~/.cache/x and ~'
+  assert_out_has 'session <session-id> and <session-id>'
+  assert_out_has 'PASS held-prompt-box (3 checks)'
+  assert_out_lacks "$TEST_DIR/home"
+}
+
+test_trim_output_leaves_other_text_alone_when_home_has_sed_special_characters() {
+  EXIT_CODE=0
+  printf '%s\n' '/a.b&c/x /aXb&c' | HOME='/a.b&c' "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 0
+  assert_out_has '~/x /aXb&c'
+}
+
 run_tests "$@"
