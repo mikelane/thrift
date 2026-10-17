@@ -168,6 +168,8 @@ async function deliverNote(
   if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
+  // SAFETY: the joined group is a scheduled one, and only a prompt typed at the composer leaves a copy in the box, so boxCopy is
+  // always undefined today and no test can tell whether it is passed on. It stays so a group that does carry one is not lost.
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
   const note: HeldPrompt = {
     text: joinPrompts(message, sameOriginGroup?.text),

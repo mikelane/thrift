@@ -94,8 +94,9 @@ the type declarations, then runs these in order and stops at the first failure:
 3. `claude plugin test plugins/<name>`: all pass, no skipped tests, no network access.
    `plugin test` measures no coverage (checked on 2.1.294), so review enforces it: every
    exported function and every branch in `hooks/` has a test whose name says which, and
-   `test-coverage-mapper` reports no uncovered changed function. Go back to a measured 100%
-   once `plugin test` reports coverage.
+   `test-coverage-mapper` reports no uncovered changed function. A test cannot call a
+   `$`-taking helper directly, so for those a `describe` named for the function meets "a test
+   whose name says which". Go back to a measured 100% once `plugin test` reports coverage.
 
 A check that reads a plugin's files goes in `plugins/<name>/checks/*.ts`, because `plugin test`
 has no file system. `scripts/check.sh` runs each one with `node --experimental-strip-types` after
