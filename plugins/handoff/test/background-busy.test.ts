@@ -9,6 +9,7 @@ describe('isBackgroundBusy', () => {
     await bash($, world, 'sleep 100', { result: { backgroundTaskId: 'bg1' } })
     world.agentListThrows = true
     await completeTurn($)
+    expect(lastRecord(world).trigger_values.is_background_busy).toBe(true)
     expect(world.debugLines.some(line => line.includes('could not list agents'))).toBe(false)
   })
 

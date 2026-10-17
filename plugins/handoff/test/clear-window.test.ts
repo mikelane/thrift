@@ -3,13 +3,25 @@ import { describe, expect, test } from 'claude-code/testing'
 import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
 import type { SettledHandoff } from '../hooks/decision-record'
 import { compacted, lastRecord, mountBand, startTurn } from './helpers'
-import { ACT, COMPACTING, WAITING, actHandoffWhileWritingTheNote, endTurn, shownText, writingTheNote } from './wait-for-turn-helpers'
+import {
+  ACT,
+  BUSY_MESSAGE,
+  COMPACTING,
+  SESSION_ENDED_MESSAGE,
+  WAITING,
+  WAITING_TOAST,
+  actHandoffWhileWritingTheNote,
+  endTurn,
+  personClearedThenTurnInFreshSession,
+  shownText,
+  writingTheNote,
+} from './wait-for-turn-helpers'
 
-const settledHandoff = {
-  trigger: { point: 'turn-end', signal: 'strong', isBusy: false, contextTokens: 200_000 },
+const settledHandoff: SettledHandoff = {
+  trigger: { point: 'turn-end', signal: 'strong', isBusy: false, contextTokens: 200_000, cacheReadTokens: 0, effectiveMode: 'ask' },
   isUnattended: false,
   heldGroups: [],
-} as unknown as SettledHandoff
+}
 
 const abandoning = (cause: AbandonCause) => {
   const calls: Array<{ settled: SettledHandoff; reason: string; message: string; sessionId: string }> = []
@@ -37,12 +49,10 @@ describe('showWaitingStatus', () => {
     expect(await shownText(await mountBand($))).toEqual([WAITING])
   })
 
-  test('It leaves the band alone once a session end decided the outcome', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await startTurn($)
-    await $.session.end({ reason: 'resume', sessionId: 'old-session', resume: { id: 'old-session' } })
-    await finishNote()
-    expect(world.effects).not.toContain(`toast:${WAITING}`)
+  test('It leaves the band and the toast alone once a session end decided the outcome', async ($, on) => {
+    const world = await personClearedThenTurnInFreshSession($, on)
+    expect(await shownText(await mountBand($))).toEqual(['engine band'])
+    expect(world.effects).not.toContain(WAITING_TOAST)
   })
 })
 
@@ -118,13 +128,13 @@ describe('abandonAfterWait', () => {
   test('It abandons with session_ended and the session-ended message', async () => {
     const { calls, done } = abandoning('session_ended')
     await done
-    expect(calls).toMatchObject([{ reason: 'session_ended', sessionId: 'old-session' }])
+    expect(calls).toMatchObject([{ reason: 'session_ended', message: SESSION_ENDED_MESSAGE, sessionId: 'old-session' }])
   })
 
-  test('It abandons with background_busy and a busy-refusal trigger', async () => {
+  test('It abandons with background_busy, the busy-refusal message, and a busy-refusal trigger', async () => {
     const { calls, done } = abandoning('busy')
     await done
-    expect(calls).toMatchObject([{ reason: 'background_busy', settled: { trigger: { isBusy: true, signal: 'weak' } } }])
+    expect(calls).toMatchObject([{ reason: 'background_busy', message: BUSY_MESSAGE, settled: { trigger: { isBusy: true, signal: 'weak' } } }])
   })
 
   test('It abandons with clear_failed and the trigger as settled', async () => {
