@@ -751,6 +751,7 @@ test_signals_are_ignored_by_the_time_the_cleanup_starts() {
   assert_out_has "trap -- '' SIGTERM"
   assert_out_has "trap -- '' SIGHUP"
   assert_out_has "trap -- '' SIGQUIT"
+  assert_out_has "trap -- '' SIGPIPE"
 }
 
 test_a_scenario_that_ran_no_checks_is_an_error_not_a_pass() {
@@ -772,6 +773,7 @@ test_a_malformed_decision_log_is_an_error_not_zero_records() {
   assert_out_lacks 'PASS s'
 }
 
+# chmod 000 does not stop root, so under root this test reads the log and fails.
 test_an_unreadable_decision_log_is_an_error_not_zero_records() {
   run_live 'live_init; echo "{}" > "$LIVE_DECISIONS"; chmod 000 "$LIVE_DECISIONS"
     check "no cleared record" detail eval "! record_exists cleared"

@@ -125,6 +125,9 @@ live_init() {
 }
 
 # live_note_error <message>: records that the harness hit a problem inside a command substitution.
+# A note is never cleared, so one bad read ends the run. The plugin appends each decision record with
+# one small write, so a read that lands mid-record is not expected; if one ever shows up as a spurious
+# "could not be read" ERROR, read only up to the last newline rather than retrying.
 live_note_error() { [[ -z "${LIVE_RUN:-}" ]] || printf '%s\n' "$*" >"$LIVE_RUN/harness-error" 2>/dev/null || true; }
 
 # live_raise_noted_error: ends the run with an ERROR when a helper noted a problem.
