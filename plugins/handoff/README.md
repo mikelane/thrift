@@ -10,8 +10,9 @@ Success means fewer cache-read tokens per turn in long sessions, measured agains
 baseline that `off` mode logs.
 
 > **Status:** early. The tests pass against Claude Code 2.1.302. Parts of the handoff have been
-> watched in live terminals (a hand run on 2.1.299, tmux harness runs on 2.1.299 through 2.1.302);
-> the rest has not. See [What has been verified live](#what-has-been-verified-live) and
+> watched in live terminals (a hand run on 2.1.299, tmux harness runs on 2.1.299 through 2.1.302,
+> the latest on 2026-10-17 after the `register.tsx` split); the rest has not. See
+> [What has been verified live](#what-has-been-verified-live) and
 > [What has not been verified](#what-has-not-been-verified).
 
 ## Install
@@ -470,7 +471,7 @@ plugin without any error. Four layers guard against that:
 
 | Release | Tested through Claude Code |
 |---|---|
-| 0.1.0 | 2.1.302 |
+| 0.2.0 | 2.1.302 |
 
 ## What has been verified live
 
@@ -490,9 +491,25 @@ hand on 2.1.299:
   session, so the plugin reports it as a late turn (`peer-during-compaction`, 2.1.299).
 - `/clear` typed while a handoff waits runs first: the `cleared` record has `cleared_by: person`,
   and the note lands in the fresh session.
-- `/clear` typed during the `compactBeforeClear` compaction is queued by Claude Code and runs after
-  the handoff's own clear. Both run, the `cleared` record has `cleared_by: handoff`, and the note
-  lands in the final session. It leaves an empty session in the resume list.
+- `/clear` typed during the `compactBeforeClear` compaction is queued by Claude Code. Both clears
+  run, the `cleared` record has `cleared_by: handoff` and `compacted_before_clear: true`, and the
+  note lands in the final session. It leaves an empty session in the resume list. The order varies:
+  most runs put the person's clear after the handoff's, but one run on 2.1.302 put it about 75 ms
+  ahead (issue #43, "Run A"). The record read the same either way.
+- `/resume` typed during the compaction or the wait is queued too. Exactly one record ends the
+  handoff and it names the session the handoff started in with `effective_mode: ask`, no record
+  reports a failure, and the session ends once per clear or resume that ran. A `/clear` typed
+  during the wait ends it as the person's (`clear-resume-during-handoff`, 28 checks, 2.1.302; issue
+  #43, "#67 scenarios" and "Run A").
+- After an abandoned handoff the held prompts return to the box in typing order, before a draft that
+  is still unsent, and the draft is not sent (`restore-order-after-abandon`, 4 checks, 2.1.302).
+- The handoff's own `/clear` carries the origin `handoff`. The engine skips the plugin's own
+  `command.run` hook for it with a re-entry line, while other plugins' hooks still see it. A
+  person's `/clear` does reach the hook, with a composer origin; `session.end` fires inside its
+  `next(e)`, and core's result carries `ref` (2.1.302, `--plugin-dir`; issue #43, "Run A").
+- The plugin's own `$.prompt.submit` does not pass through its own `prompt.submit` hook (2.1.299).
+- No turn with an `agentId` starts during the pre-clear compaction, and no `cleared` record carries
+  `late_turn` (2.1.302, two runs; issue #43, "Run A").
 - The band draws `h: Hand off and clear`, and ctrl+x Tab then `h` presses it and starts the
   handoff (`busy-abandon`, 2.1.302).
 - The waiting status shows ("Handoff note written. The handoff continues when the current turn
@@ -515,7 +532,7 @@ These need a live terminal and have not been watched yet:
   off and clear does what its label says.
 - How the band lays out in a narrow terminal (around 40 columns), in fullscreen and on the main
   screen: that the buttons wrap onto new rows rather than clip, and that the message and hint lines
-  wrap. The waiting status was seen at about 90 columns only.
+  wrap. The waiting status was seen at about 90 columns only, never at 60.
 - A press that waited colliding with a prompt queued mid-turn: the queued prompt may start the next
   turn before the scheduled clear or compaction runs. A queued peer prompt was seen running before a
   queued `/clear`, but not after a press.
@@ -523,6 +540,20 @@ These need a live terminal and have not been watched yet:
   then released.
 - That `claude --resume <old id>` reopens the old session after a handoff that cleared. It was seen
   only after a busy abandon, and only with `-p`.
+- Three behaviors seen on 2.1.302 that are open as #89, so not verified as intended. After a
+  `/resume` typed during a handoff, the "Handed off" line and toast show in the resumed session,
+  while the note lands in the transcript of the fresh session the person left. A command typed
+  during the wait is queued and runs the moment the turn ends, so the compaction met a turn in
+  flight and logged `compaction_failed` in 3 of 5 runs; the handoff went on regardless. A typed
+  `/clear` that ran ahead of the handoff's own was still credited to the handoff.
+- Anything with a bridge or SDK client, such as a prompt refused for its attachment, a remote
+  prompt held through an abandon, and what the sender sees as the drop reason. The harness cannot
+  stand in for a client.
+- Whether the handoff's own clear keeps the origin name `handoff` when the plugin is installed from
+  the marketplace rather than loaded with `--plugin-dir`.
+- Subagents: a background agent running when `/handoff` is typed, a band press while only a
+  subagent runs, a foreground agent during the wait, and a teammate's turns (#94). A scheduled
+  prompt that fires during a handoff and keeps its unattended turn (#95).
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
 - Whether the appended note shows in the fresh session's transcript, or only in its context. If it
@@ -530,11 +561,12 @@ These need a live terminal and have not been watched yet:
 - That `ask` mode refills the box with a prompt it holds. A held prompt was seen back in the box
   after a busy abandon in `ask` mode only.
 - That a draft typed beside a held prompt survives its delivery (#56).
-- Held prompts from a bridge or SDK client, a scheduled prompt that is resubmitted, and the drop
-  reason a remote sender sees.
 - The paths that need a refused submit or fill: a second held group refused, `fill` returning
-  `isFilled: false`, and both refused (#67).
-- `/resume` while a handoff is compacting or waiting, and a `/handoff` typed before `session.start`.
+  `isFilled: false`, and both refused. Only the test kit covers them; a live session cannot force
+  a refusal.
+- A prompt typed, or an image prompt sent, while an abandon restores its held prompts. The restore
+  takes about 17 ms, too short for tmux, so only the test kit covers it.
+- A `/handoff` typed before `session.start`.
 - That `/handoff` in a session with no reply yet shows the "Nothing to hand off yet" message (#54).
 - That the status line (writing, then waiting) comes down after the clear, and that no `handoff:` appears twice in a
   transcript line or toast.
