@@ -90,6 +90,7 @@ run_judge() {
     echo "Handoff from the previous session (old1), written by Claude" > "$CLAUDE_CONFIG_DIR/projects/p/${NOTE_FILE:-fresh}.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
+    CASE_PHASE=${PHASE:-}; COMPACTION_ENDED_AT_TYPING=${ENDED_AT_TYPING:-0}
     judge_case c '"$expectation"' '"$ends"'
     live_verdict s'
 }
@@ -158,6 +159,49 @@ test_clear_resume_is_a_fail_when_the_note_reached_the_resumed_session() {
   assert_out_has 'FAIL  case: the handoff note reached exactly one transcript'
   assert_out_has 'transcripts holding the note: resumed.jsonl'
   assert_out_lacks "$TEST_DIR/home"
+}
+
+test_clear_resume_passes_a_command_typed_before_the_compaction_finished() {
+  PHASE=compaction ENDED_AT_TYPING=0 run_judge cleared_by_person 2 "$(cleared_record)"
+  assert_exit_code 0
+  assert_out_has 'PASS  case: the command was typed before the compaction finished'
+  assert_out_has 'PASS s (8 checks)'
+}
+
+test_clear_resume_is_a_fail_when_the_compaction_had_finished_when_the_command_was_typed() {
+  PHASE=compaction ENDED_AT_TYPING=1 run_judge cleared_by_person 2 "$(cleared_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the command was typed before the compaction finished'
+}
+
+test_clear_resume_does_not_judge_the_compaction_for_a_command_typed_during_the_wait() {
+  PHASE=wait ENDED_AT_TYPING=1 run_judge cleared_by_person 2 "$(cleared_record)"
+  assert_exit_code 0
+  assert_out_lacks 'compaction finished'
+}
+
+# run_case_calls <phase>: run_case for one case with every engine-facing helper stubbed to print what it
+# was asked to wait for. The log count of the note line is stubbed to 4, the baseline the wait must use.
+run_case_calls() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh"
+    live_init
+    handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }; submit() { echo "CALL submit $2"; }
+    decision_lines() { echo 0; }; settle_until() { :; }; show_case() { :; }; judge_case() { :; }
+    log_count() { case $2 in *finished*) echo 4 ;; *) echo 2 ;; esac; }
+    wait_for() { echo "CALL wait $*"; }
+    run_case label c1 '"$1"' /clear cleared_by_handoff 2
+    check done none true; live_verdict s'
+}
+
+test_run_case_waits_for_a_new_note_not_for_any_note_already_in_the_log() {
+  run_case_calls compaction
+  assert_exit_code 0
+  assert_out_has 'CALL wait the note of '"'"'c1'"'"' to be written log_has_more_than c1 Forked agent \[plugin_model_fork\] finished 4'
+}
+
+test_run_case_types_the_command_once_the_compaction_has_started() {
+  run_case_calls compaction
+  assert_out_has 'CALL wait the compaction of '"'"'c1'"'"' to start log_has c1 \$\.session\.compact \(handoff\): compacting'
 }
 
 test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {

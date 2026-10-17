@@ -9,8 +9,12 @@
 # - exactly one record ends the handoff: a `cleared` record, or a `none` record with reason session_ended;
 # - that record names the session the handoff started in, and carries `effective_mode` ask;
 # - no record reports a failure (clear_failed, handoff_failed, no_handoff_written);
-# - the session ended once for each clear or resume that ran, and the handoff note reached exactly one
-#   transcript, which is not the resumed session's.
+# - the session ended once for each clear or resume that ran, and after a clear the handoff note reached
+#   exactly one transcript, which is not the resumed session's (an abandon as session_ended carries no note,
+#   so no transcript holds it).
+# - in the cases typed during the compaction, the command was typed before the compaction finished: the
+#   engine logs nothing when a typed command arrives, so the run reads the log right after typing, and a
+#   compaction that had already ended then is a FAIL (the case would only cover "after the compaction").
 # The `/clear` cases also pin who cleared. A `/clear` during the compaction is queued behind the
 # handoff's own clear (#43), so `cleared_by` is `handoff`; during the wait it is the person's own clear,
 # so it is `person`. The `/resume` cases print which of the two paths the run took and judge only the
@@ -28,6 +32,13 @@ FAILURE_RECORD='.action == "none" and (.trigger_values.reason as $reason | ["cle
 CASE_BASE=0
 CASE_ID=''
 CASE_LABEL=''
+CASE_PHASE=''
+COMPACTION_ENDED_AT_TYPING=0
+# The engine's own lines for the compaction the handoff starts (seen on 2.1.302): `$.session.compact` logs
+# "compacting" when it starts, and the forked compaction agent logs "finished" when it ends.
+COMPACTION_STARTED='\$\.session\.compact \(handoff\): compacting'
+COMPACTION_ENDED='Forked agent \[reactive-compact\] finished'
+NOTE_WRITTEN='Forked agent \[plugin_model_fork\] finished'
 
 scenario_run() {
   handoff_prepare '{"compactBeforeClear": true, "handoffContextTokens": 20000}'
@@ -60,18 +71,23 @@ start_resume_target() {
 run_case() {
   local label=$1 name=$2 phase=$3 typed=$4 expectation=$5 expected_ends=$6
   CASE_LABEL=$label
+  CASE_PHASE=$phase
   CASE_ID=$(new_session_id)
   if [[ "$phase" == compaction ]]; then
     handoff_start "$name" --session-id "$CASE_ID"
     say_apple "$name"
     CASE_BASE=$(decision_lines)
+    local notes_before
+    notes_before=$(log_count "$name" "$NOTE_WRITTEN")
     submit "$name" '/handoff'
-    wait_for "the note of '$name' to be written" log_has "$name" 'Forked agent \[plugin_model_fork\] finished'
+    wait_for "the note of '$name' to be written" log_has_more_than "$name" "$NOTE_WRITTEN" "$notes_before"
+    wait_for "the compaction of '$name' to start" log_has "$name" "$COMPACTION_STARTED"
   else
     CASE_BASE=$(decision_lines)
     start_waiting_handoff "$name" b "$SLEEP_TASK" --session-id "$CASE_ID"
   fi
   submit "$name" "$typed"
+  COMPACTION_ENDED_AT_TYPING=$(log_count "$name" "$COMPACTION_ENDED")
   wait_for "the handoff of '$name' to end ($label)" handoff_has_ended
   # Not a wait_for: a command the engine drops would otherwise end the run in an ERROR, not a FAIL.
   settle_until session_ends_reach "$name" "$(ends_expected "$expected_ends")"
@@ -122,8 +138,14 @@ judge_case() {
     session_ends_are "$name" "$expected_ends"
   check "$CASE_LABEL: the handoff note reached exactly one transcript after a clear, none after session_ended" \
     "$(note_evidence)" note_reached_the_right_transcripts
+  if [[ "$CASE_PHASE" == compaction ]]; then
+    check "$CASE_LABEL: the command was typed before the compaction finished" \
+      "the compaction had finished $COMPACTION_ENDED_AT_TYPING time(s) when the command was typed" typed_during_compaction
+  fi
   "$expectation"
 }
+
+typed_during_compaction() { [[ "$COMPACTION_ENDED_AT_TYPING" == 0 ]]; }
 
 session_ends_are() { [[ "$(session_ends "$1")" == "$2" ]]; }
 # The transcripts of the project, other than the old session's own, holding this case's handoff note,
