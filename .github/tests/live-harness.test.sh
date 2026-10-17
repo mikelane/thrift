@@ -405,12 +405,12 @@ test_live_start_is_an_error_when_tmux_cannot_start_the_session() {
 
 test_live_start_isolates_the_session_from_the_owners_settings_memory_and_session() {
   run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
-  assert_tmux_called '--setting-sources project'
+  assert_tmux_called "'--setting-sources' 'project'"
   assert_tmux_called 'CLAUDE_CODE_DISABLE_AUTO_MEMORY=1'
   assert_tmux_called 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
   assert_tmux_called '--append-system-prompt'
   assert_tmux_called "THRIFT_HOME=$TEST_DIR/tmp"
-  assert_tmux_called "--debug-file $TEST_DIR/tmp/debug-a.log"
+  assert_tmux_called "'--debug-file' '$TEST_DIR/tmp/debug-a.log'"
 }
 
 test_start_dialogs_cleared_is_an_error_when_the_session_exited() {
@@ -612,6 +612,28 @@ test_the_session_command_runs_under_a_posix_sh() {
   assert_out_has 'BIN='
   assert_out_has 'CLAUDE_CODE_OAUTH_TOKEN=tok'
   assert_out_lacks 'CLAUDE_PID='
+}
+
+# Outside a UTF-8 locale bash's printf %q writes a non-ASCII character as $'\303\251', which dash
+# reads as a literal $ and a quoted string: the session would get another THRIFT_HOME, silently.
+test_the_session_command_runs_under_a_posix_sh_in_the_c_locale_with_a_non_ascii_path() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command LC_ALL=C -- \
+    'LIVE_THRIFT_HOME=$TMPDIR/José; LIVE_RUN=$TMPDIR; dash -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has "THRIFT_HOME=$TEST_DIR/tmp/José"
+}
+
+test_the_session_command_hands_a_posix_sh_an_argument_with_a_newline_and_quotes() {
+  write_live_stubs
+  printf '#!/bin/sh\nfor a in "$@"; do printf "ARG=[%%s]\\n" "$a"; done\n' > "$TEST_DIR/bin/claude"
+  run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; dash -c "$(live_claude_command a --x "it'"'"'s \$HOME
+two \\ \"lines\"")"'
+  assert_exit_code 0
+  assert_out_has "ARG=[it's \$HOME"
+  assert_out_has 'two \ "lines"]'
 }
 
 test_the_session_command_keeps_the_login_and_the_variables_the_harness_sets() {

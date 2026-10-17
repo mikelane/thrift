@@ -169,6 +169,16 @@ pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 # session is unverified; the point is not to inherit the owner's session by accident.
 LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH)$'
 
+# live_sh_words <words...>: the words as one POSIX sh command line, each in single quotes, which every
+# shell tmux may run the command with reads the same way. Not printf %q: it writes $'...' for a newline
+# or a control character, and outside a UTF-8 locale for any non-ASCII one, and a POSIX sh (dash, a
+# tmux default-shell of /bin/sh on Linux) reads $'...' as a literal $ and a quoted string.
+live_sh_words() {
+  local word words='' quote_in_quotes="'\\''"
+  for word in "$@"; do words+="'${word//\'/$quote_in_quotes}' "; done
+  printf '%s' "$words"
+}
+
 # live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
 # new session, so the variables are dropped inside it, from the environment it actually has. The
@@ -177,11 +187,9 @@ LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0
 live_claude_command() {
   local name=$1
   shift
-  # One line on purpose: printf %q writes a string with a newline as $'...', which a POSIX sh (dash,
-  # a tmux default-shell of /bin/sh on Linux) does not read.
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
   local drop_script='keep=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do printf "%s\n" "$variable" | grep -Eq "$keep" || unset "$variable"; done; exec "$@"'
-  printf '%q ' sh -c "$drop_script" sh "$LIVE_KEPT_ENV" env \
+  live_sh_words sh -c "$drop_script" sh "$LIVE_KEPT_ENV" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"
