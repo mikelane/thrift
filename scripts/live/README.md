@@ -74,10 +74,13 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
 - **Inherited environment.** Each session's command first drops every `CLAUDE*` variable in the
   environment it receives (`CLAUDE_PID`, `CLAUDE_EFFORT`, `CLAUDE_CODE_EXECPATH`,
   `CLAUDE_CODE_VERSION`, the session and messaging ids), so a run from inside Claude Code's Bash tool
-  starts sessions like one from a terminal. It keeps the login and provider choice
-  (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the
-  pattern is `LIVE_KEPT_ENV` in `lib.sh`). The dropping happens inside the tmux session, so it also
-  covers a tmux server that was started from a Claude Code session. What the dropped variables do to a
+  starts sessions like one from a terminal. It then sets the login and provider choice from the
+  harness's own environment (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*`,
+  `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is `LIVE_KEPT_ENV` in `lib.sh`), not from a tmux server that
+  was started earlier with other values. They pass through an owner-only file in the run directory
+  that the session deletes once read, so the OAuth token is never in the command text. The dropping
+  happens inside the tmux session, so it also covers a tmux server that was started from a Claude Code
+  session. What the dropped variables do to a
   session is unverified. The two `CLAUDE_CODE_DISABLE_*` variables above are set, not confirmed to
   work.
 - **Which `claude`.** A new tmux session gets its environment from the tmux server, which may already

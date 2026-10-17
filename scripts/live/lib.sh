@@ -58,6 +58,8 @@ live_cleanup() {
   for session in ${LIVE_SESSIONS[@]+"${LIVE_SESSIONS[@]}"}; do
     tmux kill-session -t "=$session" 2>/dev/null
   done
+  # A session deletes its kept-variables file once it reads it; one that never started leaves it.
+  [[ -z "$LIVE_RUN" ]] || rm -f -- "$LIVE_RUN"/session-env-* 2>/dev/null
   [[ -z "$error_message" ]] || live_say "$error_message"
   [[ -z "$interrupt_message" ]] || live_say "$interrupt_message"
   [[ -z "$screens" ]] || live_say "$screens"
@@ -161,12 +163,12 @@ debug_log_of() { echo "$LIVE_RUN/debug-$1.log"; }
 pane_target_of() { echo "=$(session_of "$1"):"; }
 pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 
-# Names of environment variables a session keeps. Everything else starting with CLAUDE is dropped, so
-# a run from inside Claude Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT, CLAUDE_CODE_EXECPATH,
-# CLAUDE_CODE_VERSION, the session and messaging ids) starts sessions like a run from a terminal. The
-# login and the provider choice stay: the config directory, the OAuth token, CLAUDE_CODE_USE_*
-# (Bedrock, Vertex, Foundry) and CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped variables on a
-# session is unverified; the point is not to inherit the owner's session by accident.
+# Names of environment variables a session keeps from this shell. Everything else starting with CLAUDE
+# is dropped, so a run from inside Claude Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT,
+# CLAUDE_CODE_EXECPATH, CLAUDE_CODE_VERSION, the session and messaging ids) starts sessions like a run
+# from a terminal. The login and the provider choice stay: the config directory, the OAuth token,
+# CLAUDE_CODE_USE_* (Bedrock, Vertex, Foundry) and CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped
+# variables on a session is unverified; the point is not to inherit the owner's session by accident.
 LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH)$'
 
 # live_sh_words <words...>: the words as one POSIX sh command line, each in single quotes, which every
@@ -179,17 +181,32 @@ live_sh_words() {
   printf '%s' "$words"
 }
 
+# live_kept_env: this shell's kept variables as `export NAME='value'` lines for a POSIX sh.
+live_kept_env() {
+  local name
+  for name in $(compgen -e); do
+    [[ "$name" =~ $LIVE_KEPT_ENV ]] || continue
+    printf 'export %s=' "$name"
+    live_sh_words "${!name}"
+    printf '\n'
+  done
+}
+
 # live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
-# new session, so the variables are dropped inside it, from the environment it actually has. The
-# binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
-# reason: a tmux server started earlier carries its own PATH.
+# new session, and a server started earlier carries its own. So the session drops every CLAUDE
+# variable it has and then reads this shell's kept ones from a file in the run directory (owner-only),
+# which it deletes at once: the OAuth token stays out of the command text, which `ps` and tmux show.
+# The binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
+# reason.
 live_claude_command() {
   local name=$1
   shift
+  local env_file="$LIVE_RUN/session-env-$name"
+  (umask 077 && live_kept_env >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
-  local drop_script='keep=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do printf "%s\n" "$variable" | grep -Eq "$keep" || unset "$variable"; done; exec "$@"'
-  live_sh_words sh -c "$drop_script" sh "$LIVE_KEPT_ENV" env \
+  local drop_script='env_file=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
+  live_sh_words sh -c "$drop_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"

@@ -650,6 +650,43 @@ test_the_session_command_keeps_the_login_and_the_variables_the_harness_sets() {
   assert_out_has 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
 }
 
+# A tmux server that was already running hands a new session its own environment, so the login and
+# config directory a session keeps must be the harness's, not whatever the server started with:
+# transcripts_dir() reads the harness's CLAUDE_CONFIG_DIR.
+test_the_session_command_takes_the_kept_variables_from_the_harness_not_the_tmux_server() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_CODE_OAUTH_TOKEN=harness-tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     env -u CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CONFIG_DIR=/server-cfg CLAUDE_CODE_USE_VERTEX=1 sh -c "$command"'
+  assert_exit_code 0
+  assert_out_has 'CLAUDE_CODE_OAUTH_TOKEN=harness-tok'
+  assert_out_lacks 'CLAUDE_CONFIG_DIR='
+  assert_out_lacks 'CLAUDE_CODE_USE_VERTEX='
+}
+
+# The command text shows in `ps` and in tmux; the token reaches the session another way, and does not
+# stay behind in the run directory, which a FAIL or an ERROR keeps.
+test_the_session_command_keeps_the_oauth_token_out_of_its_text_and_the_run_directory() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_CODE_OAUTH_TOKEN=secret-tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     printf "COMMAND=%s\n" "$command"; env -u CLAUDE_CODE_OAUTH_TOKEN sh -c "$command" | grep -c OAUTH_TOKEN=secret-tok'
+  assert_exit_code 0
+  assert_out_has 'COMMAND='
+  assert_out_lacks 'secret-tok'
+  ! grep -rqa secret-tok "$TEST_DIR/tmp" || fail 'the token was left in the run directory'
+}
+
+test_a_run_directory_kept_after_an_error_holds_no_token_of_a_session_that_never_started() {
+  write_live_stubs
+  run_claude_command CLAUDE_CODE_OAUTH_TOKEN=secret-tok -- 'live_init; live_claude_command a >/dev/null; false'
+  assert_exit_code 2
+  assert_out_has 'run directory kept'
+  ! grep -rqa secret-tok "$TEST_DIR/tmp" || fail 'the token was left in the run directory'
+}
+
 # A tmux server that was already running hands new sessions its own environment, so a bare `claude`
 # in the command can be another binary than the one live_require checked.
 test_the_session_command_runs_the_claude_that_live_require_checked() {
