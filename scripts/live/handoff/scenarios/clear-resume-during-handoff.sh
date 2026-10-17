@@ -54,7 +54,9 @@ start_resume_target() {
 
 # run_case <label> <name> <compaction|wait> <typed command> <expectation> <session ends>: one handoff in
 # a session named <name>, the command typed once the handoff is in the phase, then the judgement.
-# <session ends> is how many times the session ends: the handoff's clear (when it runs) and the command.
+# <session ends> is how many times the session ends when the handoff clears: its own clear (when it
+# runs) and the command. A handoff that ends as session_ended runs no clear and carries no note, so the
+# session ends once, for the command, and no transcript holds the note.
 run_case() {
   local label=$1 name=$2 phase=$3 typed=$4 expectation=$5 expected_ends=$6
   CASE_LABEL=$label
@@ -72,7 +74,7 @@ run_case() {
   submit "$name" "$typed"
   wait_for "the handoff of '$name' to end ($label)" handoff_has_ended
   # Not a wait_for: a command the engine drops would otherwise end the run in an ERROR, not a FAIL.
-  settle_until session_ends_reach "$name" "$expected_ends"
+  settle_until session_ends_reach "$name" "$(ends_expected "$expected_ends")"
   show_case "$name"
   judge_case "$name" "$expectation" "$expected_ends"
 }
@@ -85,6 +87,10 @@ settle_until() {
     ((SECONDS < deadline)) || return 0
     sleep "$LIVE_POLL"
   done
+}
+# ends_expected <session ends when the handoff clears>: one when the handoff ended as session_ended.
+ends_expected() {
+  if [[ "$(ending_field .trigger_values.reason)" == session_ended ]]; then echo 1; else echo "$1"; fi
 }
 session_ends() { log_count "$1" 'handoff@inline session\.end settled'; }
 session_ends_reach() { (($(session_ends "$1") >= $2)); }
@@ -102,7 +108,8 @@ show_case() {
 }
 
 judge_case() {
-  local name=$1 expectation=$2 expected_ends=$3
+  local name=$1 expectation=$2 expected_ends
+  expected_ends=$(ends_expected "$3")
   check "$CASE_LABEL: exactly one record ends the handoff" "$(ending_record_count) ending records: $(ending_records | tr '\n' ' ')" \
     exactly_one_ending_record
   check "$CASE_LABEL: it names the session the handoff started in" "the ending record names $(ending_field .session_id), not $CASE_ID" \
@@ -113,24 +120,30 @@ judge_case() {
     no_failure_record
   check "$CASE_LABEL: the session ended $expected_ends time(s), once per clear or resume that ran" "it ended $(session_ends "$name") time(s)" \
     session_ends_are "$name" "$expected_ends"
-  check "$CASE_LABEL: the handoff note reached exactly one transcript, not the resumed session's" \
-    "transcripts holding the note: $(note_transcripts | sed 's|.*/||' | tr '\n' ' ')" \
-    note_in_one_transcript_not_the_resumed_one
+  check "$CASE_LABEL: the handoff note reached exactly one transcript after a clear, none after session_ended" \
+    "$(note_evidence)" note_reached_the_right_transcripts
   "$expectation"
 }
 
 session_ends_are() { [[ "$(session_ends "$1")" == "$2" ]]; }
-# The transcripts of the project holding this case's handoff note, found by its opening line.
+# The transcripts of the project, other than the old session's own, holding this case's handoff note,
+# found by its opening line. Fails when the old session's transcript is not found.
 note_transcripts() {
   local old directory
   old=$(transcript_path "$CASE_ID")
-  [[ -n "$old" ]] || return 0
+  [[ -n "$old" ]] || return 1
   directory=$(dirname -- "$old")
-  grep -lF -- "Handoff from the previous session ($CASE_ID)" "$directory"/*.jsonl 2>/dev/null || true
+  grep -lF -- "Handoff from the previous session ($CASE_ID)" "$directory"/*.jsonl 2>/dev/null | grep -vxF -- "$old" || true
 }
-note_in_one_transcript_not_the_resumed_one() {
+note_evidence() {
   local transcripts
-  transcripts=$(note_transcripts)
+  transcripts=$(note_transcripts) || { echo "the transcript of the old session $CASE_ID was not found under $(transcripts_dir | sed "s|$HOME|~|")"; return 0; }
+  if [[ -z "$transcripts" ]]; then echo 'transcripts holding the note: none'; else echo "transcripts holding the note: $(sed 's|.*/||' <<<"$transcripts" | tr '\n' ' ')"; fi
+}
+note_reached_the_right_transcripts() {
+  local transcripts
+  transcripts=$(note_transcripts) || return 1
+  if [[ "$(ending_field .trigger_values.reason)" == session_ended ]]; then [[ -z "$transcripts" ]]; return; fi
   [[ "$(grep -c . <<<"$transcripts")" == 1 && "$transcripts" != *"$RESUME_TARGET_ID"* ]]
 }
 
