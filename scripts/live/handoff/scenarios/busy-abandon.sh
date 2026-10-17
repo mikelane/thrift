@@ -16,20 +16,8 @@ HELD_PROMPT='held while waiting'
 
 scenario_run() {
   handoff_prepare '{"compactBeforeClear": true, "handoffContextTokens": 20000}'
-  handoff_start a --allowedTools "Bash(sleep *)"
-  handoff_start_peer b
-  say_apple a
-  wait_for 'the band to offer a handoff' pane_has a 'h: Hand off and clear'
-  submit b 'Use ToolSearch to load the SendMessage tool, then reply with the word ready.'
-  wait_for 'the peer to load SendMessage' turns_done_above b 0
-
-  type_text b "Use the SendMessage tool to send exactly this text to the session named $(session_of a): $PEER_TASK Do nothing else."
-  press a C-x Tab
-  press a h
-  wait_for 'the band to press hand off' log_has a 'ui\.press handoff/handoff'
-  press b Enter
-  wait_for 'the peer turn to start in a' log_has a 'cc_turn_origin=peer'
-  wait_for 'the handoff to wait for the running turn' pane_has a 'continues when the current turn ends'
+  start_peer_messenger b
+  start_waiting_handoff a b "$PEER_TASK"
   submit a "$HELD_PROMPT"
   wait_for 'the prompt to be held' log_has a 'held a prompt for the handoff'
   # Every evaluation logs a `none` record, so only the reason shows that the abandon has happened.

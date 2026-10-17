@@ -57,3 +57,17 @@ records_with() {
   return 0
 }
 record_exists() { (($(record_count "$1") > ${2:-0})); }
+
+# decision_lines: how many lines the decision log has, 0 before it exists. A scenario that runs several
+# handoffs takes it as a baseline and reads the records written after it with records_after.
+decision_lines() {
+  [[ -f "$LIVE_DECISIONS" ]] || { echo 0; return 0; }
+  wc -l <"$LIVE_DECISIONS" | tr -d ' '
+}
+# records_after <baseline> <jq-condition>: the records written after the baseline line for which the jq
+# condition holds, one per line. An unreadable log is noted like in records_with.
+records_after() {
+  [[ -f "$LIVE_DECISIONS" ]] || return 0
+  sed -n "$(($1 + 1)),\$p" "$LIVE_DECISIONS" | jq -c "select($2)" 2>"$LIVE_RUN/jq-error" || live_note_unreadable_decisions
+  return 0
+}
