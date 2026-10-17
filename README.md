@@ -41,7 +41,7 @@ Every plugin appends one JSON object per evaluation to a shared log:
 Each plugin is self-contained under `plugins/<name>/`:
 
 ```sh
-claude --plugin-dir ~/dev/thrift/plugins/<name>   # run it in a session; saves hot-reload
+claude --plugin-dir ~/dev/thrift/plugins/<name>   # run it in a session; an edit takes effect after /reload-plugins
 claude plugin validate plugins/<name>             # what the engine would load or refuse
 claude plugin test plugins/<name>                 # run its *.test.ts files
 ```
