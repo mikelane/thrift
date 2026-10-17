@@ -88,10 +88,10 @@ test_live_sh_starts_sessions_outside_any_git_work_tree() {
 }
 
 # A home directory that is itself a git work tree (dotfiles kept in a repo at $HOME) puts the default
-# working directory inside it.
-test_live_sh_starts_sessions_outside_a_git_work_tree_at_home() {
+# working directory inside it, so live.sh stops and names LIVE_CWD instead of starting a session there.
+test_live_sh_is_an_error_when_the_default_working_directory_is_in_a_git_work_tree_at_home() {
   write_live_stubs
-  local repo=$TEST_DIR/repo session_cwd
+  local repo=$TEST_DIR/repo
   mkdir -p "$repo/scripts"
   cp -R "$LIVE_DIR" "$repo/scripts/live"
   make_plugin_fixture "$repo/plugins/handoff"
@@ -99,9 +99,10 @@ test_live_sh_starts_sessions_outside_a_git_work_tree_at_home() {
   EXIT_CODE=0
   hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
     "$BASH" "$repo/scripts/live/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
-  session_cwd=$(sed -n 's/^new-session .* -c \([^ ]*\) .*/\1/p' "$TMUX_LOG")
-  [[ -n "$session_cwd" ]] || return 0
-  ! git -C "$session_cwd" rev-parse --is-inside-work-tree > /dev/null 2>&1 || fail "sessions start inside a git work tree: $session_cwd"
+  assert_exit_code 2
+  assert_out_has 'inside a git work tree'
+  assert_out_has 'Set LIVE_CWD'
+  assert_tmux_not_called 'new-session'
 }
 
 test_live_sh_list_prints_each_plugin_and_scenario() {
