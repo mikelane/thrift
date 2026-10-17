@@ -92,8 +92,6 @@ test_entry_point_fails_when_a_test_file_reports_no_tests_run() {
   assert_out_has 'a.test.sh ran no tests'
 }
 
-# Every test file honors the name fragment: a file that ignores it runs all its tests under a fragment
-# meant for another file, and the entry point cannot tell (#78).
 # Three live-harness tests run the session command under dash. Without it, a test file stops at the
 # prerequisite check with a message naming dash, not with three failures of status 127.
 test_a_test_file_exits_2_and_names_dash_when_dash_is_not_on_path() {
@@ -105,6 +103,8 @@ test_a_test_file_exits_2_and_names_dash_when_dash_is_not_on_path() {
   assert_out_has 'The harness needs dash on PATH'
 }
 
+# Every test file honors the name fragment: a file that ignores it runs all its tests under a fragment
+# meant for another file, and the entry point cannot tell (#78).
 # The real entry point over the real test files: any file that runs a test makes it exit 0, not 1.
 test_entry_point_runs_no_test_file_for_a_name_fragment_that_matches_no_test() {
   EXIT_CODE=0
