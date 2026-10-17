@@ -246,19 +246,20 @@ export const beginBeforeClear = (state: SessionState): void => {
 export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
   state.isOwnClearQueued = true
-  state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
 
 const PLUGIN_NAME = 'handoff'
 
-// A clear someone else queued ahead of the handoff's own. The declarations skip only the calling hook on a plugin's
-// $.command.run ("the calling hook alone"; "the plugin's others see it"), so the handoff's own clear can reach this plugin's
-// command.run hook too. Its origin, which the engine stamps { kind: 'plugin', name }, tells it apart. Any other clear seen
-// while ours waits runs ahead of it, so its session end is not the end of ours.
+// A clear someone else started, counted from its command.run until its session end. The declarations skip only the calling
+// hook on a plugin's $.command.run ("the calling hook alone"; "the plugin's others see it"), so the handoff's own clear can
+// reach this plugin's command.run hook too. Its origin, which the engine stamps { kind: 'plugin', name }, tells it apart.
+// Counting starts before the handoff queues its own clear: a clear already running then (its end awaits the hooks beneath
+// and core) ends its session after ours is queued, and that end is not the end of ours. One seen after our clear's end runs
+// behind it and is no handoff's business.
 export const recordForeignClear = (state: SessionState, origin: PromptOrigin): void => {
   if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
-  if (state.isOwnClearQueued) state.foreignClearsAhead += 1
+  if (state.handoffStage === 'before_clear' || state.isOwnClearQueued) state.foreignClearsAhead += 1
 }
 
 // A foreign clear a hook answered in its place: it ran nothing and ends no session, so no end is owed to it.
@@ -279,6 +280,8 @@ const endQueuedClear = (state: SessionState, reason: string): void => {
 export const recordSessionEnd = (state: SessionState, reason: string): void => {
   if (state.handoffStage === 'own_clear') endQueuedClear(state, reason)
   if (state.handoffStage !== 'before_clear') return
+  // A foreign clear that ended its session before ours was queued is owed nothing more.
+  if (reason === 'clear' && state.foreignClearsAhead > 0) state.foreignClearsAhead -= 1
   if (state.sessionEndBeforeClear === 'other') return
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }

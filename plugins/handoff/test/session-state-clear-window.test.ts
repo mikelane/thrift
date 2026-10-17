@@ -304,13 +304,45 @@ test('It takes a session end that is not a clear as the end of the queued clear 
   expect(state.isOwnClearQueued).toBe(false)
 })
 
-test('It ignores a foreign clear before the own clear is queued in recordForeignClear', () => {
+test('It keeps the own clear queued when a foreign clear that started before it ended the session first in recordSessionEnd', () => {
   const state = createState(settings)
   beginBeforeClear(state)
   recordForeignClear(state, PERSON)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(true)
+})
+
+test('It treats the next clear as the own clear after a foreign clear ended its session before the own clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordForeignClear(state, PERSON)
+  recordSessionEnd(state, 'clear')
+  beginOwnClear(state)
+  recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It keeps the foreign clear counted when a session end that is not a clear comes before the own clear in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordForeignClear(state, PERSON)
+  recordSessionEnd(state, 'resume')
+  expect(state.foreignClearsAhead).toBe(1)
+})
+
+test('It records the person clear before the own clear even with a foreign clear counted in recordSessionEnd', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordForeignClear(state, PERSON)
+  recordSessionEnd(state, 'clear')
+  expect(state.sessionEndBeforeClear).toBe('cleared_by_person')
+})
+
+test('It ignores a foreign clear while no handoff runs in recordForeignClear', () => {
+  const state = createState(settings)
+  recordForeignClear(state, PERSON)
+  expect(state.foreignClearsAhead).toBe(0)
 })
 
 test('It ignores a foreign clear after the own clear ended the session in recordForeignClear', () => {

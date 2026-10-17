@@ -1243,7 +1243,7 @@ export const register: Register = (on, options) => {
 
   // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
   // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
-  // Counted before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
+  // Counted from the note on, before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
   // hook beneath that answers in the clear's place leaves it off, and a clear that throws ran nothing: no end is coming.
   // SAFETY: a hook beneath that calls next and then rewrites the output also leaves ref off. The end already spent the count,
   // so forgetting is a no-op, unless a second foreign clear is still pending, whose count it eats: that clear's end is then

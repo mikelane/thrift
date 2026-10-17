@@ -82,6 +82,43 @@ describe('a person clear answered in its place while the handoff clear waits', (
   })
 })
 
+// The person's /clear started while the note was being written, and its session end landed only after the handoff queued its
+// own clear (core's clear awaits, such as the SessionEnd hooks, before the end). The handoff's clear then ran behind it, after a
+// turn started in the session the person made.
+const personClearInFlightAcrossOwnClear = (world: World, $: Parameters<typeof startTurn>[0]) => {
+  const personGate: { release: () => void } = { release: () => undefined }
+  const personEndsLater = new Promise<void>(resolve => {
+    personGate.release = resolve
+  })
+  const personClear: { run: Promise<unknown> } = { run: Promise.resolve() }
+  world.onClearIssued = async () => {
+    world.onClearIssued = async () => {
+      world.onClearIssued = undefined
+      personGate.release()
+      await personClear.run
+      await startTurn($, 'queued behind the person clear')
+    }
+    await personEndsLater
+  }
+  personClear.run = runCommand($, 'clear')
+}
+
+describe('a person clear in flight when the handoff clear is queued', () => {
+  test('It records late_turn true when a turn ran in the session the in-flight person clear made', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearInFlightAcrossOwnClear(world, $)
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { late_turn: true } })
+  })
+
+  test('It adds the turn-after-note line when a turn ran in the session the in-flight person clear made', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearInFlightAcrossOwnClear(world, $)
+    await finishNote()
+    expect(world.appended.join('\n')).toContain(TURN_AFTER_NOTE_LINE)
+  })
+})
+
 describe('a person clear queued ahead of the handoff clear', () => {
   test('It adds the turn-after-note line when a turn ran in the session the person cleared to', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
