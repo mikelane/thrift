@@ -25,6 +25,7 @@ import {
 } from './band-text'
 import {
   heldGroupFields,
+  leftoverStripFields,
   isUsableThriftHome,
   LOG_WRITER,
   logLocation,
@@ -105,7 +106,12 @@ import {
   startSubagentTurn,
   endSubagentTurn,
   takeHeldPrompts,
-  isCollectingHeldPrompts,
+  isAwaitingDelivery,
+  forgetBoxLeftover,
+  noteBoxCleared,
+  noteBoxLeftover,
+  noteLeftoverStrip,
+  typedAfterBoxLeftover,
   takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type BoxPlacement,
@@ -317,19 +323,29 @@ const refillBox = async ($: EngineInterface, prompt: BoxPrompt, placement: BoxPl
 }
 
 // Once a person's prompt went into the fresh session, the text the engine kept in the box would send it a second time. Only
-// that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays.
-const emptySentPromptFromBox = async ($: EngineInterface, prompt: HeldPrompt): Promise<void> => {
+// that copy is taken out, as whole lines: anything else in the box is a draft the person typed since, and stays. A copy taken
+// out is no longer a leftover the next prompt can be joined to.
+const emptySentPromptFromBox = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<void> => {
   const copies = boxCopiesOf(prompt)
   if (copies.length === 0) return
   try {
     const draft = (await $.prompt.read()).text
-    const remainingDraft = copies.map(copy => withoutPrompt(draft, copy)).find(remaining => remaining !== null)
-    if (remainingDraft === undefined) return
-    const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
-    if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
+    const removal = copies
+      .map(copy => ({ copy, remainingDraft: withoutPrompt(draft, copy) }))
+      .find((candidate): candidate is { copy: string; remainingDraft: string } => candidate.remainingDraft !== null)
+    if (removal === undefined) return
+    const emptied = await $.prompt.fill({ text: removal.remainingDraft, mode: 'replace' })
+    if (emptied.isFilled) noteBoxCleared(state, removal.copy)
+    else debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
   }
+}
+
+// A held prompt kept in the box for the person to send: text typed after it is sent with it on purpose.
+const markKeptInBox = (state: SessionState): Carried => {
+  forgetBoxLeftover(state)
+  return 'in_box'
 }
 
 const composerPrompt = (text: string): HeldPrompt => ({ text, isUnattended: false, origin: 'composer', author: 'person' })
@@ -378,9 +394,9 @@ const restorePrompt = async (
   prompt: HeldPrompt,
   placement: BoxPlacement = 'before_draft',
 ): Promise<Carried> => {
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
   const carried = await submitOrKeepInTranscript($, state, prompt)
-  if (carried === 'submitted') await emptySentPromptFromBox($, prompt)
+  if (carried === 'submitted') await emptySentPromptFromBox($, state, prompt)
   return carried
 }
 
@@ -453,6 +469,7 @@ const abandonHandoff = async (
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
       held_restore: worstDelivery([...restores, ...late.deliveries]),
+      ...leftoverStripFields(state.leftoverStrips),
     },
     sessionId: recordedSessionId,
   })
@@ -526,10 +543,10 @@ const sendOrKeepInBox = async (
   { placement = 'before_draft', notice, holdBack = false }: SendOptions = {},
 ): Promise<Carried> => {
   if (!holdBack && (await submitEntered($, state, prompt, 'could not send the prompt', speaksForPerson(prompt)))) {
-    await emptySentPromptFromBox($, prompt)
+    await emptySentPromptFromBox($, state, prompt)
     return 'submitted'
   }
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return 'in_box'
+  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
   keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
   return 'not_carried'
 }
@@ -620,6 +637,7 @@ const continueInFreshSession = async (
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
       held_other_delivery: worstDelivery([...deliveries, ...late.deliveries]),
+      ...leftoverStripFields(state.leftoverStrips),
     },
   })
 }
@@ -759,10 +777,11 @@ const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
   request: HandoffRequest,
-  beforeRun?: () => Promise<void>,
+  beforeRun?: () => Promise<unknown>,
 ) => {
   try {
-    // SAFETY: beforeRun is emptyBoxIfHolding, which catches its own failures, so no test can make it throw.
+    // SAFETY: beforeRun is clearBoxCopyWhileHeld on the prompt path (it wraps emptyBoxIfHolding) and emptyBoxIfHolding
+    // on the command path. emptyBoxIfHolding catches its own failures, so no test can make it throw.
     // It runs inside the try so a future beforeRun that throws still releases the claim.
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
@@ -797,7 +816,7 @@ const scheduleHandoff = (
   $: EngineInterface,
   state: SessionState,
   request: HandoffRequest,
-  beforeRun?: () => Promise<void>,
+  beforeRun?: () => Promise<unknown>,
 ): boolean => {
   if (!claimPending(state, 'handoff')) return false
   state.heldPrompt = null
@@ -863,15 +882,22 @@ const inspectPrompt = async ($: EngineInterface, state: SessionState, text: stri
   return isNewWork
 }
 
-const emptyBoxIfHolding = async ($: EngineInterface, text: string) => {
+// True when the prompt's text was found in the box and taken out.
+const emptyBoxIfHolding = async ($: EngineInterface, text: string): Promise<boolean> => {
   try {
     const remainingDraft = withoutPrompt((await $.prompt.read()).text, text)
-    if (remainingDraft === null) return
+    if (remainingDraft === null) return false
     const emptied = await $.prompt.fill({ text: remainingDraft, mode: 'replace' })
     if (!emptied.isFilled) debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
+    return emptied.isFilled
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)
+    return false
   }
+}
+
+const clearBoxCopyWhileHeld = async ($: EngineInterface, state: SessionState, boxText: string) => {
+  if (await emptyBoxIfHolding($, boxText)) noteBoxCleared(state, boxText)
 }
 
 const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {
@@ -921,17 +947,32 @@ const refuseDuringHandoff = ($: EngineInterface, state: SessionState, e: PromptS
 }
 
 const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmitInput): { drop: string } => {
-  const heldCount = addHeldPrompt(state, { text: e.text, isUnattended: isUnattendedOrigin(e.origin.kind), origin: e.origin.kind, author: 'person' })
+  const isFromComposer = isComposerOrigin(e.origin.kind)
+  // The engine submits the leftover of the last prompt it dropped together with the one typed after it; the person typed only
+  // the part after the leftover.
+  const typedText = isFromComposer ? typedAfterBoxLeftover(state, e.text) : e.text
+  if (typedText !== e.text) noteLeftoverStrip(state)
+  const prompt: HeldPrompt = {
+    text: typedText,
+    isUnattended: isUnattendedOrigin(e.origin.kind),
+    origin: e.origin.kind,
+    author: 'person',
+    ...(typedText === e.text ? {} : { boxText: e.text }),
+  }
+  const heldCount = addHeldPrompt(state, prompt)
   debug($, `held a prompt for the handoff (${heldCount} held)`)
   // Claude Code leaves a dropped prompt's text in the box, so the next prompt would be typed after it and held as
   // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the
-  // text back after the hook returns. Only while prompts are still collected: once the handoff took them, a restore may have
-  // put the text back, and the delivery and restore paths deal with what the engine left.
-  // SAFETY: a handoff that ends and a second one that starts inside this one tick would let the clear run in the second hold.
-  // Both need several engine round trips, so a real session cannot produce it, and no code guards it.
-  if (isComposerOrigin(e.origin.kind)) {
+  // text back after the hook returns. Only while this prompt is still held, whether collected or arrived during the delivery:
+  // once the handoff took it, a restore may have put the text back, and the delivery and restore paths deal with what the
+  // engine left. The deferred clear can run before the engine has put the text back, so the text is also remembered until a
+  // clear finds it, and the next prompt is held without it.
+  // SAFETY: a handoff that ends and a second one that starts inside this one tick would let the clear run in the second hold,
+  // but only for this same prompt object, which the second hold never holds. No code guards it.
+  if (isFromComposer) {
+    noteBoxLeftover(state, e.text)
     $.clock.after(0, () => {
-      if (isCollectingHeldPrompts(state)) void logFailure($, emptyBoxIfHolding($, e.text))
+      if (isAwaitingDelivery(state, prompt)) void logFailure($, clearBoxCopyWhileHeld($, state, e.text))
     })
   }
   return { drop: HELD_FOR_HANDOFF }
@@ -986,8 +1027,12 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {
     // Claude Code leaves the dropped text in the box; the handoff sends the prompt itself, so that copy is taken out first.
-    const emptyBox = isComposerOrigin(e.origin.kind) ? () => emptyBoxIfHolding($, e.text) : undefined
+    // That clear can read the box before the text is back, as a held prompt's can, so the text is remembered as the box's
+    // leftover once the hold has begun (beginHandoffHold forgets any earlier one).
+    const isFromComposer = isComposerOrigin(e.origin.kind)
+    const emptyBox = isFromComposer ? () => clearBoxCopyWhileHeld($, state, e.text) : undefined
     const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, heldPromptOrigin: e.origin.kind, isUnattended }, emptyBox)
+    if (isClaimed && isFromComposer) noteBoxLeftover(state, e.text)
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
   }
   if (action === 'hold') return holdPrompt($, state, e.text, trigger)

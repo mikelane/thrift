@@ -252,6 +252,51 @@ test_busy_abandon_is_a_fail_when_the_handoff_clears_instead_of_stopping() {
   assert_out_has 'FAIL  the handoff did not clear'
 }
 
+# run_delivery_window <debug-log-lines...>: the delivery-window scenario against a fixture debug log, with
+# every engine-facing helper a no-op, so only the scenario's own waits and checks read the evidence.
+run_delivery_window() {
+  local fixture=$TEST_DIR/delivery-window.log
+  printf '%s\n' "$@" > "$fixture"
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/delivery-window-prompts.sh"
+    live_init
+    handoff_prepare() { :; }; handoff_start() { :; }; say_apple() { :; }; submit() { :; }; type_text() { :; }
+    press() { :; }; press_two_prompts() { :; }; pane_has() { :; }; turns_done_above() { :; }
+    show_pane() { :; }; show_box() { :; }; show_log() { :; }; box_text() { :; }
+    cp "'"$fixture"'" "$(debug_log_of a)"
+    printf "%s\n" "{\"action\":\"cleared\",\"trigger_values\":{}}" > "$LIVE_DECISIONS"
+    LIVE_TIMEOUT=1
+    scenario_run
+    live_verdict s'
+}
+
+# The plugin submits "five" and then "fivesix": the second late prompt was held with the first one's
+# text in front of it (#63). That is the misbehavior the scenario exists to report, so it is a FAIL.
+test_delivery_window_is_a_fail_when_the_second_prompt_is_held_joined() {
+  run_delivery_window '$.command.run (handoff): 6 chars queued' \
+    'handoff: held a prompt for the handoff (1 held)' '$.prompt.submit (handoff): "one"' \
+    'handoff: held a prompt for the handoff (2 held)' '$.prompt.submit (handoff): "five"' \
+    '$.prompt.submit (handoff): "fivesix"'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'
+}
+
+test_delivery_window_is_an_error_when_the_second_prompt_misses_the_sending_stage() {
+  run_delivery_window '$.command.run (handoff): 6 chars queued' \
+    'handoff: held a prompt for the handoff (1 held)' '$.prompt.submit (handoff): "one"' \
+    '$.prompt.submit (handoff): "five"'
+  assert_exit_code 2
+  assert_out_has 'the timing window was missed'
+}
+
+test_delivery_window_passes_when_each_prompt_is_held_as_typed() {
+  run_delivery_window '$.command.run (handoff): 6 chars queued' \
+    'handoff: held a prompt for the handoff (1 held)' '$.prompt.submit (handoff): "one"' \
+    'handoff: held a prompt for the handoff (2 held)' '$.prompt.submit (handoff): "five"' \
+    '$.prompt.submit (handoff): "six"'
+  assert_exit_code 0
+  assert_out_has 'PASS s (3 checks)'
+}
+
 test_box_is_empty_fails_when_the_screen_shows_no_prompt_box() {
   run_live 'source "$LIVE_DIR/handoff/scenarios/held-prompt-box.sh"
     live_init

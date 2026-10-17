@@ -130,10 +130,13 @@ Not isolated:
 | `held-prompt-box` | #56 | Three prompts typed during one handoff are delivered and the prompt box is empty afterwards. |
 | `held-prompt-origin` | #55 | The three held prompts reach the fresh session's transcript (the one whose handoff note names the old session id) as one user entry marked `origin.asUser`, joined by blank lines, and the screen does not frame them "The handoff plugin sent a message". The turn's `cc_turn_origin` isn't checked: it is not `human` for an `asUser` prompt. |
 | `peer-during-compaction` | #57 | A peer message that arrives while the old session compacts does not start a turn between the queued `/clear` and the clear. |
+| `delivery-window-prompts` | #63 | Two prompts submitted 40 ms apart while the held prompt is delivered are each held and sent as typed (never joined as `fivesix`), and the box is empty afterwards. It polls every 5 ms to reach the window, which closes when the delivery ends, and reports ERROR if the second prompt misses it. |
 | `busy-abandon` | #43 | A handoff whose wait ends with background work running stops with `background_busy`, puts the held prompt back in the box (`held_restore: in_box`), clears nothing, and leaves a compacted old-session transcript. |
 
-`held-prompt-box` and `held-prompt-origin` fail on a build that has the bug they track; once the
-fix is in they pass. `busy-abandon` passes on main: it guards the abandon path the fixes touch.
+`held-prompt-box`, `held-prompt-origin` and `delivery-window-prompts` fail on a build that has the
+bug they track; once the fix is in they pass. `delivery-window-prompts` reproduced #63 in 4 of 15 runs on 2.1.302
+before the fix, so a single PASS does not prove the fix holds.
+`busy-abandon` passes on main: it guards the abandon path the fixes touch.
 
 `peer-during-compaction` checks prevention: that no peer turn starts between the queued `/clear`
 and the clear. #57 was fixed by detecting and reporting that turn instead (#62), so the scenario

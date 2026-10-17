@@ -1,18 +1,25 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  forgetBoxLeftover,
   addHeldPrompt,
   beginHandoffHold,
+  beginSending,
   createState,
   endHandoff,
   isCarriedByHandoff,
-  isCollectingHeldPrompts,
+  isAwaitingDelivery,
   isGroupOfOrigin,
   isHoldingForHandoff,
+  noteBoxCleared,
+  noteBoxLeftover,
+  noteLeftoverStrip,
+  typedAfterBoxLeftover,
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
   takeHeldPrompts,
+  takeLateArrivalsOrEndSending,
 } from '../hooks/session-state'
 import { settings, person, nightly } from './session-state-fixtures'
 
@@ -36,6 +43,8 @@ test('It returns the settings with a closed gate and an empty session from creat
     pending: null,
     heldPrompt: null,
     handoffHold: { phase: 'idle' },
+    boxLeftover: null,
+    leftoverStrips: 0,
     hasBand: false,
     isTurnRunning: false,
     isPressRunning: false,
@@ -126,21 +135,43 @@ test('It reports a state that holds nothing as not holding from isHoldingForHand
   expect(isHoldingForHandoff(createState(settings))).toBe(false)
 })
 
-test('It reports a state that holds nothing as not collecting from isCollectingHeldPrompts', () => {
-  expect(isCollectingHeldPrompts(createState(settings))).toBe(false)
+test('It reports a state that holds nothing as not awaiting delivery from isAwaitingDelivery', () => {
+  expect(isAwaitingDelivery(createState(settings), person)).toBe(false)
 })
 
-test('It reports a handoff that is collecting prompts as collecting from isCollectingHeldPrompts', () => {
+test('It reports a prompt held while collecting as awaiting delivery from isAwaitingDelivery', () => {
   const state = createState(settings)
   beginHandoffHold(state, null)
-  expect(isCollectingHeldPrompts(state)).toBe(true)
+  addHeldPrompt(state, person)
+  expect(isAwaitingDelivery(state, person)).toBe(true)
 })
 
-test('It reports a handoff whose prompts were taken as not collecting from isCollectingHeldPrompts', () => {
+test('It reports a prompt that was never held as not awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
+})
+
+test('It reports a prompt whose holding group was taken as not awaiting delivery from isAwaitingDelivery', () => {
   const state = createState(settings)
   beginHandoffHold(state, person)
   takeHeldPrompts(state)
-  expect(isCollectingHeldPrompts(state)).toBe(false)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
+})
+
+test('It reports a late arrival as awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginSending(state)
+  addHeldPrompt(state, person)
+  expect(isAwaitingDelivery(state, person)).toBe(true)
+})
+
+test('It reports a late arrival the delivery took as not awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginSending(state)
+  addHeldPrompt(state, person)
+  takeLateArrivalsOrEndSending(state)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
 })
 
 test('It holds the carried prompt first and remembers its text from beginHandoffHold', () => {
@@ -253,4 +284,97 @@ test('It returns to idle from endHandoff in every phase', () => {
 
 test('It tells whether a group shares an origin in isGroupOfOrigin', () => {
   expect([isGroupOfOrigin(person, false), isGroupOfOrigin(person, true), isGroupOfOrigin(nightly, true)]).toEqual([true, false, true])
+})
+
+test('It returns the submitted text whole from typedAfterBoxLeftover when nothing is left in the box', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
+})
+
+test('It returns only the part typed after the leftover from typedAfterBoxLeftover', () => {
+  const state = createState(settings)
+  beginSending(state)
+  noteBoxLeftover(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('six')
+})
+
+test('It returns the submitted text whole from typedAfterBoxLeftover when it is only the leftover again', () => {
+  const state = createState(settings)
+  beginSending(state)
+  noteBoxLeftover(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'five')).toBe('five')
+})
+
+test('It returns the submitted text whole from typedAfterBoxLeftover when it does not start with the leftover', () => {
+  const state = createState(settings)
+  beginSending(state)
+  noteBoxLeftover(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'six')).toBe('six')
+})
+
+test('It returns the submitted text whole from typedAfterBoxLeftover once a clear confirmed the box empty', () => {
+  const state = createState(settings)
+  beginSending(state)
+  noteBoxLeftover(state, 'five')
+  noteBoxCleared(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'five six')).toBe('five six')
+})
+
+test('It keeps the leftover from noteBoxCleared when the clear was for other text', () => {
+  const state = createState(settings)
+  beginSending(state)
+  noteBoxLeftover(state, 'fivesix')
+  noteBoxCleared(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'fivesixseven')).toBe('seven')
+})
+
+test('It returns the submitted text whole from typedAfterBoxLeftover when no handoff is holding', () => {
+  const state = createState(settings)
+  noteBoxLeftover(state, 'five')
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
+})
+
+test('It keeps the leftover when beginSending starts the delivery', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  noteBoxLeftover(state, 'five')
+  beginSending(state)
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('six')
+})
+
+test('It forgets the leftover when forgetBoxLeftover is called', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  noteBoxLeftover(state, 'five')
+  forgetBoxLeftover(state)
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
+})
+
+test('It forgets the leftover when beginHandoffHold starts a new hold', () => {
+  const state = createState(settings)
+  noteBoxLeftover(state, 'five')
+  beginHandoffHold(state, null)
+  expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
+})
+
+test('It counts each strip noted with noteLeftoverStrip', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  noteLeftoverStrip(state)
+  expect(state.leftoverStrips).toBe(2)
+})
+
+test('It resets the strip count when beginHandoffHold starts a new hold', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  beginHandoffHold(state, null)
+  expect(state.leftoverStrips).toBe(0)
+})
+
+test('It keeps the strip count when beginSending starts the delivery', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  beginSending(state)
+  expect(state.leftoverStrips).toBe(1)
 })

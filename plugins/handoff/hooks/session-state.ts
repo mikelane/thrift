@@ -78,6 +78,8 @@ export type SessionState = Settings & {
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
+  boxLeftover: string | null
+  leftoverStrips: number
   hasBand: boolean
   isTurnRunning: boolean
   isPressRunning: boolean
@@ -110,6 +112,8 @@ export const createState = (settings: Settings): SessionState => ({
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
+  boxLeftover: null,
+  leftoverStrips: 0,
   hasBand: false,
   isTurnRunning: false,
   isPressRunning: false,
@@ -147,6 +151,8 @@ export const isGroupOfOrigin = (group: HeldPromptGroup, isUnattended: boolean): 
 
 // The prompt the handoff carries is the first held prompt, so it is delivered with its own origin's group.
 export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null): void => {
+  state.boxLeftover = null
+  state.leftoverStrips = 0
   state.handoffHold = {
     phase: 'holding',
     heldPrompts: carried === null ? [] : [carried],
@@ -154,8 +160,15 @@ export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null
   }
 }
 
-// True only while prompts are still being collected, before the handoff takes them to deliver or put back.
-export const isCollectingHeldPrompts = (state: SessionState): boolean => state.handoffHold.phase === 'holding'
+// True while this very prompt is still held and not yet taken to deliver or put back: collected before the handoff takes the
+// held prompts, or a late arrival in the sending stage before the delivery takes the late arrivals. Once taken, the delivery
+// and restore paths deal with what the engine left in the box, and a restore may have put the text back.
+export const isAwaitingDelivery = (state: SessionState, prompt: HeldPrompt): boolean => {
+  const hold = state.handoffHold
+  if (hold.phase === 'holding') return hold.heldPrompts.includes(prompt)
+  if (hold.phase === 'sending') return hold.lateArrivals.includes(prompt)
+  return false
+}
 
 export const isHoldingForHandoff = (state: SessionState): boolean =>
   state.handoffHold.phase === 'holding' || state.handoffHold.phase === 'sending'
@@ -172,6 +185,38 @@ export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number =
     return hold.lateArrivals.length
   }
   return 0
+}
+
+// Claude Code leaves a dropped prompt's text in the box and submits the next one typed after it, joined: `five` then `six` is
+// submitted as `fivesix`. The plugin takes the leftover out in a later tick, but the next prompt can arrive before that tick
+// has found the text there. Until a clear confirms the box is empty, the text the box holds is remembered, so the next prompt
+// can be told from it. Only a handoff that is holding or sending has a leftover to watch.
+export const noteBoxLeftover = (state: SessionState, boxText: string): void => {
+  state.boxLeftover = boxText
+}
+
+// A strip can be wrong: the person cleared the box by hand and then typed text that starts like the leftover. The count goes in
+// the record that ends the handoff, so a wrong strip can be told apart from a right one there.
+export const noteLeftoverStrip = (state: SessionState): void => {
+  state.leftoverStrips += 1
+}
+
+// Once the plugin has put a prompt in the box for the person to send, or found it already there, the box holds that prompt and
+// not a leftover: text typed after it is sent with it on purpose, and is not stripped.
+export const forgetBoxLeftover = (state: SessionState): void => {
+  state.boxLeftover = null
+}
+
+export const noteBoxCleared = (state: SessionState, boxText: string): void => {
+  if (state.boxLeftover === boxText) state.boxLeftover = null
+}
+
+// What the person typed: the submitted text without the leftover it was joined to. A submit that is only the leftover again is
+// pressing Enter on the box, and stays whole.
+export const typedAfterBoxLeftover = (state: SessionState, submitted: string): string => {
+  const leftover = state.boxLeftover
+  const isJoined = leftover !== null && isHoldingForHandoff(state) && submitted.length > leftover.length && submitted.startsWith(leftover)
+  return isJoined ? submitted.slice(leftover.length) : submitted
 }
 
 // before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box

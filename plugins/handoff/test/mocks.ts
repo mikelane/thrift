@@ -35,6 +35,7 @@ export type World = {
   onClearIssued: (() => Promise<void>) | undefined
   // Runs after a clear ended the session, before the clear's run returns: what the engine ran next, in the fresh session.
   onClearEnded: (() => Promise<void>) | undefined
+  onCommandRegistered: (() => Promise<void>) | undefined
   // The origin kind and name of every clear that reached the mock, so a test can see whose clear ran.
   clearOrigins: string[]
   // A hook beneath the plugin answers a person's /clear in its place: no clear runs and no session ends.
@@ -154,9 +155,10 @@ export const installPromptMocks = (on: On, world: World) => {
 }
 
 export const installCommandMocks = ($: Engine, on: On, world: World) => {
-  on('command.register', (_$, e) => {
+  on('command.register', async (_$, e) => {
     if (world.registerThrows) throw new Error('register refused')
     world.effects.push(`register:${e.name}`)
+    await world.onCommandRegistered?.()
     return ok({ command: e.name })
   })
   on('command.run', async (_$, e) => {

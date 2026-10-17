@@ -148,9 +148,23 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       prompts, but one of them left in the prompt box waits for Enter, so a later prompt can run first.
       Claude Code leaves the text of a prompt it dropped in the prompt box, so the plugin takes that
       text back out of the box for every prompt typed at this terminal:
-      - As each prompt is held. Otherwise the next prompt is typed after the leftover text: `one`
-        then `two` would be held as `one` and `onetwo`.
+      - As each prompt is held, including one that arrives while the held prompts are being
+        delivered. Otherwise the next prompt is typed after the leftover text: `one` then `two`
+        would be held as `one` and `onetwo`. The clear is skipped for a prompt the handoff has
+        already taken to deliver or put back, since a restore may have put its text back in the box.
+        The clear can run before Claude Code has put the text back, so the plugin also remembers the
+        text it left until a clear finds and removes it. If the next prompt arrives as that text
+        followed by the new one (`five`, then `fivesix`), only the part after it is held (`six`).
+        A prompt that merely starts like the earlier one is kept whole once a clear has removed the
+        leftover, or once the plugin has put a held prompt back in the box for the person to send.
+        One case is stripped wrongly: the clear never found the leftover, the person cleared the box
+        by hand, and the next prompt really does start with the same text. `yes` is held, the box is
+        cleared by hand, then `yes please` is typed, and it is held as ` please`, space first. The
+        plugin cannot tell that from a joined prompt. `leftover_strips` in the record that ends the
+        handoff counts every strip, so a handoff where this may have happened shows a value above 0.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
+        This clear can also run before Claude Code has put the text back, so the prompt is remembered
+        and stripped from the front of the next one the same way, and counted in `leftover_strips`.
       - After a held prompt has been submitted in the fresh session, so Enter does not send it a
         second time. A group put back by an abandoned handoff and submitted rather than boxed is
         cleaned up the same way.
@@ -419,6 +433,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. When the note is not appended, a scheduled handoff's note carries the held scheduled group; an attended handoff's note carries none |
 | `trigger_values.held_other_delivery` | Present only on a `cleared` record. How the held groups the note did not carry, and any prompt that arrived during the delivery, were delivered in the fresh session. An appended note carries no group, and neither does an attended handoff's note, so every held group is sent separately; a scheduled handoff's note that is not appended carries the scheduled group, so only the other group is. Each group, and each prompt that arrived during the delivery, is submitted first; if that fails, one typed at this terminal is put in the prompt box. A person's prompt is not submitted when `note` is `in_box` or `not_carried`: it is held back after the note, so it reads `in_box` or `not_carried` here by design, not because a submit failed. A failed submit or box fill goes to the debug log with its reason. `submitted` (entered into the session), `in_box` (left in the prompt box, unsent), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (nothing was sent separately). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. Never prompt text |
 | `trigger_values.held_restore` | Present only on the `none` record that ends a handoff, the same records that carry `held_groups`. How the held groups were put back when the handoff was abandoned. A group typed at this terminal goes back in the prompt box first; if that fails, or the group came from the bridge, the SDK, or a scheduled trigger (or mixes them with prompts typed here), it is submitted. A prompt that arrived while the groups were put back is put back after them in the same way and counts here and in `held_groups`. `in_box` (back in the prompt box), `submitted` (entered into the session), `not_carried` (neither worked, so the prompt was written to the transcript), or `none` (no group was held). With more than one, the worst outcome across all of them: `not_carried`, then `in_box`, then `submitted`. The record is written after the groups are put back. Never prompt text |
+| `trigger_values.leftover_strips` | Present only when greater than 0, on the records that carry `held_groups`: a `cleared` record and the `none` record that ends a handoff. How many held prompts typed at this terminal had the text Claude Code left in the box taken off their front (`five`, then `fivesix`, is held as `six`), counted over that handoff. A strip can be wrong: see the hold-time clear above. A count, never prompt text |
 
 A prompt is evaluated, and so logged, only when it names new work.
 

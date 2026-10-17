@@ -81,12 +81,12 @@ const groupOrigin = (groupSoFar: HeldPrompt['origin'], joining: HeldPrompt['orig
 // Prompts that follow the same origin are sent together, in arrival order; groups go in order of their first prompt.
 export const groupHeldPrompts = (prompts: readonly HeldPrompt[]): HeldPromptGroup[] => {
   const groups: HeldPromptGroup[] = []
-  for (const { text, isUnattended, origin, author } of prompts) {
+  for (const { text, isUnattended, origin, author, boxText } of prompts) {
     const index = groups.findIndex(group => isGroupOfOrigin(group, isUnattended))
     const group = groups[index]
-    if (group === undefined) groups.push({ text, isUnattended, origin, author })
+    if (group === undefined) groups.push({ text, isUnattended, origin, author, ...(boxText === undefined ? {} : { boxText }) })
     else {
-      const boxCopy = isComposerOrigin(origin) ? text : boxCopyOf(group)
+      const boxCopy = isComposerOrigin(origin) ? (boxText ?? text) : boxCopyOf(group)
       groups[index] = {
         text: `${group.text}${PROMPT_SEPARATOR}${text}`,
         isUnattended,

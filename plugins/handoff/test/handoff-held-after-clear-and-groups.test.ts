@@ -120,6 +120,15 @@ describe('boxText on a group', () => {
     expect(groupHeldPrompts(prompts)[0]?.boxText).toBe('finally, this')
   })
 
+  test('It keeps the boxText of a single prompt in its group', () => {
+    expect(groupHeldPrompts([{ ...personGroup, text: 'six', boxText: 'fivesix' }])[0]?.boxText).toBe('fivesix')
+  })
+
+  test('It sets boxText to the text the engine left for the last prompt of a group when it carries one', () => {
+    const prompts = [personGroup, { ...personGroup, text: 'six', boxText: 'fivesix' }]
+    expect(groupHeldPrompts(prompts)[0]?.boxText).toBe('fivesix')
+  })
+
   test('It keeps the composer prompt as boxText when a bridge prompt joins after it', () => {
     const prompts = [personGroup, { ...personGroup, text: 'from phone', origin: 'bridge' as const }]
     expect(groupHeldPrompts(prompts)[0]?.boxText).toBe(personGroup.text)
