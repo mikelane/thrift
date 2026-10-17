@@ -561,7 +561,11 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 
 | File | What it holds |
 |---|---|
-| `hooks/register.tsx` | Engine wiring. Every function that takes `$` lives here, because the engine follows `$` only through functions declared at the top of this file. |
+| `hooks/register.tsx` | Engine wiring. A function that takes `$` is a top-level function of this file, or a `function` declaration in a module it imports (a `const` arrow in another module is refused). |
+| `hooks/engine-log.tsx` | `debug` and `logFailure`: the debug-log line and the guard for background work, shared by the modules that take `$` |
+| `hooks/prompt-box.tsx` | The prompt box: filling it with a prompt (`refillBox`, `returnToBox`), taking out the copy the engine kept (`emptySentPromptFromBox`, `emptyBoxIfHolding`, `clearBoxCopyWhileHeld`), and the transcript notice for a prompt that cannot go there (`keepInTranscript`) |
+| `hooks/handoff-hold.tsx` | What happens to a prompt that arrives while a handoff is pending (`decideDuringHandoff`): dropping a repeat of a carried prompt, refusing one with attachments or context, or holding it |
+| `hooks/box-leftover.ts` | The text the engine keeps in the prompt box after dropping a prompt, remembered until a clear confirms the box is empty (`noteBoxLeftover`, `noteBoxCleared`, `forgetBoxLeftover`), and stripping it from the next prompt (`typedAfterBoxLeftover`, `noteLeftoverStrip`) |
 | `hooks/signals.ts` | Pure signal logic: setting parsers (`asMode`, `asThreshold`), context size (`contextFromStep`, `formatTokens`), classification (`classify`), the band's buttons (`bandButtons`), the mode table (`respond`), and the busy-refusal trigger (`busyRefusalTrigger`) |
 | `hooks/turn-end-plan.ts` | What a turn's end calls for: the signal and the plan from `planTurnEnd` (advise, compact, hand off, back off, or nothing), and the back-off window (`isBackedOff`) |
 | `hooks/prompt-plan.ts` | What a submitted prompt calls for: prompt origins (`isPersonOrigin`, `isComposerOrigin`, `isUnattendedOrigin`), the sender named in a message (`senderLabel`), attachments or context (`carriesExtras`), what to do with one that arrives during a handoff (`planPromptDuringHandoff`), whether one can be held (`canHoldPrompt`), and the plan for new work (`planNewWorkPrompt`) |
