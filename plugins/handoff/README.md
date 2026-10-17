@@ -88,7 +88,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         starts while work is busy.
       - A turn started during this check: go back to step 3.
       - Otherwise queue `/clear` after the last check for a running turn. `$.command.run`
-        only queues the command, so the clear does not run in the same tick, and a prompt the engine queued earlier (a peer's message, a task
+        only queues the command, so the clear does not run in the same tick. A prompt the engine queued earlier (a peer's message, a task
         notification) runs first, in the old session, so a turn can still start before the clear
         takes effect. Such a turn is a late turn: it adds the "A turn ran in the previous session"
         line in step 6 and sets `late_turn` on the `cleared` record. The plugin reports a late turn; it
@@ -529,7 +529,7 @@ claude plugin test plugins/handoff
 branch in `hooks/` has a test whose name says which.
 
 A restart of the plugin in the middle of a handoff starts fresh state. On 2.1.299 a setting changed
-in `/config` did (a handoff right after one recorded `context_tokens: 0`); `/reload-plugins` kept the
+in `/config` restarted it (a handoff right after one recorded `context_tokens: 0`); `/reload-plugins` kept the
 plugin's state, and a code change waits for `/reload-plugins`. The handoff already running keeps the old state: its
 prompts are no longer held, `/clear` can land inside a turn, and it waits forever if it was waiting
 for a turn to end. This needs a restart while a handoff runs, from the note being written until its

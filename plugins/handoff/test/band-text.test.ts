@@ -61,7 +61,7 @@ for (const [offer, question] of questionCases) {
   })
 }
 
-test('It warns that background work would reach a fresh session without this conversation from bandMessage', () => {
+test('It warns from bandMessage that the results of background work would reach a fresh session without this conversation', () => {
   const message = bandMessage({ signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true })
   expect(message).toContain('results would reach a fresh session')
 })

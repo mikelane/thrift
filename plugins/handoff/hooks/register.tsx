@@ -1135,11 +1135,12 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   // SAFETY: a reload that runs register again gives the new state pending null and nothing held. On 2.1.299 a setting
-  // changed in /config did (a handoff right after one recorded context_tokens 0); /reload-plugins kept the old state.
-  // A handoff already running keeps the old state and its old closures. Its prompts are no longer held, so they pass
-  // through and /clear can land inside their turn. The old hooks are gone too, so nothing releases a wait for a turn to
-  // end, and that handoff waits forever and never clears. Both need a reload while a handoff runs, from the note being
-  // written until its prompts are delivered. No guard: carrying the state across a reload would need it in an atom.
+  // changed in /config did so (a handoff right after one recorded context_tokens 0); /reload-plugins kept the old
+  // state. A handoff already running keeps the old state and its old closures. Its prompts are no longer held, so they
+  // pass through and /clear can land inside their turn. The old hooks are gone too, so nothing releases a wait for a
+  // turn to end, and that handoff waits forever and never clears. Both need a reload while a handoff runs, from the
+  // note being written until its prompts are delivered. No guard: carrying the state across a reload would need it in
+  // an atom.
   // After a reload, run /handoff again.
   const state = createState({
     setting,
