@@ -163,6 +163,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         that from a joined prompt. `leftover_strips` in the record that ends the handoff counts every
         strip, so a handoff where this may have happened shows a value above 0.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
+        This clear can also run before Claude Code has put the text back, so the prompt is remembered
+        and stripped from the front of the next one the same way, and counted in `leftover_strips`.
       - After a held prompt has been submitted in the fresh session, so Enter does not send it a
         second time. A group put back by an abandoned handoff and submitted rather than boxed is
         cleaned up the same way.

@@ -1026,8 +1026,12 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   const trigger = snapshotTrigger(state, 'prompt', signal, isBusy)
   if (action === 'handoff') {
     // Claude Code leaves the dropped text in the box; the handoff sends the prompt itself, so that copy is taken out first.
-    const emptyBox = isComposerOrigin(e.origin.kind) ? () => emptyBoxIfHolding($, e.text) : undefined
+    // That clear can read the box before the text is back, as a held prompt's can, so the text is remembered as the box's
+    // leftover once the hold has begun (beginHandoffHold forgets any earlier one).
+    const isFromComposer = isComposerOrigin(e.origin.kind)
+    const emptyBox = isFromComposer ? () => clearBoxCopyWhileHeld($, state, e.text) : undefined
     const isClaimed = scheduleHandoff($, state, { trigger, heldPrompt: e.text, heldPromptOrigin: e.origin.kind, isUnattended }, emptyBox)
+    if (isClaimed && isFromComposer) noteBoxLeftover(state, e.text)
     return isClaimed ? { drop: HANDING_OFF_FIRST } : null
   }
   if (action === 'hold') return holdPrompt($, state, e.text, trigger)
