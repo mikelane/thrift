@@ -66,9 +66,3 @@ settle_after_delivery() {
 both_held_in_sending_stage() { log_has a 'held a prompt for the handoff \(2 held\)'; }
 not_joined() { ! log_has a 'prompt\.submit \(handoff\): "fivesix"'; }
 both_delivered() { log_has a 'prompt\.submit \(handoff\): "five"' && log_has a 'prompt\.submit \(handoff\): "six"'; }
-# A screen with no prompt box is not an empty box: box_text fails there, and so does this.
-box_is_empty() {
-  local text
-  text=$(box_text "$1") || return 1
-  [[ -z "$(tr -d '[:space:]' <<<"$text")" ]]
-}

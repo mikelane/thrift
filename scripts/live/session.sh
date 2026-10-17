@@ -140,6 +140,13 @@ box_shows() {
   grep -F -- "${2:0:LIVE_BOX_MATCH_CHARS}" >/dev/null <<<"$box_contents"
 }
 
+# A screen with no prompt box is not an empty box: box_text fails there, and so does this.
+box_is_empty() {
+  local text
+  text=$(box_text "$1") || return 1
+  [[ -z "$(tr -d '[:space:]' <<<"$text")" ]]
+}
+
 # type_text <name> <text>: types without Enter and waits until the box shows it. Enter pressed in
 # the same call as a long text is taken as part of a paste and ignored.
 type_text() {

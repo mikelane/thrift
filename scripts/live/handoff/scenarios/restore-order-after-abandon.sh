@@ -26,6 +26,8 @@ scenario_run() {
     held_count=$((held_count + 1))
     submit a "$word"
     wait_for "prompt '$word' to be held" log_has a "held a prompt for the handoff \\($held_count held\\)"
+    # The engine clears the box after the hook holds the prompt. Text typed before that is wiped.
+    wait_for "the box to clear after prompt '$word'" box_is_empty a
   done
   type_text a draft
   wait_for 'the handoff to stop or clear' handoff_ended
@@ -62,8 +64,4 @@ person_turns_detail() {
 }
 # The prompt box on one line, each newline shown as "|", the padding and the indent of wrapped lines removed.
 box_in_one_line() { box_text "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | paste -sd'|' -; }
-record_has_reason() { records_with none | jq -e --arg reason "$1" 'select(.trigger_values.reason == $reason)' >/dev/null; }
-handoff_ended() { record_has_reason background_busy || record_exists cleared; }
 stopped_busy_without_clear() { record_has_reason background_busy && [[ "$(record_count cleared)" == 0 ]]; }
-held_restore_of_abandon() { records_with none | jq -r 'select(.trigger_values.reason == "background_busy") | .trigger_values.held_restore // "missing"' | tail -n 1; }
-held_prompt_in_box() { [[ "$(held_restore_of_abandon)" == in_box ]]; }

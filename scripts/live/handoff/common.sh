@@ -123,3 +123,10 @@ start_waiting_handoff() {
   wait_for "the peer turn to start in '$name'" log_has "$name" 'cc_turn_origin=peer'
   wait_for 'the handoff to wait for the running turn' pane_has "$name" 'continues when the current turn ends'
 }
+
+# The abandon of a handoff that waits for a turn: a `none` record with reason background_busy. The reason
+# lives only in trigger_values (decision-record.ts never writes a top-level one).
+record_has_reason() { records_with none | jq -e --arg reason "$1" 'select(.trigger_values.reason == $reason)' >/dev/null; }
+handoff_ended() { record_has_reason background_busy || record_exists cleared; }
+held_restore_of_abandon() { records_with none | jq -r 'select(.trigger_values.reason == "background_busy") | .trigger_values.held_restore // "missing"' | tail -n 1; }
+held_prompt_in_box() { [[ "$(held_restore_of_abandon)" == in_box ]]; }

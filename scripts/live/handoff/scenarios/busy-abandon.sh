@@ -37,7 +37,7 @@ scenario_run() {
   check 'the handoff stopped with reason background_busy' 'no none record with reason background_busy' \
     record_has_reason background_busy
   check 'the handoff did not clear' 'a cleared record was written' no_cleared_record
-  check 'the held prompt went back (held_restore in_box)' "held_restore was: $(records_with none | jq -r '.trigger_values.held_restore // "missing"' | tail -n 1)" \
+  check 'the held prompt went back (held_restore in_box)' "held_restore was: $(held_restore_of_abandon)" \
     held_prompt_in_box
   check 'the held prompt is in the prompt box' "the box holds [$(box_text a | tr '\n' ' ')]" \
     box_shows a "$HELD_PROMPT"
@@ -45,10 +45,7 @@ scenario_run() {
     "no compaction marker in the transcript of $old_id" transcript_is_compacted "$old_id"
 }
 
-record_has_reason() { records_with none | jq -e --arg reason "$1" 'select(.trigger_values.reason == $reason or .reason == $reason)' >/dev/null; }
-handoff_ended() { record_has_reason background_busy || record_exists cleared; }
 no_cleared_record() { [[ "$(record_count cleared)" == 0 ]]; }
-held_prompt_in_box() { records_with none | jq -e 'select(.trigger_values.held_restore == "in_box")' >/dev/null; }
 
 transcript_is_compacted() {
   local path
@@ -59,9 +56,9 @@ transcript_summary() {
   local path
   path=$(transcript_path "$1")
   if [[ -z "$path" ]]; then
-    echo "no transcript file '${1:-<no session id>}.jsonl' under $(transcripts_dir)"
+    echo "no transcript file '${1:-<no session id>}.jsonl' under $(transcripts_dir | sed "s|$HOME|~|")"
     return
   fi
-  printf '%s\n' "$path"
+  printf '%s\n' "${path##*/}"
   grep -oE '"compact_boundary"|"isCompactSummary":true' "$path" | sort | uniq -c || true
 }
