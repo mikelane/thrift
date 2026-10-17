@@ -96,7 +96,8 @@ test('It says only the size in that band, as the question already names the back
   await bash($, world, 'sleep 100', { result: { backgroundTaskId: 'bg1' } })
   await completeTurn($)
   const band = await mountBand($)
-  expect(await band.find({ text: 'Context is 200k.' })).toBeDefined()
+  expect(await band.find({ text: 'Context is 200k. Accuracy drops' })).toBeDefined()
+  expect(await band.find({ text: 'Background work is still running, and its results would reach a fresh session without this conversation, so compact instead?' })).toBeDefined()
 })
 
 test('It says only the size in a plain weak band', ASK, async ($, on) => {
