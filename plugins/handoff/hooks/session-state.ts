@@ -154,8 +154,15 @@ export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null
   }
 }
 
-// True only while prompts are still being collected, before the handoff takes them to deliver or put back.
-export const isCollectingHeldPrompts = (state: SessionState): boolean => state.handoffHold.phase === 'holding'
+// True while this very prompt is still held and not yet taken to deliver or put back: collected before the handoff takes the
+// held prompts, or a late arrival in the sending stage before the delivery takes the late arrivals. Once taken, the delivery
+// and restore paths deal with what the engine left in the box, and a restore may have put the text back.
+export const isAwaitingDelivery = (state: SessionState, prompt: HeldPrompt): boolean => {
+  const hold = state.handoffHold
+  if (hold.phase === 'holding') return hold.heldPrompts.includes(prompt)
+  if (hold.phase === 'sending') return hold.lateArrivals.includes(prompt)
+  return false
+}
 
 export const isHoldingForHandoff = (state: SessionState): boolean =>
   state.handoffHold.phase === 'holding' || state.handoffHold.phase === 'sending'

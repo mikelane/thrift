@@ -148,8 +148,10 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       prompts, but one of them left in the prompt box waits for Enter, so a later prompt can run first.
       Claude Code leaves the text of a prompt it dropped in the prompt box, so the plugin takes that
       text back out of the box for every prompt typed at this terminal:
-      - As each prompt is held. Otherwise the next prompt is typed after the leftover text: `one`
-        then `two` would be held as `one` and `onetwo`.
+      - As each prompt is held, including one that arrives while the held prompts are being
+        delivered. Otherwise the next prompt is typed after the leftover text: `one` then `two`
+        would be held as `one` and `onetwo`. The clear is skipped for a prompt the handoff has
+        already taken to deliver or put back, since a restore may have put its text back in the box.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
       - After a held prompt has been submitted in the fresh session, so Enter does not send it a
         second time. A group put back by an abandoned handoff and submitted rather than boxed is

@@ -3,16 +3,18 @@ import { expect, test } from 'claude-code/testing'
 import {
   addHeldPrompt,
   beginHandoffHold,
+  beginSending,
   createState,
   endHandoff,
   isCarriedByHandoff,
-  isCollectingHeldPrompts,
+  isAwaitingDelivery,
   isGroupOfOrigin,
   isHoldingForHandoff,
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
   takeHeldPrompts,
+  takeLateArrivalsOrEndSending,
 } from '../hooks/session-state'
 import { settings, person, nightly } from './session-state-fixtures'
 
@@ -126,21 +128,43 @@ test('It reports a state that holds nothing as not holding from isHoldingForHand
   expect(isHoldingForHandoff(createState(settings))).toBe(false)
 })
 
-test('It reports a state that holds nothing as not collecting from isCollectingHeldPrompts', () => {
-  expect(isCollectingHeldPrompts(createState(settings))).toBe(false)
+test('It reports a state that holds nothing as not awaiting delivery from isAwaitingDelivery', () => {
+  expect(isAwaitingDelivery(createState(settings), person)).toBe(false)
 })
 
-test('It reports a handoff that is collecting prompts as collecting from isCollectingHeldPrompts', () => {
+test('It reports a prompt held while collecting as awaiting delivery from isAwaitingDelivery', () => {
   const state = createState(settings)
   beginHandoffHold(state, null)
-  expect(isCollectingHeldPrompts(state)).toBe(true)
+  addHeldPrompt(state, person)
+  expect(isAwaitingDelivery(state, person)).toBe(true)
 })
 
-test('It reports a handoff whose prompts were taken as not collecting from isCollectingHeldPrompts', () => {
+test('It reports a prompt that was never held as not awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginHandoffHold(state, null)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
+})
+
+test('It reports a prompt whose holding group was taken as not awaiting delivery from isAwaitingDelivery', () => {
   const state = createState(settings)
   beginHandoffHold(state, person)
   takeHeldPrompts(state)
-  expect(isCollectingHeldPrompts(state)).toBe(false)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
+})
+
+test('It reports a late arrival as awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginSending(state)
+  addHeldPrompt(state, person)
+  expect(isAwaitingDelivery(state, person)).toBe(true)
+})
+
+test('It reports a late arrival the delivery took as not awaiting delivery from isAwaitingDelivery', () => {
+  const state = createState(settings)
+  beginSending(state)
+  addHeldPrompt(state, person)
+  takeLateArrivalsOrEndSending(state)
+  expect(isAwaitingDelivery(state, person)).toBe(false)
 })
 
 test('It holds the carried prompt first and remembers its text from beginHandoffHold', () => {
