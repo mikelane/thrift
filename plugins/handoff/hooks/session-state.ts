@@ -84,6 +84,7 @@ export type SessionState = Settings & {
   deferredPress: ButtonPress | null
   hasTurnAfterNote: boolean
   isOwnClearQueued: boolean
+  foreignClearsAhead: number
   hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
   handoffStage: HandoffStage
@@ -115,6 +116,7 @@ export const createState = (settings: Settings): SessionState => ({
   deferredPress: null,
   hasTurnAfterNote: false,
   isOwnClearQueued: false,
+  foreignClearsAhead: 0,
   hasLateTurn: false,
   turnEndWaiter: null,
   handoffStage: 'idle',
@@ -234,6 +236,7 @@ export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
   state.handoffStage = 'idle'
   state.isOwnClearQueued = false
+  state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
 
@@ -250,10 +253,39 @@ export const beginOwnClear = (state: SessionState): void => {
   state.hasLateTurn = false
 }
 
+const PLUGIN_NAME = 'handoff'
+
+// A clear someone else started, counted from its command.run until its session end. The declarations skip only the calling
+// hook on a plugin's $.command.run ("the calling hook alone"; "the plugin's others see it"), so the handoff's own clear can
+// reach this plugin's command.run hook too. Its origin, which the engine stamps { kind: 'plugin', name }, tells it apart.
+// Counting starts before the handoff queues its own clear: a clear already running then (its end awaits the hooks beneath
+// and core) ends its session after ours is queued, and that end is not the end of ours. One seen after our clear's end runs
+// behind it and is no handoff's business.
+export const recordForeignClear = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
+  if (state.handoffStage === 'before_clear' || state.isOwnClearQueued) state.foreignClearsAhead += 1
+}
+
+// A foreign clear a hook answered in its place: it ran nothing and ends no session, so no end is owed to it.
+export const forgetForeignClear = (state: SessionState): void => {
+  if (state.foreignClearsAhead > 0) state.foreignClearsAhead -= 1
+}
+
+// The ends of foreign clears come first; the first end after them is the handoff's own. Any other reason ends it outright.
+const attributeOwnClearStageEnd = (state: SessionState, reason: string): void => {
+  if (reason === 'clear' && state.foreignClearsAhead > 0) {
+    state.foreignClearsAhead -= 1
+    return
+  }
+  state.isOwnClearQueued = false
+}
+
 // Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
 export const recordSessionEnd = (state: SessionState, reason: string): void => {
-  if (state.handoffStage === 'own_clear') state.isOwnClearQueued = false
+  if (state.handoffStage === 'own_clear') attributeOwnClearStageEnd(state, reason)
   if (state.handoffStage !== 'before_clear') return
+  // A foreign clear that ended its session before ours was queued is owed nothing more.
+  if (reason === 'clear' && state.foreignClearsAhead > 0) state.foreignClearsAhead -= 1
   if (state.sessionEndBeforeClear === 'other') return
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
