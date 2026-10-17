@@ -1251,9 +1251,9 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'clear' }, async ($, e, next) => {
     recordForeignClear(state, e.origin)
     try {
-      const result = await next(e)
-      if (result.ref === undefined) forgetForeignClear(state)
-      return result
+      const clearOutput = await next(e)
+      if (clearOutput.ref === undefined) forgetForeignClear(state)
+      return clearOutput
     } catch (error) {
       forgetForeignClear(state)
       throw error

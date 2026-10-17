@@ -268,7 +268,7 @@ export const forgetForeignClear = (state: SessionState): void => {
 }
 
 // The ends of foreign clears come first; the first end after them is the handoff's own. Any other reason ends it outright.
-const endQueuedClear = (state: SessionState, reason: string): void => {
+const attributeOwnClearStageEnd = (state: SessionState, reason: string): void => {
   if (reason === 'clear' && state.foreignClearsAhead > 0) {
     state.foreignClearsAhead -= 1
     return
@@ -278,7 +278,7 @@ const endQueuedClear = (state: SessionState, reason: string): void => {
 
 // Only an end that arrives before the handoff's own clear counts. A resume outranks a person's clear: it abandons.
 export const recordSessionEnd = (state: SessionState, reason: string): void => {
-  if (state.handoffStage === 'own_clear') endQueuedClear(state, reason)
+  if (state.handoffStage === 'own_clear') attributeOwnClearStageEnd(state, reason)
   if (state.handoffStage !== 'before_clear') return
   // A foreign clear that ended its session before ours was queued is owed nothing more.
   if (reason === 'clear' && state.foreignClearsAhead > 0) state.foreignClearsAhead -= 1

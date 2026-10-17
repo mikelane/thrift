@@ -91,13 +91,14 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         does not prevent one. A person's `/clear` queued ahead of the plugin's counts too: the plugin
         sees it through its own `command.run` hook, which tells the plugin's own clear apart by the
         origin the engine stamps on it (`{ kind: 'plugin', name: 'handoff' }`). The session end that
-        clear causes is not taken for the plugin's, nor is the end of one that was still running when the plugin issued its clear, and a turn in the session either made is a late turn.
-        The plugin's clear then wipes that session, and the record says `handoff`. A `/clear` that
-        another hook answers in its place ends no session and is not counted. `command.run` takes no
-        priority, and the declarations give no read of the prompt queue. A `session.receive` hook can take a delivery before it is queued (a peer's
-        message, or a relay's event or trigger under origin `task-notification`) by returning
-        `{ consumed }`, so one that arrives during the handoff could be held and sent after the
-        clear. The plugin does not do that yet.
+        clear causes is not taken for the plugin's, nor is the end of one that was still running when
+        the plugin issued its clear, and a turn in the session either clear made is a late turn. The
+        plugin's clear then wipes that session, and the record says `handoff`. A `/clear` that another
+        hook answers in its place ends no session and is not counted. `command.run` takes no
+        priority, and the declarations give no read of the prompt queue. A `session.receive` hook can
+        take a delivery before it is queued (a peer's message, or a relay's event or trigger under
+        origin `task-notification`) by returning `{ consumed }`, so one that arrives during the
+        handoff could be held and sent after the clear. The plugin does not do that yet.
    6. Append the handoff as a message for the model, prefixed "Handoff from the previous session
       (&lt;id&gt;), written by Claude just before a /clear". If a turn ran in the old session after the
       note began to be written, the message ends with one more line saying so ("A turn ran in the previous session

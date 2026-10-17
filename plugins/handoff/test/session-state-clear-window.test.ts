@@ -21,7 +21,7 @@ import {
 import { settings } from './session-state-fixtures'
 import type { PromptOrigin } from 'claude-code'
 
-const PERSON: PromptOrigin = { kind: 'composer' }
+const PERSON_ORIGIN: PromptOrigin = { kind: 'composer' }
 
 const isPending = async (promise: Promise<void>): Promise<boolean> =>
   Promise.race([promise.then(() => false), Promise.resolve().then(() => true)])
@@ -263,7 +263,7 @@ test('It clears the queued-clear and late-turn marks from endHandoff', () => {
 test('It keeps the own clear queued when a foreign clear ended the session first in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
 })
@@ -271,7 +271,7 @@ test('It keeps the own clear queued when a foreign clear ended the session first
 test('It marks a turn between a foreign clear and the own clear as late in startMainTurn', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   startMainTurn(state, '')
   expect(state.hasLateTurn).toBe(true)
@@ -280,17 +280,17 @@ test('It marks a turn between a foreign clear and the own clear as late in start
 test('It treats the second clear as the own clear after one foreign clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
 })
 
-test('It treats the second clear as the own clear after two foreign clears in recordSessionEnd', () => {
+test('It keeps the own clear queued through the ends of two foreign clears in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
@@ -299,7 +299,7 @@ test('It treats the second clear as the own clear after two foreign clears in re
 test('It takes a session end that is not a clear as the end of the queued clear despite a foreign clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'resume')
   expect(state.isOwnClearQueued).toBe(false)
 })
@@ -307,7 +307,7 @@ test('It takes a session end that is not a clear as the end of the queued clear 
 test('It keeps the own clear queued when a foreign clear that started before it ended the session first in recordSessionEnd', () => {
   const state = createState(settings)
   beginBeforeClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
@@ -316,7 +316,7 @@ test('It keeps the own clear queued when a foreign clear that started before it 
 test('It treats the next clear as the own clear after a foreign clear ended its session before the own clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginBeforeClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
@@ -326,7 +326,7 @@ test('It treats the next clear as the own clear after a foreign clear ended its 
 test('It keeps the foreign clear counted when a session end that is not a clear comes before the own clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginBeforeClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'resume')
   expect(state.foreignClearsAhead).toBe(1)
 })
@@ -334,14 +334,14 @@ test('It keeps the foreign clear counted when a session end that is not a clear 
 test('It records the person clear before the own clear even with a foreign clear counted in recordSessionEnd', () => {
   const state = createState(settings)
   beginBeforeClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   recordSessionEnd(state, 'clear')
   expect(state.sessionEndBeforeClear).toBe('cleared_by_person')
 })
 
 test('It ignores a foreign clear while no handoff runs in recordForeignClear', () => {
   const state = createState(settings)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   expect(state.foreignClearsAhead).toBe(0)
 })
 
@@ -349,7 +349,7 @@ test('It ignores a foreign clear after the own clear ended the session in record
   const state = createState(settings)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
@@ -358,7 +358,7 @@ test('It ignores a foreign clear after the own clear ended the session in record
 test('It forgets a foreign clear from endHandoff', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   endHandoff(state)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
@@ -376,7 +376,7 @@ test('It ignores the handoff plugin own clear in recordForeignClear', () => {
 test('It drops a counted foreign clear that ended no session in forgetForeignClear', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON_ORIGIN)
   forgetForeignClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
