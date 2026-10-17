@@ -31,8 +31,9 @@ mkdir -p -- "$dir" && cd -- "$dir" && claude
 Until then every scenario stops with ERROR at the trust dialog and prints this instruction.
 
 Exit status: `0` PASS, `1` FAIL (the plugin misbehaved), `2` ERROR (the harness could not reach the
-state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, or any
-harness command that failed before a verdict). A FAIL or ERROR keeps the run directory and prints
+state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, a scenario that
+ran no checks, a decision log that exists but cannot be read as JSON lines, or any harness command
+that failed before a verdict). A FAIL or ERROR keeps the run directory and prints
 its path: `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
 
 Every wait is on a condition (pane text, a debug-log line, a decision record) with a

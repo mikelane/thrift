@@ -42,7 +42,7 @@ assert_file_matches() { grep -qaE -- "$2" "$1" || { fail "${1#"$TEST_DIR"/} has 
 assert_tmux_not_called() { assert_file_lacks "$TMUX_LOG" "$1"; }
 
 test_cleanup_kills_each_own_session_by_exact_name_and_never_the_server() {
-  run_live 'live_init; LIVE_SESSIONS=(live-1-a live-1-b); live_verdict x'
+  run_live 'live_init; LIVE_SESSIONS=(live-1-a live-1-b); check ok detail true; live_verdict x'
   assert_exit_code 0
   assert_tmux_called 'kill-session -t =live-1-a'
   assert_tmux_called 'kill-session -t =live-1-b'
@@ -96,7 +96,7 @@ test_a_failed_check_is_a_fail() {
 }
 
 test_a_run_directory_is_removed_after_a_pass() {
-  run_live 'live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
+  run_live 'live_init; echo "RUN=$LIVE_RUN"; check ok detail true; live_verdict s'
   assert_exit_code 0
   local run_dir
   run_dir=$(sed -n 's/^RUN=//p' "$OUTPUT")
@@ -118,7 +118,7 @@ test_a_timeout_that_is_not_a_whole_number_is_an_error() {
 }
 
 test_log_count_is_zero_before_the_debug_log_exists() {
-  run_live 'live_init; echo "COUNT=$(log_count a x)"; live_verdict s'
+  run_live 'live_init; echo "COUNT=$(log_count a x)"; check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has 'COUNT=0'
 }
@@ -130,7 +130,7 @@ test_ts_before_orders_timestamps_and_refuses_empty_ones() {
     ! ts_before 2026-10-14T05:00:00.100Z 2026-10-14T05:00:00.100Z
     ! ts_before "" 2026-10-14T05:00:00.100Z
     ! ts_before 2026-10-14T05:00:00.100Z ""
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
 }
 
@@ -143,7 +143,7 @@ test_busy_abandon_waits_for_the_reason_not_for_any_none_record() {
     ! record_has_reason background_busy
     printf "%s\n" "{\"action\":\"none\",\"trigger_values\":{\"reason\":\"background_busy\"}}" >> "$LIVE_DECISIONS"
     record_has_reason background_busy
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
 }
 
@@ -175,7 +175,7 @@ test_handoff_prepare_patches_the_copy_and_leaves_the_source_alone() {
     live_init; LIVE_PLUGIN_SOURCE='"$TEST_DIR"'/src; handoff_prepare "{}"
     cat "$LIVE_RUN/plugin/hooks/engine-version.ts" "$LIVE_RUN/plugin/hooks/signals.ts"
     jq -c .userConfig "$LIVE_RUN/plugin/.claude-plugin/plugin.json"
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has "TESTED_THROUGH = '2.1.999'"
   assert_out_has 'MIN_THRESHOLD = 1_000'
@@ -224,7 +224,7 @@ test_busy_abandon_is_a_fail_when_the_handoff_clears_instead_of_stopping() {
     printf "%s\n" "{\"action\":\"cleared\",\"session_id\":\"old\",\"trigger_values\":{}}" > "$LIVE_DECISIONS"
     LIVE_TIMEOUT=1
     scenario_run
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 1
   assert_out_has 'FAIL  the handoff did not clear'
 }
@@ -371,7 +371,7 @@ test_a_second_quit_during_cleanup_still_kills_the_sessions() {
 }
 
 test_a_run_directory_is_kept_after_a_pass_when_keep_is_set() {
-  run_live 'LIVE_KEEP=1; live_init; echo "RUN=$LIVE_RUN"; live_verdict s'
+  run_live 'LIVE_KEEP=1; live_init; echo "RUN=$LIVE_RUN"; check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has 'run directory kept'
   assert_file_exists "$(sed -n 's/^RUN=//p' "$OUTPUT")"
@@ -423,7 +423,7 @@ test_start_dialogs_cleared_answers_the_claude_md_imports_dialog_and_keeps_waitin
   run_live 'live_init; tmux() { command tmux "$@" || true; }
     pane() { echo "Allow external CLAUDE.md file imports"; }
     ! start_dialogs_cleared a
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_tmux_called 'send-keys -t =live-'
   assert_tmux_called '-a: Enter'
@@ -442,7 +442,7 @@ test_start_dialogs_cleared_succeeds_once_the_prompt_box_is_up() {
   run_live 'live_init; tmux() { command tmux "$@" || true; }
     pane() { printf "%s\n" "──────" "❯ " "──────"; }
     start_dialogs_cleared a
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
 }
 
@@ -450,13 +450,13 @@ test_box_text_prints_the_box_between_the_last_two_rules_without_the_glyph() {
   run_live 'live_init
     pane() { printf "%s\n" "──────" "❯ old" "──────" "output" "──────" "❯ hello there" "──────" "footer"; }
     echo "BOX=[$(box_text a)]"
-    live_verdict s'
+    check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has 'BOX=[hello there]'
 }
 
 test_record_count_is_zero_before_the_decision_log_exists() {
-  run_live 'live_init; echo "COUNT=$(record_count none)"; ! record_exists none; live_verdict s'
+  run_live 'live_init; echo "COUNT=$(record_count none)"; ! record_exists none; check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has 'COUNT=0'
 }
@@ -669,6 +669,61 @@ test_signals_are_ignored_by_the_time_the_cleanup_starts() {
   assert_out_has "trap -- '' SIGTERM"
   assert_out_has "trap -- '' SIGHUP"
   assert_out_has "trap -- '' SIGQUIT"
+}
+
+test_a_scenario_that_ran_no_checks_is_an_error_not_a_pass() {
+  run_live 'live_init; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'ran no checks'
+  assert_out_lacks 'PASS s'
+}
+
+# Decision-log helpers run in command substitutions, where they cannot stop the harness themselves.
+# They note the problem in the run directory, and the next wait, check or verdict raises it.
+test_a_malformed_decision_log_is_an_error_not_zero_records() {
+  run_live 'live_init; printf "%s\n" "{not json" > "$LIVE_DECISIONS"
+    check "no cleared record" detail eval "[[ \"\$(record_count cleared)\" == 0 ]]"
+    live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'decision log'
+  assert_out_has 'could not be read'
+  assert_out_lacks 'PASS s'
+}
+
+test_an_unreadable_decision_log_is_an_error_not_zero_records() {
+  run_live 'live_init; echo "{}" > "$LIVE_DECISIONS"; chmod 000 "$LIVE_DECISIONS"
+    check "no cleared record" detail eval "! record_exists cleared"
+    live_verdict s'
+  chmod -R u+rw "$TEST_DIR/tmp"
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'PASS s'
+}
+
+test_a_wait_on_a_record_ends_at_once_when_the_decision_log_is_malformed() {
+  run_live 'live_init; LIVE_TIMEOUT=60; printf "%s\n" "{not json" > "$LIVE_DECISIONS"
+    wait_for "a cleared record" record_exists cleared'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'timed out'
+}
+
+test_records_with_notes_a_malformed_decision_log() {
+  run_live 'live_init; printf "%s\n" "{not json" > "$LIVE_DECISIONS"
+    records_with cleared >/dev/null
+    check x detail true
+    live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+}
+
+test_a_well_formed_decision_log_is_counted() {
+  run_live 'live_init; printf "%s\n" "{\"action\":\"cleared\"}" "{\"action\":\"none\"}" > "$LIVE_DECISIONS"
+    echo "COUNT=$(record_count cleared)"
+    check x detail record_exists cleared
+    live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'COUNT=1'
 }
 
 run_tests "$@"

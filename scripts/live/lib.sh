@@ -120,6 +120,17 @@ live_init() {
   LIVE_ENGINE_VERSION=$(claude --version | awk '{print $1}')
 }
 
+# live_note_error <message>: records that the harness hit a problem inside a command substitution.
+live_note_error() { [[ -z "${LIVE_RUN:-}" ]] || printf '%s\n' "$*" >"$LIVE_RUN/harness-error" 2>/dev/null || true; }
+
+# live_raise_noted_error: ends the run with an ERROR when a helper noted a problem.
+live_raise_noted_error() {
+  local noted
+  [[ -n "${LIVE_RUN:-}" && -f "$LIVE_RUN/harness-error" ]] || return 0
+  noted=$(cat -- "$LIVE_RUN/harness-error")
+  live_abort "${noted:-a harness helper failed}"
+}
+
 # --- waiting -------------------------------------------------------------------------------------
 
 # wait_for <description> <command...>: polls the command until it succeeds. A timeout is an ERROR
@@ -129,7 +140,8 @@ wait_for() {
   shift
   local deadline=$((SECONDS + LIVE_TIMEOUT))
   LIVE_WAITING="$description (condition: $*)"
-  until "$@"; do
+  until live_raise_noted_error; "$@"; do
+    live_raise_noted_error
     ((SECONDS < deadline)) || live_abort "timed out after ${LIVE_TIMEOUT}s waiting for $LIVE_WAITING"
     sleep "$LIVE_POLL"
   done
@@ -287,8 +299,21 @@ ts_before() {
 turns_done() { pane_count "$1" '^✻ [^(]+ for ([0-9]+m )?[0-9]+s'; }
 turns_done_above() { (($(turns_done "$1") > $2)); }
 
-record_count() { [[ -f "$LIVE_DECISIONS" ]] && jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" || echo 0; }
-records_with() { [[ -f "$LIVE_DECISIONS" ]] && jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" || true; }
+# A log that does not exist yet has no records. One that exists and cannot be read as JSON lines is
+# not "0 records": `! record_exists cleared` would pass on it. These run in command substitutions and
+# cannot stop the harness, so they note the problem and live_raise_noted_error (run by wait_for,
+# check and live_verdict) ends the run with an ERROR.
+record_count() {
+  [[ -f "$LIVE_DECISIONS" ]] || { echo 0; return 0; }
+  jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" 2>/dev/null \
+    || { live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"; echo 0; }
+}
+records_with() {
+  [[ -f "$LIVE_DECISIONS" ]] || return 0
+  jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" 2>/dev/null \
+    || live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"
+  return 0
+}
 record_exists() { (($(record_count "$1") > ${2:-0})); }
 
 # --- verdicts ------------------------------------------------------------------------------------
@@ -317,7 +342,10 @@ check() {
   local name=$1 detail=$2
   shift 2
   LIVE_CHECKED=$((LIVE_CHECKED + 1))
-  if "$@"; then
+  local passed=0
+  "$@" && passed=1
+  live_raise_noted_error
+  if [[ "$passed" == 1 ]]; then
     printf 'PASS  %s\n' "$name"
   else
     LIVE_FAILED=$((LIVE_FAILED + 1))
@@ -335,6 +363,8 @@ live_verdict_unwritable() {
 # reader of stdout is gone) is an ERROR, never a PASS or a FAIL nobody saw.
 live_verdict() {
   local scenario=$1
+  live_raise_noted_error
+  ((LIVE_CHECKED > 0)) || live_abort "scenario $scenario ran no checks, so there is nothing to judge"
   printf '\n' || live_verdict_unwritable
   if ((LIVE_FAILED > 0)); then
     printf 'FAIL %s (%d of %d checks failed)\n' "$scenario" "$LIVE_FAILED" "$LIVE_CHECKED" || live_verdict_unwritable
