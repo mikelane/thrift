@@ -6,8 +6,9 @@ Every model call re-reads the whole session context, so a long session pays for 
 every turn, mostly as cache reads. Accuracy also drops as context grows. Each plugin here pulls
 one lever on that cost and logs what it decided, so you can measure whether it helped.
 
-> **Status:** early development. `handoff` installs from this marketplace. Parts of it have been
-> verified in live terminals on Claude Code 2.1.302 with a tmux harness; the rest has not. See the
+> **Status:** early development. `handoff` is listed in this marketplace; an install from it has
+> not been tried yet. Parts of the plugin have been verified in live terminals on Claude Code
+> 2.1.299 through 2.1.302, by hand and with a tmux harness; the rest has not. See the
 > [verified and unverified lists](plugins/handoff/README.md#what-has-been-verified-live).
 
 ## Plugins
