@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # #63: two prompts submitted while the held prompts are being delivered (the plugin's `sending` stage).
 # #56 empties the box as each prompt is held while the handoff still collects them; a late arrival in
-# the `sending` stage had no such clear, so the second Enter could hold "fivesix" instead of "six".
+# the `sending` stage has no such clear, so the second Enter holds "fivesix" instead of "six".
 #
 # The window is narrow: it opens when the plugin queues its /clear (the debug line
-# "$.command.run (handoff): 6 chars queued") and closes about 80 ms later, when the last late arrival has
-# been taken. The scenario polls the debug log every 5 ms for that line and presses the Enters at once;
-# the harness's usual 0.25 s poll would miss the window. On 2.1.302 the two prompts were held 20 to
-# 35 ms apart in 9 of 9 runs, and never joined: no person submits twice that fast (issue #63).
-# It exits ERROR, not FAIL, when the window is missed.
+# "$.command.run (handoff): 6 chars queued") and the late prompts must both be held before the delivery
+# ends. The scenario polls the debug log every 5 ms for that line and presses the first Enter at once;
+# the harness's usual 0.25 s poll would miss the window.
+#
+# The join is a race, so a PASS does not prove the bug is gone. On 2.1.302 the second prompt was held
+# as "fivesix" in 4 of 15 runs, each time when its hold landed within about 5 ms of the plugin's submit
+# of "five"; all 4 had a pause of 20 to 60 ms before the second prompt. Runs with no pause (9) never
+# joined, and runs with a 10 or 40 ms pause joined in neither of 2.
+# It exits ERROR, not FAIL, when the second prompt misses the window.
 
 CLEAR_QUEUED='command\.run \(handoff\): 6 chars queued'
+# The pause between the first late Enter and the second prompt; every run that joined had one.
+SECOND_PROMPT_PAUSE=0.04
+TIGHT_POLL=0.005
 
 scenario_run() {
   handoff_prepare '{}'
@@ -23,7 +30,7 @@ scenario_run() {
   submit a one
   wait_for "prompt 'one' to be held" log_has a 'held a prompt for the handoff \(1 held\)'
   type_text a five
-  wait_tightly "the handoff to queue its /clear" log_has a "$CLEAR_QUEUED"
+  LIVE_POLL=$TIGHT_POLL wait_for "the handoff to queue its /clear" log_has a "$CLEAR_QUEUED"
   press_two_prompts a six
   wait_for "the handoff to clear" record_exists cleared
   wait_for "the fresh session to answer" turns_done_above a 0
@@ -35,39 +42,31 @@ scenario_run() {
   show_box a 'after delivery'
 
   check 'the second prompt was held as typed, not joined to the first' \
-    'a plugin submit or a held record carries "fivesix"' not_joined
+    'the plugin submitted "fivesix"' not_joined
   check 'both prompts reached the fresh session as typed' 'no plugin submit of "five" and of "six"' both_delivered
   check 'the prompt box is empty after delivery' "the box holds [$(box_text a | tr '\n' ' ')]" box_is_empty a
 }
 
-# wait_tightly <description> <command...>: wait_for with a 5 ms poll, for a window that is milliseconds wide.
-wait_tightly() {
-  local description=$1
-  shift
-  local deadline=$((SECONDS + LIVE_TIMEOUT))
-  until "$@"; do
-    ((SECONDS < deadline)) || live_abort "timed out after ${LIVE_TIMEOUT}s waiting for $description"
-    sleep 0.005
-  done
-}
-
-# press_two_prompts <name> <second>: Enter on the prompt already in the box, then the second prompt and its
-# Enter. The two prompts land 20 to 35 ms apart; a third tmux command in between already misses the window.
+# press_two_prompts <name> <second>: Enter on the prompt already in the box, a pause, then the second
+# prompt and its Enter in one tmux command, so it lands inside the window.
 press_two_prompts() {
   local target
   target=$(pane_target_of "$1")
   tmux send-keys -t "$target" Enter
+  sleep "$SECOND_PROMPT_PAUSE"
   tmux send-keys -t "$target" -l -- "$2" \; send-keys -t "$target" Enter
 }
 
-# The late arrivals are submitted after the note and the held group, each in its own turn.
+# The held prompt and the two late arrivals are each submitted by the plugin, whatever text they carry:
+# a wait on the expected texts would time out, an ERROR, on the joined "fivesix" this scenario reports.
 settle_after_delivery() {
-  wait_for "both late prompts to be submitted" log_has_more_than a 'prompt\.submit \(handoff\): "(five|six)"' 1
+  wait_for "the held prompt and both late prompts to be submitted" log_has_more_than a 'prompt\.submit \(handoff\): "' 2
 }
 
 both_held_in_sending_stage() { log_has a 'held a prompt for the handoff \(2 held\)'; }
 not_joined() { ! log_has a 'prompt\.submit \(handoff\): "fivesix"'; }
 both_delivered() { log_has a 'prompt\.submit \(handoff\): "five"' && log_has a 'prompt\.submit \(handoff\): "six"'; }
+# A screen with no prompt box is not an empty box: box_text fails there, and so does this.
 box_is_empty() {
   local text
   text=$(box_text "$1") || return 1

@@ -927,10 +927,6 @@ const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmit
   // "onetwo". Deferred like the other box work in a hook, because the declarations do not say whether the engine puts the
   // text back after the hook returns. Only while prompts are still collected: once the handoff took them, a restore may have
   // put the text back, and the delivery and restore paths deal with what the engine left.
-  // SAFETY: a late arrival, held in the sending stage, gets no hold-time clear, so a second one could be held with the first
-  // one's text in front of it ("five", then "fivesix"). That needs two submits inside the delivery window, which opens at the
-  // handoff's /clear and closes about 80 ms later. Live (delivery-window-prompts, 2.1.302) the two were held 20 to 35 ms apart
-  // in 9 of 9 runs and never joined, and a person cannot submit twice that fast, so no code guards it (#63).
   // SAFETY: a handoff that ends and a second one that starts inside this one tick would let the clear run in the second hold.
   // Both need several engine round trips, so a real session cannot produce it, and no code guards it.
   if (isComposerOrigin(e.origin.kind)) {

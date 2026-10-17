@@ -471,11 +471,6 @@ hand on 2.1.299:
   them as one submit marked `asUser`, and that the pane shows no "The handoff plugin sent a message"
   frame.
 - A person-origin held prompt leaves the box once it is delivered (`held-prompt-box`, 2.1.299).
-- Two prompts submitted while the held prompts are being delivered are each held as typed, not
-  joined (`delivery-window-prompts`, 2.1.302; #63). The scenario lands both inside the window, 20 to
-  35 ms apart, and the second was never held with the first one's text in front of it. A person
-  cannot submit twice inside that window (it is about 80 ms wide), so #63 is closed as not
-  reproducible rather than fixed.
 - A prompt the engine queued during a handoff (a peer's, during the compaction) runs in the old
   session, so the plugin reports it as a late turn (`peer-during-compaction`, 2.1.299).
 - `/clear` typed while a handoff waits runs first: the `cleared` record has `cleared_by: person`,
