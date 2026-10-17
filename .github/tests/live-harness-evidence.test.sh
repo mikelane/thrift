@@ -279,4 +279,33 @@ test_a_well_formed_decision_log_is_counted() {
   assert_out_has 'COUNT=1'
 }
 
+test_decision_lines_is_zero_before_the_decision_log_exists_and_counts_its_lines_after() {
+  run_live 'live_init
+    echo "BEFORE=$(decision_lines)"
+    printf "%s\n%s\n" "{}" "{}" > "$LIVE_DECISIONS"
+    echo "AFTER=$(decision_lines)"
+    check ok detail true; live_verdict s'
+  assert_out_has 'BEFORE=0'
+  assert_out_has 'AFTER=2'
+}
+
+test_records_after_returns_only_the_selected_records_written_after_the_baseline() {
+  run_live 'live_init
+    printf "%s\n" "{\"action\":\"cleared\",\"id\":1}" "{\"action\":\"none\",\"id\":2}" "{\"action\":\"cleared\",\"id\":3}" > "$LIVE_DECISIONS"
+    echo "SELECTED=$(records_after 1 ".action == \"cleared\"" | jq -r .id | paste -sd, -)"
+    echo "NOLOG=$(LIVE_DECISIONS=$LIVE_RUN/missing records_after 0 true | wc -l | tr -d " ")"
+    check ok detail true; live_verdict s'
+  assert_out_has 'SELECTED=3'
+  assert_out_has 'NOLOG=0'
+}
+
+test_records_after_notes_a_malformed_decision_log() {
+  run_live 'live_init
+    printf "not json\n" > "$LIVE_DECISIONS"
+    records_after 0 true
+    check ok detail true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read as JSON lines'
+}
+
 run_tests "$@"
