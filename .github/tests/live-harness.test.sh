@@ -38,6 +38,7 @@ run_live_sh() {
 }
 
 assert_tmux_called() { assert_file_has "$TMUX_LOG" "$1"; }
+assert_file_matches() { grep -qaE -- "$2" "$1" || { fail "${1#"$TEST_DIR"/} has no line matching: $2"; show_file "$1"; }; }
 assert_tmux_not_called() { assert_file_lacks "$TMUX_LOG" "$1"; }
 
 test_cleanup_kills_each_own_session_by_exact_name_and_never_the_server() {
@@ -426,8 +427,8 @@ test_start_dialogs_cleared_answers_the_claude_md_imports_dialog_and_keeps_waitin
     ! start_dialogs_cleared a
     live_verdict s'
   assert_exit_code 0
-  assert_tmux_called 'send-keys -t live-'
-  assert_tmux_called '-a Enter'
+  assert_tmux_called 'send-keys -t =live-'
+  assert_tmux_called '-a: Enter'
 }
 
 test_start_dialogs_cleared_is_an_error_on_a_dialog_it_will_not_answer() {
@@ -520,6 +521,53 @@ test_live_sh_runs_a_plugin_that_has_scenarios_but_no_common_sh() {
     "$BASH" "$repo/scripts/live/live.sh" bare only > "$OUTPUT" 2>&1 || EXIT_CODE=$?
   assert_exit_code 0
   assert_out_has 'PASS bare/only (1 checks)'
+}
+
+# `-t name` falls back to a prefix or window-name match when the session is gone, so every target is
+# exact. A pane target needs the trailing colon: tmux 3.8 answers "can't find pane: =name" without it.
+test_the_pane_is_captured_from_the_exact_session() {
+  run_live 'live_init; pane a || true'
+  assert_tmux_called 'capture-pane -p -J -t =live-'
+  assert_file_matches "$TMUX_LOG" '-t =live-[^ :]*-a:$'
+}
+
+test_keys_are_sent_to_the_exact_session() {
+  run_live 'live_init; press a Enter || true'
+  assert_file_matches "$TMUX_LOG" '^send-keys -t =live-[^ :]*-a: Enter$'
+}
+
+test_typed_text_goes_to_the_exact_session() {
+  run_live 'live_init; LIVE_TIMEOUT=1; type_text a hello || true'
+  assert_file_matches "$TMUX_LOG" '^send-keys -t =live-[^ :]*-a: -l -- hello$'
+}
+
+test_no_tmux_target_in_the_harness_is_a_bare_session_name() {
+  ! grep -rnE -- '-t "?\$\(session_of' "$LIVE_DIR" || fail 'a tmux target is built without the exact-match prefix'
+}
+
+# A capture bigger than the pipe buffer used to make `pane | grep -q` die of SIGPIPE inside the pane
+# function, and pipefail then read a real match as "no match".
+test_pane_has_finds_a_match_in_a_capture_larger_than_the_pipe_buffer() {
+  run_live 'live_init
+    pane() { echo needle; head -c 400000 /dev/zero | tr "\\0" x; echo; }
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pane_has a needle; done
+    check x detail true; live_verdict s'
+  assert_exit_code 0
+}
+
+test_pane_has_is_false_when_the_pane_cannot_be_read() {
+  run_live 'live_init; pane() { return 1; }
+    ! pane_has a anything
+    check x detail true; live_verdict s'
+  assert_exit_code 0
+}
+
+test_box_shows_finds_the_typed_text_in_a_large_box() {
+  run_live 'live_init
+    box_text() { echo "hello there"; head -c 400000 /dev/zero | tr "\\0" x; echo; }
+    for _ in 1 2 3 4 5 6 7 8 9 10; do box_shows a "hello there"; done
+    check x detail true; live_verdict s'
+  assert_exit_code 0
 }
 
 run_tests "$@"

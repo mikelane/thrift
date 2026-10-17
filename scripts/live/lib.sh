@@ -131,7 +131,11 @@ wait_for() {
 
 session_of() { echo "live-$$-$1"; }
 debug_log_of() { echo "$LIVE_RUN/debug-$1.log"; }
-pane() { tmux capture-pane -p -J -t "$(session_of "$1")"; }
+# The target for capture-pane and send-keys: `=` makes the session name an exact match (a bare name
+# falls back to a prefix or window-name match when the session has died), and the trailing colon makes
+# it a pane target (tmux answers "can't find pane: =name" without it).
+pane_target_of() { echo "=$(session_of "$1"):"; }
+pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 
 # live_start <name> <claude-args...>: starts claude in a detached tmux session and clears the
 # start-up dialogs. The session reads project settings only (--setting-sources project), so the
@@ -172,11 +176,11 @@ start_dialogs_cleared() {
   tmux has-session -t "=$(session_of "$name")" 2>/dev/null \
     || live_abort "the claude session '$name' exited at start-up. Check that claude is logged in, and see $(debug_log_of "$name")"
   screen=$(pane "$name") || return 1
-  if grep -q 'Allow external CLAUDE.md file imports' <<<"$screen"; then
-    tmux send-keys -t "$(session_of "$name")" Enter
+  if text_matches 'Allow external CLAUDE.md file imports' "$screen"; then
+    tmux send-keys -t "$(pane_target_of "$name")" Enter
     return 1
   fi
-  if grep -q 'Enter to confirm' <<<"$screen"; then
+  if text_matches 'Enter to confirm' "$screen"; then
     live_abort "claude is showing a dialog this harness will not answer (on a first run, the workspace trust prompt). Run 'cd $LIVE_CWD && claude' once, answer it, quit, then run the scenario again"
   fi
   box_text "$name" >/dev/null || return 1
@@ -199,15 +203,23 @@ box_text() {
 press() {
   local name=$1
   shift
-  tmux send-keys -t "$(session_of "$name")" "$@"
+  tmux send-keys -t "$(pane_target_of "$name")" "$@"
 }
 
-box_shows() { box_text "$1" | grep -qF -- "${2:0:LIVE_BOX_MATCH_CHARS}"; }
+# text_matches <extended-regex> <text>: succeeds when the text has a match. grep reads all of the text
+# (no -q), so the shell that feeds it never meets a closed pipe. A pipe from `pane` into `grep -q`
+# under pipefail reads a SIGPIPE'd producer as "no match", and `! pane_has` would then pass.
+text_matches() { grep -E -- "$1" >/dev/null <<<"$2"; }
+box_shows() {
+  local box
+  box=$(box_text "$1") || return 1
+  grep -F -- "${2:0:LIVE_BOX_MATCH_CHARS}" >/dev/null <<<"$box"
+}
 
 # type_text <name> <text>: types without Enter and waits until the box shows it. Enter pressed in
 # the same call as a long text is taken as part of a paste and ignored.
 type_text() {
-  tmux send-keys -t "$(session_of "$1")" -l -- "$2"
+  tmux send-keys -t "$(pane_target_of "$1")" -l -- "$2"
   wait_for "the box of '$1' to show the typed text" box_shows "$1" "$2"
 }
 
@@ -218,7 +230,11 @@ submit() {
 
 # --- reading the screen and the logs ---------------------------------------------------------------
 
-pane_has() { pane "$1" | grep -qE -- "$2"; }
+pane_has() {
+  local screen
+  screen=$(pane "$1") || return 1
+  text_matches "$2" "$screen"
+}
 pane_count() { pane "$1" | grep -cE -- "$2" || true; }
 log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
 # grep -c prints nothing when the file does not exist yet, which would break the arithmetic callers.
