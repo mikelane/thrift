@@ -172,6 +172,34 @@ test_the_session_command_drops_the_anthropic_variables_of_the_tmux_server() {
   assert_out_lacks 'server-key'
 }
 
+# The harness's own ANTHROPIC* values (an API key, a Vertex project, a base URL) reach the session in
+# place of the server's, so a login that is not an OAuth token still works.
+test_the_session_command_takes_the_anthropic_variables_from_the_harness_not_the_tmux_server() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command ANTHROPIC_API_KEY=harness-key ANTHROPIC_VERTEX_PROJECT_ID=harness-project -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     env -u ANTHROPIC_API_KEY -u ANTHROPIC_VERTEX_PROJECT_ID ANTHROPIC_API_KEY=server-key ANTHROPIC_BASE_URL=http://server sh -c "$command"'
+  assert_exit_code 0
+  assert_out_has 'ANTHROPIC_API_KEY=harness-key'
+  assert_out_has 'ANTHROPIC_VERTEX_PROJECT_ID=harness-project'
+  assert_out_lacks 'server-key'
+  assert_out_lacks 'ANTHROPIC_BASE_URL='
+}
+
+# An API key travels like the OAuth token: through the owner-only file, never in the command text.
+test_the_session_command_keeps_the_anthropic_api_key_out_of_its_text_and_the_run_directory() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command ANTHROPIC_API_KEY=secret-key -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a)
+     printf "COMMAND=%s\n" "$command"; env -u ANTHROPIC_API_KEY sh -c "$command" | grep -c API_KEY=secret-key'
+  assert_exit_code 0
+  assert_out_has 'COMMAND='
+  assert_out_lacks 'secret-key'
+  ! grep -rqa secret-key "$TEST_DIR/tmp" || fail 'the API key was left in the run directory'
+}
+
 # The command text shows in `ps` and in tmux; the token reaches the session another way, and does not
 # stay behind in the run directory, which a FAIL or an ERROR keeps.
 test_the_session_command_keeps_the_oauth_token_out_of_its_text_and_the_run_directory() {

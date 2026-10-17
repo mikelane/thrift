@@ -16,13 +16,14 @@ pane_target_of() { echo "=$(session_of "$1"):"; }
 pane() { tmux capture-pane -p -J -t "$(pane_target_of "$1")"; }
 
 # Names of environment variables a session keeps from this shell. Everything else starting with CLAUDE
-# is dropped, and so is every ANTHROPIC* variable (nothing keeps one), so a run from inside Claude
-# Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT, CLAUDE_CODE_EXECPATH, CLAUDE_CODE_VERSION, the session
-# and messaging ids) starts sessions like a run from a terminal. The login and the provider choice
-# stay: the config directory, the OAuth token, CLAUDE_CODE_USE_* (Bedrock, Vertex, Foundry) and
-# CLAUDE_CODE_SKIP_*_AUTH. The effect of the dropped variables on a session is unverified; the point
+# is dropped, so a run from inside Claude Code's Bash tool (CLAUDE_PID, CLAUDE_EFFORT,
+# CLAUDE_CODE_EXECPATH, CLAUDE_CODE_VERSION, the session and messaging ids) starts sessions like a run
+# from a terminal. The login and the provider choice stay: the config directory, the OAuth token,
+# CLAUDE_CODE_USE_* (Bedrock, Vertex, Foundry), CLAUDE_CODE_SKIP_*_AUTH, and every ANTHROPIC_*
+# variable this shell has (an API key, a Vertex project, a Foundry resource, a base URL), whose names
+# are not listed one by one. The effect of the dropped variables on a session is unverified; the point
 # is not to inherit the owner's session by accident.
-LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH)$'
+LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0-9_]+|CLAUDE_CODE_SKIP_[A-Z0-9_]+_AUTH|ANTHROPIC_[A-Za-z0-9_]+)$'
 
 # live_sh_words <words...>: the words as one POSIX sh command line, each in single quotes, which every
 # shell tmux may run the command with reads the same way. Not printf %q: it writes $'...' for a newline
@@ -47,9 +48,10 @@ live_kept_env() {
 
 # live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
-# new session, and a server started earlier carries its own. So the session drops every CLAUDE
-# variable it has and then reads this shell's kept ones from a file in the run directory (owner-only),
-# which it deletes at once: the OAuth token stays out of the command text, which `ps` and tmux show.
+# new session, and a server started earlier carries its own. So the session drops every CLAUDE and
+# ANTHROPIC variable it has and then reads this shell's kept ones from a file in the run directory
+# (owner-only), which it deletes at once: the OAuth token and any API key stay out of the command
+# text, which `ps` and tmux show.
 # The binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
 # reason.
 live_claude_command() {

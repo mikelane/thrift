@@ -76,12 +76,13 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   `CLAUDE_CODE_VERSION`, the session and messaging ids, a tmux server's `ANTHROPIC_API_KEY`), so a
   run from inside Claude Code's Bash tool starts sessions like one from a terminal. It then sets the
   login and provider choice from the harness's own environment (`CLAUDE_CONFIG_DIR`,
-  `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is
-  `LIVE_KEPT_ENV` in `session.sh`), not from a tmux server that was started earlier with other values. These values pass through an
-  owner-only file in the run directory that the session deletes once read, so the OAuth token is
-  never in the command text. The dropping happens inside the tmux session, so it also covers a tmux
-  server that was started from a Claude Code session. What the dropped variables do to a session is
-  unverified. The two `CLAUDE_CODE_DISABLE_*` variables above are set, not confirmed to work.
+  `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`, and every `ANTHROPIC_*`
+  variable, such as an API key, a Vertex project or a base URL; the pattern is `LIVE_KEPT_ENV` in
+  `session.sh`), not from a tmux server that was started earlier with other values. These values pass
+  through an owner-only file in the run directory that the session deletes once read, so the OAuth
+  token and any API key are never in the command text. The dropping happens inside the tmux session,
+  so it also covers a tmux server that was started from a Claude Code session. What the dropped
+  variables do to a session is unverified. The two `CLAUDE_CODE_DISABLE_*` variables above are set, not confirmed to work.
 - **Which `claude`.** A new tmux session gets its environment from the tmux server, which may
   already be running with another `PATH`. The command runs `claude` by the absolute path that
   `live_require` found and passes the harness's own `PATH`, so the binary that was checked is the
