@@ -42,6 +42,18 @@ describe('takeDownBand', () => {
   })
 })
 
+describe('takeDownBand', () => {
+  test('It writes one takedown, not one per later turn, after a press took the band down', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await weakBand($, world)
+    await band.press({ key: 'not-now' })
+    await startTurn($)
+    await completeTurn($)
+    expect(world.offerWrites).toHaveLength(2)
+  })
+})
+
 describe('takeDownBandFromBeforeReload', () => {
   test('It takes down an offer that the store kept from before the reload', ASK, async ($, on) => {
     const world = install($, on)
@@ -82,6 +94,16 @@ describe('refreshBandBusyState', () => {
     await bash($, world, 'npm run dev', { result: { backgroundTaskId: 'bg1' } })
     await completeTurn($, { reason: 'aborted' })
     expect(await buttonLabels(band)).toEqual(['Compact', 'Not now'])
+  })
+})
+
+describe('refreshBandBusyState', () => {
+  test('It leaves the writing status as it is when a turn with no answer ends while the note is written', ASK, async ($, on) => {
+    const { world } = await writingTheNote($, on)
+    const writesBefore = [...world.offerWrites]
+    await startTurn($)
+    await completeTurn($, { reason: 'aborted' })
+    expect(world.offerWrites).toEqual(writesBefore)
   })
 })
 
