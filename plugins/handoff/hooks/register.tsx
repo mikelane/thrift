@@ -53,7 +53,6 @@ import {
   HANDOFF_PROMPT,
   handoffMessage,
   groupHeldPrompts,
-  holdsPrompt,
   joinPrompts,
   speaksForPerson,
   deliveryAfterNote,
@@ -1011,7 +1010,8 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
   return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
-// Long because every on(...) call lives here: the engine lets $ pass only to functions declared at the top of this file.
+// Long because every on(...) call lives here. The engine follows $ into a top-level function of this file, and past an
+// import only into a function declaration.
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
   // SAFETY: a reload that runs register again gives the new state pending null and nothing held. On 2.1.299 a setting

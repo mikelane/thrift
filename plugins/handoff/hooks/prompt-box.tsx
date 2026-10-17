@@ -6,8 +6,8 @@ import { boxCopiesOf, holdsPrompt, withoutBoxCopy, withoutPrompt, type Carried }
 import { isComposerOrigin } from './prompt-plan'
 import { type BoxPlacement, type HeldPrompt, type SessionState } from './session-state'
 
-export const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
-export const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
+const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
+const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'
 
 type BoxPrompt = Pick<HeldPrompt, 'text' | 'boxText'>
 
