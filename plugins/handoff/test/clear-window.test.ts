@@ -2,7 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
 import type { SettledHandoff } from '../hooks/decision-record'
-import { compacted, lastRecord, mountBand, startTurn } from './helpers'
+import { compacted, completeTurn, lastRecord, mountBand, startTurn } from './helpers'
+import { turnRunningWhenTheNoteIsWritten } from './wait-for-turn-helpers'
 import {
   ACT,
   BUSY_MESSAGE,
@@ -113,6 +114,17 @@ describe('waitForClearWindow', () => {
     await finishNote()
     expect(world.effects).not.toContain('clear')
     await endTurn($, world)
+    expect(world.effects).toContain('clear')
+  })
+
+  test('It clears when the running turn ends while the waiting status is being drawn', async ($, on) => {
+    const { world, finishNote } = await turnRunningWhenTheNoteIsWritten($, on)
+    world.onOfferWrite = async value => {
+      if (!JSON.stringify(value).includes('"stage":"wait"')) return
+      await completeTurn($)
+      await world.clock.settle()
+    }
+    await finishNote()
     expect(world.effects).toContain('clear')
   })
 
