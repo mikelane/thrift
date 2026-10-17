@@ -330,10 +330,12 @@ const emptySentPromptFromBox = async ($: EngineInterface, state: SessionState, p
   if (copies.length === 0) return
   try {
     const draft = (await $.prompt.read()).text
-    const removedCopy = copies.find(copy => withoutPrompt(draft, copy) !== null)
-    if (removedCopy === undefined) return
-    const emptied = await $.prompt.fill({ text: withoutPrompt(draft, removedCopy) ?? draft, mode: 'replace' })
-    if (emptied.isFilled) noteBoxCleared(state, removedCopy)
+    const removal = copies
+      .map(copy => ({ copy, remainingDraft: withoutPrompt(draft, copy) }))
+      .find((candidate): candidate is { copy: string; remainingDraft: string } => candidate.remainingDraft !== null)
+    if (removal === undefined) return
+    const emptied = await $.prompt.fill({ text: removal.remainingDraft, mode: 'replace' })
+    if (emptied.isFilled) noteBoxCleared(state, removal.copy)
     else debug($, `the prompt box refused to be emptied: ${emptied.refusal ?? 'refused by a hook'}`)
   } catch (error) {
     debug($, `could not empty the prompt box: ${String(error)}`)

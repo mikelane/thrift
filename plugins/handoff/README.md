@@ -159,7 +159,7 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         the plugin has put a held prompt back in the box for the person to send.
         One case is stripped wrongly: the clear never found the leftover, the person cleared the box
         by hand, and the next prompt really does start with the same text. `yes` is held, the box is
-        cleared by hand, then `yes please` is typed, and it is held as `please`. The plugin cannot tell
+        cleared by hand, then `yes please` is typed, and it is held as ` please`, space first. The plugin cannot tell
         that from a joined prompt. `leftover_strips` in the record that ends the handoff counts every
         strip, so a handoff where this may have happened shows a value above 0.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
