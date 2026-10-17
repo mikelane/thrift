@@ -31,6 +31,8 @@ export type World = {
   agentListThrows: boolean
   // One-shot: runs inside the next agent.list call, so a test can act while the plugin awaits it.
   onAgentList: (() => Promise<void>) | undefined
+  // Runs inside each write of the band's offer, so a test can act while the plugin awaits that write.
+  onOfferWrite: ((value: unknown) => Promise<void>) | undefined
   // Runs when a clear is issued, before it ends the session: what the engine ran ahead of it, in the order it ran.
   onClearIssued: (() => Promise<void>) | undefined
   // Runs after a clear ended the session, before the clear's run returns: what the engine ran next, in the fresh session.
@@ -229,9 +231,12 @@ export const installTurnMocks = (on: On, world: World) => {
 }
 
 export const installStateMocks = (on: On, world: World) => {
-  on('state.set', (_$, e, next) => {
+  on('state.set', async (_$, e, next) => {
     if (world.stateSetThrows) return { deny: 'cannot write' }
-    if (e.key === 'offer') world.offerWrites.push(e.value)
+    if (e.key === 'offer') {
+      world.offerWrites.push(e.value)
+      await world.onOfferWrite?.(e.value)
+    }
     return next(e)
   })
 }
