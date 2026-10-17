@@ -38,11 +38,16 @@ plugins/<name>/
   .claude-plugin/plugin.json   name, one-line description, version, userConfig, "types"
   hooks/hooks.json             { "modules": ["./register.tsx"] }
   hooks/register.tsx           engine wiring; session state in one object
+  hooks/<helper>.tsx           engine-wiring helpers; `$` only in `function` declarations
   hooks/<logic>.ts             pure functions, no `$`, no engine calls
   types/index.d.ts             PluginState['<name>'] for every $.state value
   test/<name>.test.ts
 ```
 
+- `hooks/register.tsx` does engine wiring. Other `hooks/*.tsx` are engine-wiring helpers: they
+  may take `$`, but only through `function` declarations (`export function f($) {}`). Validate
+  on 2.1.302 rejects a `$`-taking const arrow past an import.
+- `hooks/<logic>.ts` stays pure: no `$`, no engine calls.
 - Wrap every hook: `on(...).catch(($, e, next) => next(e))`. A plugin here never blocks or
   breaks a turn.
 - Claude Code refuses `/clear`, compaction, and `$.prompt.submit` inside a hook the turn is
