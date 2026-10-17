@@ -110,6 +110,34 @@ describe('a turn that starts between resubmitted prompts', () => {
     expect(handoffsStarted(world)).toBe(2)
   })
 
+  test('It keeps a resubmitted turn unattended when a subagent turn quoting the next resubmitted prompt starts in it', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await submitPerson($, 'person says')
+    await finishNote()
+    await startTurn($, 'nightly job')
+    await $.turn.start({ text: 'look into what the person says', turnId: 'sub-t1', agentId: 'sub1' })
+    await growTo200k($, world)
+    await bash($, world, 'git commit -m x')
+    await completeTurn($)
+    await world.clock.settle()
+    expect(handoffsStarted(world)).toBe(2)
+  })
+
+  test('It leaves the next resubmitted prompt queued for its own turn when a subagent turn quotes it', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'person says')
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await finishNote()
+    await startTurn($, 'person says')
+    await $.turn.start({ text: 'run the nightly job checks', turnId: 'sub-t1', agentId: 'sub1' })
+    await completeTurn($)
+    await submitPerson($, 'after')
+    await runTurnWithoutContext($, 'after')
+    await endStrongTurnInFreshSession($, world, 'nightly job')
+    expect(handoffsStarted(world)).toBe(2)
+  })
+
   test('It judges a resubmitted turn by its origin when the engine frames the prompt text', ASK, async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
