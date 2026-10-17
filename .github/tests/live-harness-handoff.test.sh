@@ -76,7 +76,8 @@ test_restore_order_is_a_fail_when_a_person_turn_starts_after_the_wait() {
 # run_judge <expectation> <session ends> <decision-log lines>: judge_case of the clear/resume scenario for
 # one case "old1", with the session ending twice and the note in the transcript of a fresh session.
 # RESUME_TARGET_ID names the session a /resume would load; its transcript holds the note when
-# NOTE_IN_RESUMED is set.
+# NOTE_IN_RESUMED is set. PHASE is the case's phase, ENDS_AT_TYPING the compaction ends counted when the
+# command was typed, and COMPACTION_LOG more lines for the debug log.
 run_judge() {
   local expectation=$1 ends=$2 records=$3
   printf '%s\n' "$records" > "$TEST_DIR/decisions"
@@ -90,7 +91,8 @@ run_judge() {
     echo "Handoff from the previous session (old1), written by Claude" > "$CLAUDE_CONFIG_DIR/projects/p/${NOTE_FILE:-fresh}.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
-    CASE_PHASE=${PHASE:-}; COMPACTION_ENDED_AT_TYPING=${ENDED_AT_TYPING:-0}
+    printf "%s" "${COMPACTION_LOG:-}" >> "$(debug_log_of c)"
+    CASE_PHASE=${PHASE:-}; COMPACTION_ENDS_AT_TYPING=${ENDS_AT_TYPING:-0}
     judge_case c '"$expectation"' '"$ends"'
     live_verdict s'
 }
@@ -161,34 +163,58 @@ test_clear_resume_is_a_fail_when_the_note_reached_the_resumed_session() {
   assert_out_lacks "$TEST_DIR/home"
 }
 
+COMPACTION_ENDED_LINE=$'Forked agent [reactive-compact] finished: 1 messages\n'
+
 test_clear_resume_passes_a_command_typed_before_the_compaction_finished() {
-  PHASE=compaction ENDED_AT_TYPING=0 run_judge cleared_by_person 2 "$(cleared_record)"
+  PHASE=compaction ENDS_AT_TYPING=0 COMPACTION_LOG=$COMPACTION_ENDED_LINE run_judge cleared_by_person 2 "$(cleared_record)"
   assert_exit_code 0
   assert_out_has 'PASS  case: the command was typed before the compaction finished'
   assert_out_has 'PASS s (8 checks)'
 }
 
 test_clear_resume_is_a_fail_when_the_compaction_had_finished_when_the_command_was_typed() {
-  PHASE=compaction ENDED_AT_TYPING=1 run_judge cleared_by_person 2 "$(cleared_record)"
+  PHASE=compaction ENDS_AT_TYPING=1 COMPACTION_LOG=$COMPACTION_ENDED_LINE run_judge cleared_by_person 2 "$(cleared_record)"
   assert_exit_code 1
   assert_out_has 'FAIL  case: the command was typed before the compaction finished'
+  assert_out_has 'the compaction had finished 1 time(s) when the command was typed and 1 time(s) by the judgement'
+}
+
+# A compaction whose end line never shows (the engine renamed it, or the log cannot be read) proves nothing.
+test_clear_resume_is_a_fail_when_the_debug_log_never_shows_the_compaction_finishing() {
+  PHASE=compaction ENDS_AT_TYPING=0 run_judge cleared_by_person 2 "$(cleared_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the command was typed before the compaction finished'
+  assert_out_has 'the compaction had finished 0 time(s) when the command was typed and 0 time(s) by the judgement'
+}
+
+# An end line from an earlier compaction in the same log is not this one's.
+test_clear_resume_passes_when_an_earlier_compaction_had_finished_before_the_command() {
+  PHASE=compaction ENDS_AT_TYPING=1 COMPACTION_LOG=$COMPACTION_ENDED_LINE$COMPACTION_ENDED_LINE run_judge cleared_by_person 2 "$(cleared_record)"
+  assert_exit_code 0
+  assert_out_has 'PASS  case: the command was typed before the compaction finished'
 }
 
 test_clear_resume_does_not_judge_the_compaction_for_a_command_typed_during_the_wait() {
-  PHASE=wait ENDED_AT_TYPING=1 run_judge cleared_by_person 2 "$(cleared_record)"
+  PHASE=wait ENDS_AT_TYPING=1 run_judge cleared_by_person 2 "$(cleared_record)"
   assert_exit_code 0
   assert_out_lacks 'compaction finished'
 }
 
-# run_case_calls <phase>: run_case for one case with every engine-facing helper stubbed to print what it
-# was asked to wait for. The log count of the note line is stubbed to 4, the baseline the wait must use.
+# run_case_calls <phase>: run_case for one case "c1" with every engine-facing helper stubbed. The debug log
+# starts with four notes and the compaction's start. wait_for prints what it was asked to wait for, and
+# submit prints the waits done before it. Every submit stands in for a compaction that ends as its keys land,
+# so the ends counted after the typed command are 2, and a count taken before it would be 1.
 run_case_calls() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh"
     live_init
-    handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }; submit() { echo "CALL submit $2"; }
-    decision_lines() { echo 0; }; settle_until() { :; }; show_case() { :; }; judge_case() { :; }
-    log_count() { case $2 in *finished*) echo 4 ;; *) echo 2 ;; esac; }
-    wait_for() { echo "CALL wait $*"; }
+    printf "Forked agent [plugin_model_fork] finished\n%.0s" 1 2 3 4 > "$(debug_log_of c1)"
+    echo "\$.session.compact (handoff): compacting" >> "$(debug_log_of c1)"
+    WAITED=
+    handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }
+    submit() { echo "CALL submit $2 after:$WAITED"; echo "Forked agent [reactive-compact] finished" >> "$(debug_log_of "$1")"; }
+    decision_lines() { echo 0; }; settle_until() { :; }; show_case() { :; }
+    judge_case() { echo "ENDS AT TYPING $COMPACTION_ENDS_AT_TYPING"; }
+    wait_for() { echo "CALL wait $*"; WAITED="$WAITED|$1"; }
     run_case label c1 '"$1"' /clear cleared_by_handoff 2
     check done none true; live_verdict s'
 }
@@ -202,6 +228,12 @@ test_run_case_waits_for_a_new_note_not_for_any_note_already_in_the_log() {
 test_run_case_types_the_command_once_the_compaction_has_started() {
   run_case_calls compaction
   assert_out_has 'CALL wait the compaction of '"'"'c1'"'"' to start log_has c1 \$\.session\.compact \(handoff\): compacting'
+  assert_out_has 'CALL submit /clear after:|the note of '"'"'c1'"'"' to be written|the compaction of '"'"'c1'"'"' to start'
+}
+
+test_run_case_counts_the_compaction_ends_after_the_command_is_typed() {
+  run_case_calls compaction
+  assert_out_has 'ENDS AT TYPING 2'
 }
 
 test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {
@@ -213,10 +245,10 @@ test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {
   assert_out_has 'SETTLED'
 }
 
-# qa_judge <expectation> <expected-ends> <session.end lines in the debug log> <note files, space separated, or none>
+# qa_judge <expectation> <expected-ends> <session.end lines in the debug log> <note file or none>
 # <old transcript present: yes|no> <records>
 qa_judge() {
-  local expectation=$1 ends=$2 end_lines=$3 note_files=$4 old=$5 records=$6
+  local expectation=$1 ends=$2 end_lines=$3 note_file=$4 old=$5 records=$6
   printf '%s\n' "$records" > "$TEST_DIR/decisions"
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh"
     CLAUDE_CONFIG_DIR=$HOME/.claude
@@ -226,7 +258,7 @@ qa_judge() {
     for _ in $(seq 1 '"$end_lines"'); do echo "handoff@inline session.end settled in 1ms" >> "$(debug_log_of c)"; done
     mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
     [[ "'"$old"'" == no ]] || echo x > "$CLAUDE_CONFIG_DIR/projects/p/old1.jsonl"
-    for f in '"$note_files"'; do [[ $f == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/$f.jsonl"; done
+    [[ "'"$note_file"'" == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/'"$note_file"'.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
     judge_case c '"$expectation"' '"$ends"'

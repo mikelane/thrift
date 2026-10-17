@@ -13,8 +13,10 @@
 #   exactly one transcript, which is not the resumed session's (an abandon as session_ended carries no note,
 #   so no transcript holds it).
 # - in the cases typed during the compaction, the command was typed before the compaction finished: the
-#   engine logs nothing when a typed command arrives, so the run reads the log right after typing, and a
-#   compaction that had already ended then is a FAIL (the case would only cover "after the compaction").
+#   engine logs nothing when a typed command arrives, so the run counts the compaction's end lines right
+#   after typing and again at the judgement, and only a new end line since the typing is a PASS. A
+#   compaction that had already ended (the case would only cover "after the compaction") and one whose end
+#   line never shows are both a FAIL.
 # The `/clear` cases also pin who cleared. A `/clear` during the compaction is queued behind the
 # handoff's own clear (#43), so `cleared_by` is `handoff`; during the wait it is the person's own clear,
 # so it is `person`. The `/resume` cases print which of the two paths the run took and judge only the
@@ -33,7 +35,7 @@ CASE_BASE=0
 CASE_ID=''
 CASE_LABEL=''
 CASE_PHASE=''
-COMPACTION_ENDED_AT_TYPING=0
+COMPACTION_ENDS_AT_TYPING=0
 # The engine's own lines for the compaction the handoff starts (seen on 2.1.302): `$.session.compact` logs
 # "compacting" when it starts, and the forked compaction agent logs "finished" when it ends.
 COMPACTION_STARTED='\$\.session\.compact \(handoff\): compacting'
@@ -87,7 +89,7 @@ run_case() {
     start_waiting_handoff "$name" b "$SLEEP_TASK" --session-id "$CASE_ID"
   fi
   submit "$name" "$typed"
-  COMPACTION_ENDED_AT_TYPING=$(log_count "$name" "$COMPACTION_ENDED")
+  COMPACTION_ENDS_AT_TYPING=$(log_count "$name" "$COMPACTION_ENDED")
   wait_for "the handoff of '$name' to end ($label)" handoff_has_ended
   # Not a wait_for: a command the engine drops would otherwise end the run in an ERROR, not a FAIL.
   settle_until session_ends_reach "$name" "$(ends_expected "$expected_ends")"
@@ -139,13 +141,16 @@ judge_case() {
   check "$CASE_LABEL: the handoff note reached exactly one transcript after a clear, none after session_ended" \
     "$(note_evidence)" note_reached_the_right_transcripts
   if [[ "$CASE_PHASE" == compaction ]]; then
+    local ends_now
+    ends_now=$(log_count "$name" "$COMPACTION_ENDED")
     check "$CASE_LABEL: the command was typed before the compaction finished" \
-      "the compaction had finished $COMPACTION_ENDED_AT_TYPING time(s) when the command was typed" typed_during_compaction
+      "the compaction had finished $COMPACTION_ENDS_AT_TYPING time(s) when the command was typed and $ends_now time(s) by the judgement" \
+      finished_after_typing "$ends_now"
   fi
   "$expectation"
 }
 
-typed_during_compaction() { [[ "$COMPACTION_ENDED_AT_TYPING" == 0 ]]; }
+finished_after_typing() { (($1 > COMPACTION_ENDS_AT_TYPING)); }
 
 session_ends_are() { [[ "$(session_ends "$1")" == "$2" ]]; }
 # The transcripts of the project, other than the old session's own, holding this case's handoff note,
