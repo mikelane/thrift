@@ -226,4 +226,33 @@ test_a_scenario_that_ran_no_checks_is_an_error_not_a_pass() {
   assert_out_lacks 'PASS s'
 }
 
+# live_note_error runs in command substitutions, possibly before live_init made the run directory.
+test_noting_an_error_before_the_run_directory_exists_writes_nothing() {
+  run_live 'live_note_error "too early"; echo "STATUS=$?"; ls -A "$TMPDIR"'
+  assert_exit_code 0
+  assert_out_has 'STATUS=0'
+  assert_out_lacks 'could not record a harness error'
+  assert_out_lacks 'harness-error'
+}
+
+test_a_noted_error_with_no_message_is_still_an_error_that_names_a_failed_helper() {
+  run_live 'live_init; live_note_error ""; check x detail true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'ERROR: a harness helper failed'
+  assert_out_lacks 'PASS s'
+}
+
+# rm is a function here so the test sees whether the cleanup tried to remove session-env-* at all.
+test_the_cleanup_removes_no_session_env_files_when_there_is_no_run_directory() {
+  run_live 'rm() { echo "RM:$*"; }; LIVE_VERDICT_REACHED=1; trap live_cleanup EXIT'
+  assert_exit_code 0
+  assert_out_lacks 'RM:'
+}
+
+test_the_cleanup_removes_the_session_env_files_of_the_run_directory() {
+  run_live 'rm() { echo "RM:$*"; }; LIVE_RUN=/run/x; LIVE_VERDICT_REACHED=1; trap live_cleanup EXIT'
+  assert_exit_code 0
+  assert_out_has 'RM:-f -- /run/x/session-env-*'
+}
+
 run_tests "$@"
