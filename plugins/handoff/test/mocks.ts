@@ -33,6 +33,10 @@ export type World = {
   onAgentList: (() => Promise<void>) | undefined
   // Runs when a clear is issued, before it ends the session: what the engine ran ahead of it, in the order it ran.
   onClearIssued: (() => Promise<void>) | undefined
+  // Runs after a clear ended the session, before the clear's run returns: what the engine ran next, in the fresh session.
+  onClearEnded: (() => Promise<void>) | undefined
+  // The origin kind and name of every clear that reached the mock, so a test can see whose clear ran.
+  clearOrigins: string[]
   box: Box
   // True while a submitHooks callback runs: a prompt that arrives then is typed after what the plugin just put in the box.
   isRunningSubmitHook: boolean
@@ -157,10 +161,12 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
     world.effects.push('clear')
+    world.clearOrigins.push('name' in e.origin ? `${e.origin.kind}:${e.origin.name}` : e.origin.kind)
     await world.onClearIssued?.()
     const ended = world.sessionId
     world.sessionId = world.nextSessionId
     await $.session.end({ reason: 'clear', sessionId: ended, resume: { id: ended } })
+    await world.onClearEnded?.()
     return {}
   })
 }

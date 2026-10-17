@@ -18,6 +18,9 @@ import {
   resetForNewSession,
 } from '../hooks/session-state'
 import { settings } from './session-state-fixtures'
+import type { PromptOrigin } from 'claude-code'
+
+const PERSON: PromptOrigin = { kind: 'composer' }
 
 const isPending = async (promise: Promise<void>): Promise<boolean> =>
   Promise.race([promise.then(() => false), Promise.resolve().then(() => true)])
@@ -259,7 +262,7 @@ test('It clears the queued-clear and late-turn marks from endHandoff', () => {
 test('It keeps the own clear queued when a foreign clear ended the session first in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
 })
@@ -267,7 +270,7 @@ test('It keeps the own clear queued when a foreign clear ended the session first
 test('It marks a turn between a foreign clear and the own clear as late in startMainTurn', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   recordSessionEnd(state, 'clear')
   startMainTurn(state, '')
   expect(state.hasLateTurn).toBe(true)
@@ -276,7 +279,7 @@ test('It marks a turn between a foreign clear and the own clear as late in start
 test('It treats the second clear as the own clear after one foreign clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   recordSessionEnd(state, 'clear')
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
@@ -285,8 +288,8 @@ test('It treats the second clear as the own clear after one foreign clear in rec
 test('It treats the second clear as the own clear after two foreign clears in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
+  recordForeignClear(state, PERSON)
   recordSessionEnd(state, 'clear')
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
@@ -295,7 +298,7 @@ test('It treats the second clear as the own clear after two foreign clears in re
 test('It takes a session end that is not a clear as the end of the queued clear despite a foreign clear in recordSessionEnd', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   recordSessionEnd(state, 'resume')
   expect(state.isOwnClearQueued).toBe(false)
 })
@@ -303,7 +306,7 @@ test('It takes a session end that is not a clear as the end of the queued clear 
 test('It ignores a foreign clear before the own clear is queued in recordForeignClear', () => {
   const state = createState(settings)
   beginBeforeClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
@@ -313,7 +316,7 @@ test('It ignores a foreign clear after the own clear ended the session in record
   const state = createState(settings)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
@@ -322,9 +325,25 @@ test('It ignores a foreign clear after the own clear ended the session in record
 test('It forgets a foreign clear from endHandoff', () => {
   const state = createState(settings)
   beginOwnClear(state)
-  recordForeignClear(state)
+  recordForeignClear(state, PERSON)
   endHandoff(state)
   beginOwnClear(state)
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It ignores the handoff plugin own clear in recordForeignClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state, { kind: 'plugin', name: 'handoff' })
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(false)
+})
+
+test('It counts another plugin clear as foreign in recordForeignClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClear(state, { kind: 'plugin', name: 'other-plugin' })
+  recordSessionEnd(state, 'clear')
+  expect(state.isOwnClearQueued).toBe(true)
 })

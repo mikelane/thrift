@@ -1240,12 +1240,10 @@ export const register: Register = (on, options) => {
     text: 'Could not start a handoff.',
   }))
 
-  // SAFETY: the declarations say a plugin's $.command.run skips the calling plugin's own hooks, so this sees only clears
-  // someone else ran. Unverified live. If the engine did run it for the handoff's own clear, that clear would be counted as
-  // foreign and its end taken for one, so a turn that starts in the fresh session before the note is delivered would be
-  // flagged late: a spurious line in the note, never a missing one.
+  // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
+  // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
   on('command.run', { command: 'clear' }, ($, e, next) => {
-    recordForeignClear(state)
+    recordForeignClear(state, e.origin)
     return next(e)
   }).catch(($, e, next) => next(e))
 

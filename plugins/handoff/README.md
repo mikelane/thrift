@@ -89,8 +89,8 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         takes effect. Such a turn is a late turn: it adds the "A turn ran in the previous session"
         line in step 6 and sets `late_turn` on the `cleared` record. The plugin reports a late turn; it
         does not prevent one. A person's `/clear` queued ahead of the plugin's counts too: the plugin sees it
-        through its own `command.run` hook (the engine skips the calling plugin's hooks for the plugin's own
-        clear), so the session end it causes is not taken for the plugin's, and a turn in the session it
+        through its own `command.run` hook (it tells its own clear apart by the `{ kind: 'plugin', name: 'handoff' }`
+        origin the engine stamps on it), so the session end it causes is not taken for the plugin's, and a turn in the session it
         made is a late turn. The plugin's clear then wipes that session, and the record says `handoff`. `command.run` takes no priority, and the declarations give no read of
         the prompt queue. A `session.receive` hook can take a delivery before it is queued (a peer's
         message, or a relay's event or trigger under origin `task-notification`) by returning

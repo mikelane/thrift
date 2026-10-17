@@ -250,9 +250,14 @@ export const beginOwnClear = (state: SessionState): void => {
   state.hasLateTurn = false
 }
 
-// A clear someone else queued ahead of the handoff's own: the engine runs a command.run hook for every clear but the plugin's
-// own, so a clear seen here while ours waits is the person's. Its session end is not the end of ours.
-export const recordForeignClear = (state: SessionState): void => {
+const PLUGIN_NAME = 'handoff'
+
+// A clear someone else queued ahead of the handoff's own. The declarations skip only the calling hook on a plugin's
+// $.command.run ("the calling hook alone"; "the plugin's others see it"), so the handoff's own clear can reach this plugin's
+// command.run hook too. Its origin, which the engine stamps { kind: 'plugin', name }, tells it apart. Any other clear seen
+// while ours waits runs ahead of it, so its session end is not the end of ours.
+export const recordForeignClear = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
   if (state.isOwnClearQueued) state.foreignClearsAhead += 1
 }
 
