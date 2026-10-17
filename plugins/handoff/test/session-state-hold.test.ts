@@ -12,6 +12,7 @@ import {
   isHoldingForHandoff,
   noteBoxCleared,
   noteBoxLeftover,
+  noteLeftoverStrip,
   typedAfterBoxLeftover,
   releaseCarried,
   releaseCarriedGroup,
@@ -42,6 +43,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     heldPrompt: null,
     handoffHold: { phase: 'idle' },
     boxLeftover: null,
+    leftoverStrips: 0,
     hasBand: false,
     isTurnRunning: false,
     isPressRunning: false,
@@ -344,4 +346,25 @@ test('It forgets the leftover when beginHandoffHold starts a new hold', () => {
   noteBoxLeftover(state, 'five')
   beginHandoffHold(state, null)
   expect(typedAfterBoxLeftover(state, 'fivesix')).toBe('fivesix')
+})
+
+test('It counts each strip noted with noteLeftoverStrip', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  noteLeftoverStrip(state)
+  expect(state.leftoverStrips).toBe(2)
+})
+
+test('It resets the strip count when beginHandoffHold starts a new hold', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  beginHandoffHold(state, null)
+  expect(state.leftoverStrips).toBe(0)
+})
+
+test('It keeps the strip count when beginSending starts the delivery', () => {
+  const state = createState(settings)
+  noteLeftoverStrip(state)
+  beginSending(state)
+  expect(state.leftoverStrips).toBe(1)
 })

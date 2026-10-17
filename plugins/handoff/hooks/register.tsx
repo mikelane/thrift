@@ -25,6 +25,7 @@ import {
 } from './band-text'
 import {
   heldGroupFields,
+  leftoverStripFields,
   isUsableThriftHome,
   LOG_WRITER,
   logLocation,
@@ -108,6 +109,7 @@ import {
   isAwaitingDelivery,
   noteBoxCleared,
   noteBoxLeftover,
+  noteLeftoverStrip,
   typedAfterBoxLeftover,
   takeLateArrivalsOrEndSending,
   waitForTurnEnd,
@@ -456,6 +458,7 @@ const abandonHandoff = async (
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
       held_restore: worstDelivery([...restores, ...late.deliveries]),
+      ...leftoverStripFields(state.leftoverStrips),
     },
     sessionId: recordedSessionId,
   })
@@ -623,6 +626,7 @@ const continueInFreshSession = async (
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,
       held_other_delivery: worstDelivery([...deliveries, ...late.deliveries]),
+      ...leftoverStripFields(state.leftoverStrips),
     },
   })
 }
@@ -935,6 +939,7 @@ const holdForHandoff = ($: EngineInterface, state: SessionState, e: PromptSubmit
   // The engine submits the leftover of the last prompt it dropped together with the one typed after it; the person typed only
   // the part after the leftover.
   const typedText = isFromComposer ? typedAfterBoxLeftover(state, e.text) : e.text
+  if (typedText !== e.text) noteLeftoverStrip(state)
   const prompt: HeldPrompt = {
     text: typedText,
     isUnattended: isUnattendedOrigin(e.origin.kind),

@@ -79,6 +79,7 @@ export type SessionState = Settings & {
   heldPrompt: string | null
   handoffHold: HandoffHold
   boxLeftover: string | null
+  leftoverStrips: number
   hasBand: boolean
   isTurnRunning: boolean
   isPressRunning: boolean
@@ -112,6 +113,7 @@ export const createState = (settings: Settings): SessionState => ({
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
   boxLeftover: null,
+  leftoverStrips: 0,
   hasBand: false,
   isTurnRunning: false,
   isPressRunning: false,
@@ -150,6 +152,7 @@ export const isGroupOfOrigin = (group: HeldPromptGroup, isUnattended: boolean): 
 // The prompt the handoff carries is the first held prompt, so it is delivered with its own origin's group.
 export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null): void => {
   state.boxLeftover = null
+  state.leftoverStrips = 0
   state.handoffHold = {
     phase: 'holding',
     heldPrompts: carried === null ? [] : [carried],
@@ -190,6 +193,12 @@ export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number =
 // can be told from it. Only a handoff that is holding or sending has a leftover to watch.
 export const noteBoxLeftover = (state: SessionState, boxText: string): void => {
   state.boxLeftover = boxText
+}
+
+// A strip can be wrong: the person cleared the box by hand and then typed text that starts like the leftover. The count goes in
+// the record that ends the handoff, so a wrong strip can be told apart from a right one there.
+export const noteLeftoverStrip = (state: SessionState): void => {
+  state.leftoverStrips += 1
 }
 
 export const noteBoxCleared = (state: SessionState, boxText: string): void => {

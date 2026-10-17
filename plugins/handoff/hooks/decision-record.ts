@@ -28,6 +28,7 @@ export type TriggerValues = {
   handoff_unattended?: boolean
   held_other_delivery?: GroupDelivery
   held_restore?: GroupDelivery
+  leftover_strips?: number
   cleared_by?: ClearedBy
   compacted_before_clear?: true
   late_turn?: true
@@ -36,12 +37,15 @@ export type TriggerValues = {
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
 
 export type HeldRecordFields = HeldGroupFields &
-  Pick<TriggerValues, 'handoff_unattended' | 'held_other_delivery' | 'held_restore'>
+  Pick<TriggerValues, 'handoff_unattended' | 'held_other_delivery' | 'held_restore' | 'leftover_strips'>
 
 export const heldGroupFields = (groups: readonly HeldPromptGroup[]): HeldGroupFields => ({
   held_groups: groups.length,
   held_unattended: groups.some(group => group.isUnattended),
 })
+
+// Present only when a held prompt had a leftover taken off its front, like the other fields that only an event sets.
+export const leftoverStripFields = (strips: number): Pick<TriggerValues, 'leftover_strips'> => (strips > 0 ? { leftover_strips: strips } : {})
 
 type RecordInput = {
   now: number

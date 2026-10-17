@@ -42,7 +42,8 @@ const isSampleRecord = (value: unknown): value is SampleRecord => {
     isOptional(values.held_unattended, 'boolean') &&
     isOptional(values.handoff_unattended, 'boolean') &&
     isOptional(values.held_other_delivery, 'string') &&
-    isOptional(values.held_restore, 'string')
+    isOptional(values.held_restore, 'string') &&
+    isOptional(values.leftover_strips, 'number')
   )
 }
 
@@ -81,6 +82,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
           handoff_unattended: values.handoff_unattended,
           held_other_delivery: values.held_other_delivery,
           held_restore: values.held_restore,
+          leftover_strips: values.leftover_strips,
         }
       : undefined,
   }
