@@ -34,10 +34,18 @@ LIVE_WAITING=''
 # Likewise only live_verdict may produce 0: bash 3.2 hands this trap $? = 0 after a `set -u` abort.
 # Inside a trap BASH_COMMAND is still the command the trap interrupted, so the ERROR names it.
 # A failure to clean up is a warning and never changes the verdict's exit status.
+live_ignore_signals() { trap '' INT TERM HUP PIPE QUIT; }
+# The signal handlers ignore further signals before they exit, so a second one cannot cut in between
+# the handler and the first line of live_cleanup.
+live_exit_on_signal() {
+  live_ignore_signals
+  exit "$1"
+}
+
 live_cleanup() {
   local status=$? failed_command=$BASH_COMMAND
+  live_ignore_signals
   set +e
-  trap '' INT TERM HUP PIPE QUIT
   local error_message='' interrupt_message='' screens='' session
   if [[ "$status" -lt 128 && "$LIVE_VERDICT_REACHED" != 1 && "$LIVE_ABORTED" != 1 ]]; then
     error_message="ERROR: the harness stopped on a command that failed before it reached a verdict (status $status): ${failed_command%%$'\n'*}"
@@ -100,11 +108,11 @@ live_init() {
   LIVE_NAMES=()
   [[ "$LIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_TIMEOUT must be a whole number of seconds, not '$LIVE_TIMEOUT'"
   trap live_cleanup EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  trap 'exit 131' QUIT
-  trap 'exit 141' PIPE
+  trap 'live_exit_on_signal 129' HUP
+  trap 'live_exit_on_signal 130' INT
+  trap 'live_exit_on_signal 143' TERM
+  trap 'live_exit_on_signal 131' QUIT
+  trap 'live_exit_on_signal 141' PIPE
   LIVE_RUN=$(mktemp -d "${TMPDIR:-/tmp}/live.XXXXXX")
   mkdir -p -- "$LIVE_RUN/thrift"
   LIVE_THRIFT_HOME="$LIVE_RUN/thrift"
@@ -130,7 +138,10 @@ wait_for() {
 
 # --- sessions ------------------------------------------------------------------------------------
 
-session_of() { echo "live-$$-$1"; }
+# live-<pid>-<nonce>-<label>. The nonce is drawn once per run, so a recycled pid cannot name a session
+# an earlier run left behind (after a kill -9): the cleanup kills only names this run made up.
+LIVE_NONCE=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+session_of() { echo "live-$$-$LIVE_NONCE-$1"; }
 debug_log_of() { echo "$LIVE_RUN/debug-$1.log"; }
 # The target for capture-pane and send-keys: `=` makes the session name an exact match (a bare name
 # falls back to a prefix or window-name match when the session has died), and the trailing colon makes

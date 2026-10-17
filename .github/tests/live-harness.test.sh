@@ -637,4 +637,38 @@ test_the_session_command_passes_the_path_the_harness_checked() {
   assert_out_has "PATH=$TEST_DIR/bin:"
 }
 
+# A recycled pid plus a session an earlier `kill -9` left behind would have the same name; a random
+# part of the name keeps this run's sessions apart from every other run's.
+test_session_names_carry_a_random_part_that_differs_between_runs() {
+  run_live 'echo "NAME=$(session_of a)"'
+  local first
+  first=$(sed -n 's/^NAME=//p' "$OUTPUT")
+  run_live 'echo "NAME=$(session_of a)"'
+  [[ "$first" =~ ^live-[0-9]+-[0-9a-f]{6,}-a$ ]] || fail "unexpected session name: $first"
+  [[ "$first" != "$(sed -n 's/^NAME=//p' "$OUTPUT")" ]] || fail "two runs made the same session name: $first"
+}
+
+test_the_session_name_is_stable_within_a_run() {
+  run_live 'first=$(session_of a); second=$(session_of a); [[ "$first" == "$second" ]]; check x detail true; live_verdict s'
+  assert_exit_code 0
+}
+
+test_cleanup_never_lists_sessions_to_find_some_to_kill() {
+  run_live 'live_init; LIVE_SESSIONS=(live-1-a); check x detail true; live_verdict s'
+  assert_exit_code 0
+  assert_tmux_called 'kill-session -t =live-1-a'
+  assert_tmux_not_called 'list-sessions'
+  assert_tmux_not_called 'kill-server'
+}
+
+# A signal that arrives between the trap firing and the cleanup's first line must not cut it short.
+test_signals_are_ignored_by_the_time_the_cleanup_starts() {
+  run_live 'live_init; live_cleanup() { trap -p INT TERM HUP PIPE QUIT; exit 130; }; kill -INT $$; sleep 5 & wait $!'
+  assert_exit_code 130
+  assert_out_has "trap -- '' SIGINT"
+  assert_out_has "trap -- '' SIGTERM"
+  assert_out_has "trap -- '' SIGHUP"
+  assert_out_has "trap -- '' SIGQUIT"
+}
+
 run_tests "$@"

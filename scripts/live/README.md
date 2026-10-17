@@ -99,12 +99,14 @@ Not isolated:
   append every prompt they receive to `~/.claude/history.jsonl`, as any session does. The harness
   has no switch for either; the prompts are one-word test prompts. `~/.claude.json` also gains an
   entry for the working directory, the trust answer, and Claude Code's usual per-session counters.
-- **Processes.** On exit the harness kills only its own tmux sessions, each by exact name
-  (`live-<pid>-<label>`), and never the tmux server. Interrupting it with Ctrl-C, closing the
-  terminal (SIGHUP) or SIGTERM runs the same cleanup. A `kill -9` cannot: list leftovers with
-  `tmux ls` and remove them by name. Background work a scenario starts inside a session (the
-  `sleep 90` of `busy-abandon`) is not tracked by the harness and may outlive it:
-  `pgrep -fl 'sleep 90'` finds one.
+- **Processes.** On exit the harness kills only the tmux sessions this run started, each by exact
+  name (`live-<pid>-<nonce>-<label>`; the nonce is random per run, so a recycled pid cannot match a
+  session an earlier run left behind), and never the tmux server. These all run the same cleanup:
+  Ctrl-C, closing the terminal (SIGHUP), SIGTERM, Ctrl-\ (SIGQUIT), and a closed stdout pipe
+  (`live.sh ... | head`, which sends SIGPIPE). Further signals are ignored while it runs, so a second
+  Ctrl-C cannot cut it short. A `kill -9` cannot run it: list leftovers with `tmux ls` and remove
+  them by name. Background work a scenario starts inside a session (the `sleep 90` of
+  `busy-abandon`) is not tracked by the harness and may outlive it: `pgrep -fl 'sleep 90'` finds one.
 
 ## Scenarios
 
