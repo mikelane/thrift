@@ -19,9 +19,3 @@ scenario_run() {
 }
 
 held_groups_delivered() { records_with cleared | jq -e 'select(.trigger_values.held_groups >= 1)' >/dev/null; }
-# A screen with no prompt box is not an empty box: box_text fails there, and so does this.
-box_is_empty() {
-  local text
-  text=$(box_text "$1") || return 1
-  [[ -z "$(tr -d '[:space:]' <<<"$text")" ]]
-}

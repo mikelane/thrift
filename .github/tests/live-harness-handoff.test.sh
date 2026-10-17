@@ -28,7 +28,8 @@ run_restore_order() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/restore-order-after-abandon.sh"
     live_init
     handoff_prepare() { :; }; start_peer_messenger() { :; }; start_waiting_handoff() { :; }
-    submit() { :; }; type_text() { :; }; box_shows() { :; }
+    submit() { echo "submit $2" >> "'"$TEST_DIR"'/calls"; }; type_text() { echo "type $2" >> "'"$TEST_DIR"'/calls"; }
+    box_is_empty() { echo clear >> "'"$TEST_DIR"'/calls"; }; box_shows() { :; }
     show_pane() { :; }; show_box() { :; }; show_log() { :; }
     pane() { cat "'"$TEST_DIR"'/box"; }
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
@@ -45,6 +46,13 @@ test_restore_order_passes_when_the_prompts_are_back_in_order_before_the_draft() 
   run_restore_order "$(printf '%s\n%s\n' '──────' "$RESTORED_BOX"; echo '──────')" "$WAIT_ENDED_LOG"
   assert_exit_code 0
   assert_out_has 'PASS s (4 checks)'
+}
+
+test_restore_order_waits_for_the_box_to_clear_after_each_held_prompt_before_typing_on() {
+  run_restore_order "$(printf '%s\n%s\n' '──────' "$RESTORED_BOX"; echo '──────')" "$WAIT_ENDED_LOG"
+  assert_file_has "$TEST_DIR/calls" 'type draft'
+  paste -sd, "$TEST_DIR/calls" > "$TEST_DIR/order"
+  assert_file_has "$TEST_DIR/order" 'clear,submit two,clear,submit three,clear,type draft'
 }
 
 test_restore_order_is_a_fail_when_the_draft_comes_before_the_restored_prompts() {

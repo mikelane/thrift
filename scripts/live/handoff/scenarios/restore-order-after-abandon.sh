@@ -26,6 +26,8 @@ scenario_run() {
     held_count=$((held_count + 1))
     submit a "$word"
     wait_for "prompt '$word' to be held" log_has a "held a prompt for the handoff \\($held_count held\\)"
+    # The engine clears the box after the hook holds the prompt. Text typed before that is wiped.
+    wait_for "the box to clear after prompt '$word'" box_is_empty a
   done
   type_text a draft
   wait_for 'the handoff to stop or clear' handoff_ended
