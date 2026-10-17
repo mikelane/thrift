@@ -105,7 +105,7 @@ test_clear_resume_passes_one_person_clear_that_names_the_session_and_the_mode() 
 }
 
 test_clear_resume_prints_the_path_a_resume_took_without_judging_it() {
-  qa_judge show_ending_path 2 1 none "$(session_ended_record)"
+  qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
   assert_exit_code 0
   assert_out_has 'PASS s (6 checks)'
   assert_out_has 'case: ended with action none, reason session_ended, cleared_by missing'
@@ -169,9 +169,10 @@ test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {
   assert_out_has 'SETTLED'
 }
 
-# qa_judge <expectation> <expected-ends> <session.end lines in the debug log> <note file or "none"> <records>
+# qa_judge <expectation> <expected-ends> <session.end lines in the debug log> <note files, space separated, or none>
+# <old transcript present: yes|no> <records>
 qa_judge() {
-  local expectation=$1 ends=$2 end_lines=$3 note_file=$4 records=$5
+  local expectation=$1 ends=$2 end_lines=$3 note_files=$4 old=$5 records=$6
   printf '%s\n' "$records" > "$TEST_DIR/decisions"
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh"
     CLAUDE_CONFIG_DIR=$HOME/.claude
@@ -180,44 +181,43 @@ qa_judge() {
     : > "$(debug_log_of c)"
     for _ in $(seq 1 '"$end_lines"'); do echo "handoff@inline session.end settled in 1ms" >> "$(debug_log_of c)"; done
     mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
-    echo x > "$CLAUDE_CONFIG_DIR/projects/p/old1.jsonl"
-    [[ "'"$note_file"'" == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/'"$note_file"'.jsonl"
+    [[ "'"$old"'" == no ]] || echo x > "$CLAUDE_CONFIG_DIR/projects/p/old1.jsonl"
+    for f in '"$note_files"'; do [[ $f == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/$f.jsonl"; done
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
     judge_case c '"$expectation"' '"$ends"'
     live_verdict s'
 }
 
-# BUG 1: ENDING_RECORD and the header admit `none`/session_ended as a correct end of a /resume case, and
-# the plugin's session_ended abandon carries no note ("No note was carried over", handoff-note.ts) and runs
-# no clear (one session end: the /resume). scenario_run passes expected_ends=2 to both /resume cases and
-# judge_case always demands the note in exactly one transcript, so a correct session_ended run is a FAIL.
-test_qa_a_resume_that_ends_the_session_before_the_clear_passes_the_invariants() {
-  grep -q "run_case 'resume during the wait' c4 wait \"/resume \$RESUME_TARGET_ID\" show_ending_path 2" \
-    "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh" || fail 'scenario_run no longer passes 2 ends to the resume-during-the-wait case'
-  qa_judge show_ending_path 2 1 none \
-    '{"action":"none","session_id":"old1","trigger_values":{"reason":"session_ended","effective_mode":"ask"}}'
-  assert_exit_code 0
+test_a_session_ended_abandon_with_the_note_in_a_fresh_transcript_is_a_fail() {
+  qa_judge show_ending_path 2 1 fresh yes "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the handoff note'
 }
 
-# BUG 2: note_transcripts counts the old session's own transcript. A note delivered into the old session
-# (it never reached a fresh one) is "exactly one transcript, not the resumed one" and passes.
-# fresh_transcript_path in common.sh excludes the old file for this reason; note_transcripts does not.
-test_qa_a_note_that_reached_only_the_old_sessions_transcript_is_a_fail() {
-  qa_judge cleared_by_person 2 2 old1 \
-    '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"person","effective_mode":"ask"}}'
+test_a_session_ended_abandon_with_the_note_in_the_resumed_transcript_is_a_fail() {
+  qa_judge show_ending_path 2 1 resumed yes "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'transcripts holding the note: resumed.jsonl'
+}
+
+test_a_session_ended_abandon_without_the_old_transcript_is_a_fail_that_says_so() {
+  qa_judge show_ending_path 2 1 none no "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'the transcript of the old session old1 was not found under ~/.claude/projects'
+}
+
+# The old session's own transcript is not a delivery: a note only in it never reached a fresh session.
+test_a_note_that_reached_only_the_old_sessions_transcript_is_a_fail() {
+  qa_judge cleared_by_person 2 2 old1 yes "$(cleared_record)"
   assert_exit_code 1
   assert_out_has 'FAIL  case: the handoff note reached exactly one transcript'
 }
 
-# BUG 3: a FAIL with no evidence. When no transcript holds the note (or the old transcript cannot be
-# found, so nothing is searched), the detail reads "transcripts holding the note: " and stops; the two
-# causes print the same empty line.
-test_qa_the_note_check_says_what_it_found_when_no_transcript_holds_the_note() {
-  qa_judge cleared_by_person 2 2 none \
-    '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"person","effective_mode":"ask"}}'
+test_the_note_check_says_none_when_no_transcript_holds_the_note() {
+  qa_judge cleared_by_person 2 2 none yes "$(cleared_record)"
   assert_exit_code 1
-  assert_file_matches "$OUTPUT" 'transcripts holding the note: [^ ]'
+  assert_out_has 'transcripts holding the note: none'
 }
 
 run_tests "$@"
