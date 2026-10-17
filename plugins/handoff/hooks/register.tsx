@@ -26,53 +26,37 @@ import {
 import {
   heldGroupFields,
   leftoverStripFields,
-  isUsableThriftHome,
-  LOG_WRITER,
-  logLocation,
-  recordFromEvaluation,
   snapshotTrigger,
   type ClearedBy,
   type DecisionReason,
-  type Evaluation,
   type HandoffRequest,
   type SettledHandoff,
   type Trigger,
 } from './decision-record'
-import { debug, logFailure } from './engine-log'
+import { announce, debug, logFailure, registerHandoffCommand } from './engine-log'
+import {
+  continueInFreshSession,
+  restoreHeldGroups,
+  restoreLateArrivals,
+  sendOrKeepInBox,
+  submitOrKeepInTranscript,
+} from './handoff-delivery'
+import { inspectPrompt } from './prompt-inspection'
+import { writeRecord } from './record-writer'
 import { decideDuringHandoff } from './handoff-hold'
 import { noteBoxLeftover } from './box-leftover'
 import { isUntestedEngine } from './engine-version'
 import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import {
-  FINAL_MESSAGES,
   NO_HANDOFF_MESSAGE,
   busyRefusalMessage,
   clearFailedMessage,
   noHandoffMessage,
   sessionEndedMessage,
   HANDOFF_PROMPT,
-  handoffMessage,
   groupHeldPrompts,
-  joinPrompts,
-  speaksForPerson,
-  deliveryAfterNote,
-  groupJoiningNote,
-  groupsLeftToSend,
-  noteTookGroupAlong,
-  boxCopyOf,
-  type Carried,
-  type NoteDelivery,
 } from './handoff-note'
-import {
-  canUseBox,
-  clearBoxCopyWhileHeld,
-  composerPrompt,
-  emptyBoxIfHolding,
-  emptySentPromptFromBox,
-  keepInTranscript,
-  markKeptInBox,
-  refillBox,
-} from './prompt-box'
+import { clearBoxCopyWhileHeld, composerPrompt, emptyBoxIfHolding, refillBox } from './prompt-box'
 import { worstDelivery } from './held-delivery'
 import {
   canHoldPrompt,
@@ -80,12 +64,10 @@ import {
   isPersonOrigin,
   isComposerOrigin,
   isUnattendedOrigin,
-  noteOrigin,
   planNewWorkPrompt,
 } from './prompt-plan'
 import {
   beginSending,
-  removeResubmittedPrompt,
   beginHandoffHold,
   beginBeforeClear,
   beginOwnClear,
@@ -100,21 +82,14 @@ import {
   forgetForeignClear,
   recordForeignClear,
   recordSessionEnd,
-  releaseCarried,
-  queueResubmittedPrompt,
-  releaseCarriedGroup,
   releaseTurnEndWaiter,
   resetForNewSession,
   startMainTurn,
   startSubagentTurn,
   endSubagentTurn,
   takeHeldPrompts,
-  takeLateArrivalsOrEndSending,
   waitForTurnEnd,
-  type BoxPlacement,
   type ButtonPress,
-  type HeldPrompt,
-  type HeldPromptGroup,
   type SessionState,
 } from './session-state'
 import {
@@ -128,9 +103,7 @@ import {
 import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
-import { branchTicketPrefixes, hasTicketShapedToken, namesNewWork, ticketUrlPrefixes, workRefs } from './work-refs'
 
-const BRANCH_READ_TIMEOUT_MS = 5000
 const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
@@ -138,12 +111,6 @@ const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to sen
 const PRESS_WAITS_FOR_TURN = 'This turn is still running, so your choice will run when it ends.'
 const PROMPT_NOT_HELD = 'That prompt is no longer held, so there is nothing to send.'
 const ALREADY_PENDING = 'A handoff or compaction is already in progress.'
-const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
-const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
-// Held back by design, not by a failed send: none was tried, because the note did not enter the fresh session.
-const HELD_BACK_PROMPT = 'Your prompt was held back after the handoff note, so read the note first. Here it is:'
-const HELD_BACK_OTHER_PROMPT = 'A prompt was held back after the handoff note, so read the note first. Here it is:'
-const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be sent, so here they are:'
 
 // /handoff is registered only when a person is at the prompt, so only then is it there to mention.
 const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): string =>
@@ -151,30 +118,6 @@ const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): st
 
 // The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
-
-const writeRecord = async ($: EngineInterface, state: SessionState, evaluation: Evaluation) => {
-  try {
-    const [now, id, thriftHome, home] = await Promise.all([
-      $.clock.now(),
-      evaluation.sessionId ?? $.session.id(),
-      $.env.get('THRIFT_HOME'),
-      $.env.get('HOME'),
-    ])
-    const location = logLocation(thriftHome, home)
-    const isThriftHomeIgnored = Boolean(thriftHome) && !isUsableThriftHome(thriftHome)
-    if (isThriftHomeIgnored) {
-      debug($, `THRIFT_HOME is not an absolute path, so ${location === null ? 'HOME is needed for a log location, and it is not set' : 'the default log location is used'}`)
-    }
-    if (location === null) return isThriftHomeIgnored ? undefined : debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
-    const record = recordFromEvaluation(state, evaluation, now, id)
-    const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], {
-      stdin: `${JSON.stringify(record)}\n`,
-    })
-    if (ran.exitCode !== 0) debug($, `log write failed: ${ran.stderr.trim()}`)
-  } catch (error) {
-    debug($, `log write failed: ${String(error)}`)
-  }
-}
 
 const isBackgroundBusy = async ($: EngineInterface, state: SessionState): Promise<boolean> => {
   if (state.backgroundTasks.size > 0) return true
@@ -271,59 +214,6 @@ const offerBand = async ($: EngineInterface, state: SessionState, trigger: Trigg
   }
 }
 
-const registerHandoffCommand = async ($: EngineInterface) => {
-  try {
-    await $.command.register({
-      name: 'handoff',
-      description: 'Write a handoff, clear, and continue in a fresh session',
-    })
-  } catch (error) {
-    debug($, `could not register /handoff: ${String(error)}`)
-  }
-}
-
-// The engine cannot submit a prompt under another origin: the plugin's submission arrives as origin 'plugin', which this
-// plugin's prompt.submit hook does not classify. Submit resolves once the prompt's turn started or once it was queued behind
-// the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
-// turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of
-// rejecting.
-const submitEntered = async (
-  $: EngineInterface,
-  state: SessionState,
-  prompt: HeldPrompt,
-  failureLabel: string,
-  asUser: boolean,
-): Promise<boolean> => {
-  queueResubmittedPrompt(state, prompt)
-  try {
-    const result = await $.prompt.submit(asUser ? { text: prompt.text, asUser: true } : { text: prompt.text })
-    if (result.drop === undefined) return true
-    debug($, `${failureLabel}: ${result.drop}`)
-  } catch (error) {
-    debug($, `${failureLabel}: ${String(error)}`)
-  }
-  removeResubmittedPrompt(state, prompt)
-  return false
-}
-
-const submitOrKeepInTranscript = async ($: EngineInterface, state: SessionState, prompt: HeldPrompt): Promise<Carried> => {
-  if (await submitEntered($, state, prompt, 'could not restore the held prompt', speaksForPerson(prompt))) return 'submitted'
-  keepInTranscript($, prompt)
-  return 'not_carried'
-}
-
-const restorePrompt = async (
-  $: EngineInterface,
-  state: SessionState,
-  prompt: HeldPrompt,
-  placement: BoxPlacement = 'before_draft',
-): Promise<Carried> => {
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
-  const carried = await submitOrKeepInTranscript($, state, prompt)
-  if (carried === 'submitted') await emptySentPromptFromBox($, state, prompt)
-  return carried
-}
-
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
 // writeRecord leaves its own debug line.
 const readSessionId = async ($: EngineInterface): Promise<string | undefined> => {
@@ -334,37 +224,6 @@ const readSessionId = async ($: EngineInterface): Promise<string | undefined> =>
     return undefined
   }
 }
-
-// SAFETY: the record is written after restoreHeldGroups and sendHeldGroups return, so a throw inside either loop would lose
-// the record. refillBox and submitEntered catch their own failures, and keepInTranscript and releaseCarriedGroup make no
-// async calls, so no test can make a loop throw. Any call added to a loop must not throw either.
-const restoreHeldGroups = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<Carried[]> => {
-  const restores: Carried[] = []
-  for (const group of settledHandoff.heldGroups) {
-    restores.push(await restorePrompt($, state, group))
-    releaseCarriedGroup(state, group, settledHandoff.isUnattended)
-  }
-  return restores
-}
-
-type LateArrivals = { prompts: HeldPrompt[]; deliveries: Carried[] }
-
-// Prompts that arrived during a delivery or a restore go back one by one in arrival order, and more may arrive while they do.
-const forEachLateArrival = async (
-  state: SessionState,
-  carryPrompt: (prompt: HeldPrompt) => Promise<Carried>,
-): Promise<LateArrivals> => {
-  const prompts: HeldPrompt[] = []
-  const deliveries: Carried[] = []
-  for (let arrived = takeLateArrivalsOrEndSending(state); arrived.length > 0; arrived = takeLateArrivalsOrEndSending(state)) {
-    for (const prompt of arrived) deliveries.push(await carryPrompt(prompt))
-    prompts.push(...arrived)
-  }
-  return { prompts, deliveries }
-}
-
-const restoreLateArrivals = ($: EngineInterface, state: SessionState): Promise<LateArrivals> =>
-  forEachLateArrival(state, prompt => restorePrompt($, state, prompt, 'after_draft'))
 
 const abandonHandoff = async (
   $: EngineInterface,
@@ -442,130 +301,6 @@ const clearSession = async ($: EngineInterface): Promise<boolean> => {
   }
 }
 
-const appendNote = async ($: EngineInterface, message: string): Promise<boolean> => {
-  try {
-    const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: message }] } })
-    if (appended.deny === undefined) return true
-    debug($, `append denied: ${appended.deny}`)
-    return false
-    // The test kit cannot make the default append reject: a throwing session.append hook is treated as a hook failure,
-    // and the plugin sees a successful append. Whether the live default append can reject is unverified.
-    // Keep it: without it, a rejected append skips the prompt fallback and drops the handoff note.
-  } catch (error) {
-    debug($, `append failed: ${String(error)}`)
-    return false
-  }
-}
-
-// holdBack keeps a prompt out of the fresh session: a person's prompt must not run ahead of a note that never entered it.
-type SendOptions = { placement?: BoxPlacement; notice?: string | undefined; holdBack?: boolean }
-
-const sendOrKeepInBox = async (
-  $: EngineInterface,
-  state: SessionState,
-  prompt: HeldPrompt,
-  { placement = 'before_draft', notice, holdBack = false }: SendOptions = {},
-): Promise<Carried> => {
-  if (!holdBack && (await submitEntered($, state, prompt, 'could not send the prompt', speaksForPerson(prompt)))) {
-    await emptySentPromptFromBox($, state, prompt)
-    return 'submitted'
-  }
-  if (canUseBox(prompt) && (await refillBox($, prompt, placement))) return markKeptInBox(state)
-  keepInTranscript($, prompt, holdBack ? (canUseBox(prompt) ? HELD_BACK_PROMPT : HELD_BACK_OTHER_PROMPT) : notice)
-  return 'not_carried'
-}
-
-const announce = ($: EngineInterface, message: string) => {
-  $.ui.log(message)
-  $.ui.toast(message)
-}
-
-// A scheduled handoff's note rides with the scheduled group, both under the plugin's frame. An attended handoff's note goes alone
-// and framed, then the person's prompts follow it as the person's own words.
-// A note that is never offered to the box (a scheduled handoff's) gets a notice that does not say it was, and a note joined to
-// a scheduled prompt names both.
-const unsentNoteNotice = (note: HeldPrompt, isJoined: boolean): string => {
-  if (isJoined) return UNSENT_NOTE_AND_OTHER_PROMPT
-  return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
-}
-
-const deliverNote = async ($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff, message: string): Promise<NoteDelivery> => {
-  if (await appendNote($, message)) return 'appended'
-  const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
-  const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
-  const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
-  const note: HeldPrompt = {
-    text: joinPrompts(message, sameOriginGroup?.text),
-    isUnattended: settledHandoff.isUnattended,
-    origin,
-    author: 'plugin',
-    ...(boxCopy === undefined ? {} : { boxText: boxCopy }),
-  }
-  return sendOrKeepInBox($, state, note, { notice: unsentNoteNotice(note, sameOriginGroup !== undefined) })
-}
-
-const sendHeldGroups = async (
-  $: EngineInterface,
-  state: SessionState,
-  groups: readonly HeldPromptGroup[],
-  handoffIsUnattended: boolean,
-  { placement, holdBackPersonGroups }: { placement: BoxPlacement; holdBackPersonGroups: boolean },
-): Promise<Carried[]> => {
-  const deliveries: Carried[] = []
-  for (const group of groups) {
-    deliveries.push(await sendOrKeepInBox($, state, group, { placement, holdBack: holdBackPersonGroups && speaksForPerson(group) }))
-    releaseCarriedGroup(state, group, handoffIsUnattended)
-  }
-  return deliveries
-}
-
-const sendLateArrivals = ($: EngineInterface, state: SessionState, holdBackPersonPrompts: boolean): Promise<LateArrivals> =>
-  forEachLateArrival(state, async prompt => {
-    // Counted as seen like the held groups are before they go in, so a ticket named in a late prompt is not new work later.
-    await inspectPrompt($, state, prompt.text)
-    return sendOrKeepInBox($, state, prompt, { placement: 'after_draft', holdBack: holdBackPersonPrompts && speaksForPerson(prompt) })
-  })
-
-const continueInFreshSession = async (
-  $: EngineInterface,
-  state: SessionState,
-  settledHandoff: SettledHandoff,
-  oldId: string,
-  note: string,
-  hasTurnAfterNote: boolean,
-  clearedBy: ClearedBy,
-) => {
-  // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
-  // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
-  beginSending(state)
-  await registerHandoffCommand($)
-  // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
-  const hasLateTurn = state.hasLateTurn
-  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
-  if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
-  announce($, FINAL_MESSAGES[noteDelivery](oldId))
-  for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
-  const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
-  const { holdBackPerson, placement } = deliveryAfterNote(noteDelivery)
-  const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
-  const late = await sendLateArrivals($, state, holdBackPerson)
-  await writeRecord($, state, {
-    ...settledHandoff.trigger,
-    action: 'cleared',
-    sessionId: oldId,
-    note: noteDelivery,
-    clearedBy,
-    compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
-    lateTurn: hasLateTurn,
-    heldFields: {
-      ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
-      handoff_unattended: settledHandoff.isUnattended,
-      held_other_delivery: worstDelivery([...deliveries, ...late.deliveries]),
-      ...leftoverStripFields(state.leftoverStrips),
-    },
-  })
-}
-
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   let oldId: string | undefined
   try {
@@ -615,7 +350,6 @@ const CLEARED_BY = {
 type ClearWindow = {
   outcome: PreClearOutcome
   hasCompactedBeforeClear: boolean
-  isBusy: boolean
   // Read in the same synchronous run that starts the clear, so a turn that the clear lets in cannot change it.
   hasTurnAfterNote: boolean
   // Set only when the outcome is 'clear': the handoff's own /clear, already started.
@@ -663,7 +397,7 @@ const waitForClearWindow = async (
     if (!state.isTurnRunning) break
   }
   const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
-  const clearWindow = { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote: state.hasTurnAfterNote }
+  const clearWindow = { outcome, hasCompactedBeforeClear, hasTurnAfterNote: state.hasTurnAfterNote }
   if (outcome !== 'clear') return { ...clearWindow, clearing: null }
   beginOwnClear(state)
   return { ...clearWindow, clearing: clearSession($) }
@@ -710,7 +444,7 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    const { outcome, hasCompactedBeforeClear, isBusy, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
+    const { outcome, hasCompactedBeforeClear, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') return await abandonAfterWait($, state, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
     if (outcome === 'abandon_busy') return await abandonAfterWait($, state, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
@@ -785,25 +519,6 @@ const evaluateTurnEnd = async (
   if (outcome.kind === 'compact') return scheduleCompaction($, state, trigger)
   if (outcome.kind === 'handoff') return scheduleHandoff($, state, { trigger, isUnattended: state.isTurnUnattended })
   return writeRecord($, state, { ...trigger, action: 'none' })
-}
-
-const readBranch = async ($: EngineInterface): Promise<string> => {
-  try {
-    const ran = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: BRANCH_READ_TIMEOUT_MS })
-    return ran.exitCode === 0 ? ran.stdout.trim() : ''
-  } catch (error) {
-    debug($, `could not read the git branch: ${String(error)}`)
-    return ''
-  }
-}
-
-const inspectPrompt = async ($: EngineInterface, state: SessionState, text: string): Promise<boolean> => {
-  for (const prefix of ticketUrlPrefixes(text)) state.urlPrefixes.add(prefix)
-  const branchPrefixes = hasTicketShapedToken(text) ? branchTicketPrefixes(await readBranch($)) : []
-  const prefixes = [...state.urlPrefixes, ...branchPrefixes]
-  const isNewWork = namesNewWork(text, state.seenRefs, prefixes)
-  for (const ref of workRefs(text, prefixes)) state.seenRefs.add(ref)
-  return isNewWork
 }
 
 const refillHeldPrompt = async ($: EngineInterface, state: SessionState, text: string) => {

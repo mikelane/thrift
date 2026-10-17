@@ -10,3 +10,19 @@ export function debug($: EngineInterface, line: string): void {
 export function logFailure($: EngineInterface, work: Promise<unknown>): Promise<unknown> {
   return work.catch(error => debug($, `background work failed: ${String(error)}`))
 }
+
+export function announce($: EngineInterface, message: string): void {
+  $.ui.log(message)
+  $.ui.toast(message)
+}
+
+export async function registerHandoffCommand($: EngineInterface): Promise<void> {
+  try {
+    await $.command.register({
+      name: 'handoff',
+      description: 'Write a handoff, clear, and continue in a fresh session',
+    })
+  } catch (error) {
+    debug($, `could not register /handoff: ${String(error)}`)
+  }
+}
