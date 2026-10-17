@@ -67,7 +67,7 @@ export function canUseBox(prompt: HeldPrompt): boolean {
 }
 
 // A prompt that is never offered to the box is not the person's own, so it gets a notice that claims neither.
-export function keepInTranscript($: EngineInterface, prompt: HeldPrompt, notice?: string) {
+export function keepInTranscript($: EngineInterface, prompt: HeldPrompt, notice?: string): void {
   return $.ui.log(`${notice ?? (canUseBox(prompt) ? UNSENT_PROMPT : UNSENT_OTHER_PROMPT)}\n${prompt.text}`)
 }
 
@@ -89,6 +89,6 @@ export async function emptyBoxIfHolding($: EngineInterface, text: string): Promi
   }
 }
 
-export async function clearBoxCopyWhileHeld($: EngineInterface, state: SessionState, boxText: string) {
+export async function clearBoxCopyWhileHeld($: EngineInterface, state: SessionState, boxText: string): Promise<void> {
   if (await emptyBoxIfHolding($, boxText)) noteBoxCleared(state, boxText)
 }

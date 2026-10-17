@@ -45,8 +45,8 @@ plugins/<name>/
 ```
 
 - `hooks/register.tsx` does engine wiring. Other `hooks/*.tsx` are engine-wiring helpers: they
-  may take `$`, but only through `function` declarations (`export function f($) {}`). Validate
-  on 2.1.302 rejects a `$`-taking const arrow past an import.
+  may take `$`, but only through `function` declarations (`export function f($) {}`). On
+  2.1.302, `claude plugin validate` refuses a `$`-taking `const` arrow in an imported module.
 - `hooks/<logic>.ts` stays pure: no `$`, no engine calls.
 - Wrap every hook: `on(...).catch(($, e, next) => next(e))`. A plugin here never blocks or
   breaks a turn.
