@@ -1243,13 +1243,21 @@ export const register: Register = (on, options) => {
 
   // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
   // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
-  // Counted before next: the clear's session end comes inside it. Core sets ref on a run it made; a hook beneath that answers
-  // in the clear's place leaves it off, and then no end is coming.
+  // Counted before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
+  // hook beneath that answers in the clear's place leaves it off, and a clear that throws ran nothing: no end is coming.
+  // SAFETY: a hook beneath that calls next and then rewrites the output also leaves ref off. The end already spent the count,
+  // so forgetting is a no-op, unless a second foreign clear is still pending, whose count it eats: that clear's end is then
+  // taken for the handoff's, and a late turn after it goes unreported. Needs two queued clears and such a hook. No guard.
   on('command.run', { command: 'clear' }, async ($, e, next) => {
     recordForeignClear(state, e.origin)
-    const result = await next(e)
-    if (result.ref === undefined) forgetForeignClear(state)
-    return result
+    try {
+      const result = await next(e)
+      if (result.ref === undefined) forgetForeignClear(state)
+      return result
+    } catch (error) {
+      forgetForeignClear(state)
+      throw error
+    }
   }).catch(($, e, next) => next(e))
 
   on('session.end', async ($, e, next) => {

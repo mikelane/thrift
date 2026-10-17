@@ -53,6 +53,26 @@ const answeredPersonClearThenOwnClear = (world: World, $: Parameters<typeof star
   turnRunsAfterOwnClear(world, $)
 }
 
+// The person's /clear failed in core, then the handoff's clear ran and a turn started in its session.
+const failedPersonClearThenOwnClear = (world: World, $: Parameters<typeof startTurn>[0]) => {
+  world.onClearIssued = async () => {
+    world.onClearIssued = undefined
+    world.clearThrows = true
+    await runCommand($, 'clear').catch(() => undefined)
+    world.clearThrows = false
+  }
+  turnRunsAfterOwnClear(world, $)
+}
+
+describe('a person clear that failed while the handoff clear waits', () => {
+  test('It leaves late_turn off when the turn started after the handoff clear ended the session', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    failedPersonClearThenOwnClear(world, $)
+    await finishNote()
+    expect(lastRecord(world).trigger_values.late_turn).toBeUndefined()
+  })
+})
+
 describe('a person clear answered in its place while the handoff clear waits', () => {
   test('It leaves late_turn off when the turn started after the handoff clear ended the session', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
