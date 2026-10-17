@@ -1134,8 +1134,8 @@ const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
 // Long because every on(...) call lives here: the engine lets $ pass only to functions declared at the top of this file.
 export const register: Register = (on, options) => {
   const setting = asMode(options.handoffMode)
-  // SAFETY: a reload that runs register again (a code change waits for /reload-plugins, and a setting changed in /config
-  // fires session.start; neither is confirmed to run register again) gives the new state pending null and nothing held.
+  // SAFETY: a reload that runs register again gives the new state pending null and nothing held. On 2.1.299 a setting
+  // changed in /config did (a handoff right after one recorded context_tokens 0); /reload-plugins kept the old state.
   // A handoff already running keeps the old state and its old closures. Its prompts are no longer held, so they pass
   // through and /clear can land inside their turn. The old hooks are gone too, so nothing releases a wait for a turn to
   // end, and that handoff waits forever and never clears. Both need a reload while a handoff runs, from the note being

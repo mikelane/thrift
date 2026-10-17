@@ -435,7 +435,8 @@ plugin without any error. Four layers guard against that:
    fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
    an interactive run, so after a restart of the plugin it stays `off` until `session.start` has run.
    The engine's declarations say `session.start` fires once per fresh load of a plugin (never for a
-   `/clear`). On 2.1.299 a setting changed in `/config` fired it, but `/reload-plugins` did not: the
+   `/clear`). On 2.1.299 a setting changed in `/config` fired it and started the plugin's state over
+   (a handoff right after one recorded `context_tokens: 0`), but `/reload-plugins` did not: the
    plugin kept its state and mode. Editing a file under `--plugin-dir` does not reload the plugin; the
    change waits for `/reload-plugins`.
    In an interactive session `/handoff` still works, because you asked for it at a moment you
@@ -455,10 +456,11 @@ sessions, by hand on Claude Code 2.1.299 and with `scripts/live/live.sh` on 2.1.
 hand on 2.1.299:
 
 - `/handoff` is registered again after a handoff's clear: one menu entry, one dispatch, one record.
-- A prompt typed during the note is sent after the note in the fresh session, and several are held in
-  order and joined with blank lines. The harness (`held-prompt-origin`, 2.1.301 and 2.1.302) checks
-  that the fresh session's transcript has them as one submit marked `asUser`, and that the pane shows
-  no "The handoff plugin sent a message" frame.
+- A prompt typed during the note is sent after the note in the fresh session. Several are held in
+  order and joined with blank lines (`held-prompt-box`, 2.1.299; the hand run joined them wrongly,
+  #56). `held-prompt-origin` (2.1.301 and 2.1.302) checks that the fresh session's transcript has
+  them as one submit marked `asUser`, and that the pane shows no "The handoff plugin sent a message"
+  frame.
 - A person-origin held prompt leaves the box once it is delivered (`held-prompt-box`, 2.1.299).
 - A prompt the engine queued during a handoff (a peer's, during the compaction) runs in the old
   session, so the plugin reports it as a late turn (`peer-during-compaction`, 2.1.299).
@@ -467,8 +469,11 @@ hand on 2.1.299:
 - `/clear` typed during the `compactBeforeClear` compaction is queued by Claude Code and runs after
   the handoff's own clear. Both run, the `cleared` record has `cleared_by: handoff`, and the note
   lands in the final session. It leaves an empty session in the resume list.
+- The band draws `h: Hand off and clear`, and ctrl+x Tab then `h` presses it and starts the
+  handoff (`busy-abandon`, 2.1.302).
 - The waiting status shows ("Handoff note written. The handoff continues when the current turn
-  ends. Your prompts stay held.") and wraps cleanly at about 90 columns.
+  ends. Your prompts stay held.") and wraps cleanly at about 90 columns. `busy-abandon` (2.1.302)
+  sees it too.
 - A busy abandon after `compactBeforeClear` (`busy-abandon`, 2.1.302): a `none` record with
   `background_busy` and `compacted_before_clear: true`, no `cleared` record, the held prompt back in
   the box, and `claude --resume <old id>` (run with `-p`) reopens the old session compacted.
@@ -480,9 +485,10 @@ hand on 2.1.299:
 
 These need a live terminal and have not been watched yet:
 
-- How the band renders (its `subtle` shading, the `h:` labels, whether the colour reads well in light
-  and dark themes), that `0` in an empty prompt, ctrl+x Tab then a letter or Enter, and a click each
-  press a button, and that each button does what its label says.
+- How the band renders (its `subtle` shading, the labels other than `h: Hand off and clear`, whether
+  the colour reads well in light and dark themes), that `0` in an empty prompt, ctrl+x Tab then Enter
+  or a letter other than `h`, and a click each press a button, and that each button other than Hand
+  off and clear does what its label says.
 - How the band lays out in a narrow terminal (around 40 columns), in fullscreen and on the main
   screen: that the buttons wrap onto new rows rather than clip, and that the message and hint lines
   wrap. The waiting status was seen at about 90 columns only.
@@ -522,9 +528,9 @@ claude plugin test plugins/handoff
 `claude plugin test` measures no coverage. Review enforces it: every exported function and every
 branch in `hooks/` has a test whose name says which.
 
-A restart of the plugin in the middle of a handoff (a setting changed in `/config` fires
-`session.start`; on 2.1.299 `/reload-plugins` kept the plugin's state, and a code change waits for
-`/reload-plugins`) may start fresh state. The handoff already running keeps the old state: its
+A restart of the plugin in the middle of a handoff starts fresh state. On 2.1.299 a setting changed
+in `/config` did (a handoff right after one recorded `context_tokens: 0`); `/reload-plugins` kept the
+plugin's state, and a code change waits for `/reload-plugins`. The handoff already running keeps the old state: its
 prompts are no longer held, `/clear` can land inside a turn, and it waits forever if it was waiting
 for a turn to end. This needs a restart while a handoff runs, from the note being written until its
 prompts are delivered, and it is not guarded. After one, run `/handoff` again.
