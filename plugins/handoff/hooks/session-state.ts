@@ -78,6 +78,7 @@ export type SessionState = Settings & {
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
+  boxLeftover: string | null
   hasBand: boolean
   isTurnRunning: boolean
   isPressRunning: boolean
@@ -110,6 +111,7 @@ export const createState = (settings: Settings): SessionState => ({
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
+  boxLeftover: null,
   hasBand: false,
   isTurnRunning: false,
   isPressRunning: false,
@@ -147,6 +149,7 @@ export const isGroupOfOrigin = (group: HeldPromptGroup, isUnattended: boolean): 
 
 // The prompt the handoff carries is the first held prompt, so it is delivered with its own origin's group.
 export const beginHandoffHold = (state: SessionState, carried: HeldPrompt | null): void => {
+  state.boxLeftover = null
   state.handoffHold = {
     phase: 'holding',
     heldPrompts: carried === null ? [] : [carried],
@@ -181,6 +184,26 @@ export const addHeldPrompt = (state: SessionState, prompt: HeldPrompt): number =
   return 0
 }
 
+// Claude Code leaves a dropped prompt's text in the box and submits the next one typed after it, joined: `five` then `six` is
+// submitted as `fivesix`. The plugin takes the leftover out in a later tick, but the next prompt can arrive before that tick
+// has found the text there. Until a clear confirms the box is empty, the text the box holds is remembered, so the next prompt
+// can be told from it. Only a handoff that is holding or sending has a leftover to watch.
+export const noteBoxLeftover = (state: SessionState, boxText: string): void => {
+  state.boxLeftover = boxText
+}
+
+export const noteBoxCleared = (state: SessionState, boxText: string): void => {
+  if (state.boxLeftover === boxText) state.boxLeftover = null
+}
+
+// What the person typed: the submitted text without the leftover it was joined to. A submit that is only the leftover again is
+// pressing Enter on the box, and stays whole.
+export const typedAfterBoxLeftover = (state: SessionState, submitted: string): string => {
+  const leftover = state.boxLeftover
+  const isJoined = leftover !== null && isHoldingForHandoff(state) && submitted.length > leftover.length && submitted.startsWith(leftover)
+  return isJoined ? submitted.slice(leftover.length) : submitted
+}
+
 // before_draft puts the prompt ahead of whatever the box holds. after_draft puts it behind, so prompts that reach the box
 // one after another keep their order.
 export type BoxPlacement = 'before_draft' | 'after_draft'
@@ -207,6 +230,7 @@ export const takeHeldPrompts = (state: SessionState): HeldPrompt[] => {
 // between the two. Holding stays on until takeLateArrivalsOrEndSending finds nothing left.
 export const beginSending = (state: SessionState): void => {
   const hold = state.handoffHold
+  state.boxLeftover = null
   state.handoffHold = {
     phase: 'sending',
     promptCarriedByHandoff: hold.phase === 'idle' ? null : hold.promptCarriedByHandoff,

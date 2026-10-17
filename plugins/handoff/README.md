@@ -152,6 +152,10 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
         delivered. Otherwise the next prompt is typed after the leftover text: `one` then `two`
         would be held as `one` and `onetwo`. The clear is skipped for a prompt the handoff has
         already taken to deliver or put back, since a restore may have put its text back in the box.
+        The clear can run before Claude Code has put the text back, so the plugin also remembers the
+        text it left until a clear finds and removes it. If the next prompt arrives as that text
+        followed by the new one (`five`, then `fivesix`), only the part after it is held (`six`).
+        A prompt that merely starts like the earlier one is kept whole once a clear has removed it.
       - Before a handoff started by a prompt in `act` runs, since the handoff sends that prompt itself.
       - After a held prompt has been submitted in the fresh session, so Enter does not send it a
         second time. A group put back by an abandoned handoff and submitted rather than boxed is
