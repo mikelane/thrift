@@ -726,4 +726,32 @@ test_a_well_formed_decision_log_is_counted() {
   assert_out_has 'COUNT=1'
 }
 
+# live_sh_in_repo <live-cwd-relative-to-repo>: live.sh from a copy inside a fresh git repository, with
+# LIVE_CWD set to a directory of that repository.
+live_sh_in_repo() {
+  write_live_stubs
+  local repo=$TEST_DIR/repo
+  mkdir -p "$repo/scripts"
+  cp -R "$LIVE_DIR" "$repo/scripts/live"
+  make_plugin_fixture "$repo/plugins/handoff"
+  git -C "$repo" init -q
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_CWD="$repo/$1" \
+    "$BASH" "$repo/scripts/live/live.sh" handoff held-prompt-box > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+
+# Inside a .git directory `git rev-parse --is-inside-work-tree` prints false and exits 0.
+test_a_working_directory_inside_dot_git_is_not_taken_for_a_work_tree() {
+  live_sh_in_repo .git/live-cwd
+  assert_out_lacks 'inside a git work tree'
+  assert_tmux_called 'new-session'
+}
+
+test_a_working_directory_inside_a_work_tree_is_an_error() {
+  live_sh_in_repo scratch
+  assert_exit_code 2
+  assert_out_has 'inside a git work tree'
+  assert_tmux_not_called 'new-session'
+}
+
 run_tests "$@"
