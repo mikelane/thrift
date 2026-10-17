@@ -11,7 +11,10 @@ import {
   type PressActions,
 } from './band-controller'
 import { snapshotTrigger, type Trigger } from './decision-record'
-import { announce, debug, logFailure, registerHandoffCommand } from './engine-log'
+import { announce } from './announcement'
+import { registerHandoffCommand } from './command-registration'
+import { debug, logFailure } from './engine-log'
+import { startHandoffCommand } from './handoff-command'
 import { submitOrKeepInTranscript } from './handoff-delivery'
 import { isBackgroundBusy } from './background-busy'
 import { scheduleCompaction } from './compaction'
@@ -21,8 +24,7 @@ import { writeRecord } from './record-writer'
 import { decideDuringHandoff } from './handoff-hold'
 import { noteBoxLeftover } from './box-leftover'
 import { isUntestedEngine } from './engine-version'
-import { ALREADY_PENDING } from './handoff-note'
-import { clearBoxCopyWhileHeld, composerPrompt, emptyBoxIfHolding, refillBox } from './prompt-box'
+import { clearBoxCopyWhileHeld, composerPrompt, refillBox } from './prompt-box'
 import {
   canHoldPrompt,
   carriesExtras,
@@ -50,7 +52,6 @@ import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
 
-const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
 
@@ -162,19 +163,6 @@ const decidePrompt = async ($: EngineInterface, state: SessionState, e: PromptSu
   if (action === 'hold') return holdPrompt($, state, e.text, trigger)
   await writeRecord($, state, { ...trigger, action: 'none' })
   return null
-}
-
-const startHandoffCommand = async ($: EngineInterface, state: SessionState) => {
-  const trigger = snapshotTrigger(state, 'command', 'none', await isBackgroundBusy($, state))
-  const heldPrompt = state.heldPrompt
-  const emptyBox = heldPrompt === null ? undefined : () => emptyBoxIfHolding($, heldPrompt)
-  const isClaimed = scheduleHandoff(
-    $,
-    state,
-    { trigger, ...(heldPrompt === null ? {} : { heldPrompt }), isUnattended: false },
-    emptyBox,
-  )
-  return { text: isClaimed ? WRITING_COMMAND_REPLY : ALREADY_PENDING }
 }
 
 const pressActionsFor = ($: EngineInterface): PressActions => ({

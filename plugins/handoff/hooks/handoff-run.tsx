@@ -11,7 +11,8 @@ import {
   type HandoffRequest,
   type SettledHandoff,
 } from './decision-record'
-import { announce, debug, logFailure } from './engine-log'
+import { announce } from './announcement'
+import { debug, logFailure } from './engine-log'
 import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import { continueInFreshSession, restoreHeldGroups, restoreLateArrivals } from './handoff-delivery'
 import { HANDOFF_PROMPT, NO_HANDOFF_MESSAGE, groupHeldPrompts, noHandoffMessage } from './handoff-note'
