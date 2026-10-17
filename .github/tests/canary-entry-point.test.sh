@@ -94,14 +94,13 @@ test_entry_point_fails_when_a_test_file_reports_no_tests_run() {
 
 # Every test file honors the name fragment: a file that ignores it runs all its tests under a fragment
 # meant for another file, and the entry point cannot tell (#78).
-test_every_test_file_exits_4_for_a_name_fragment_that_matches_none_of_its_tests() {
-  local test_file status ignoring_files=''
-  for test_file in "$HARNESS_DIR"/*.test.sh; do
-    status=0
-    "$BASH" "$test_file" zzz-matches-no-test-anywhere > /dev/null 2>&1 || status=$?
-    [[ "$status" == 4 ]] || ignoring_files+=" ${test_file##*/}(exit $status)"
-  done
-  [[ -z "$ignoring_files" ]] || fail "these test files do not exit 4 for a fragment that matches none of their tests:$ignoring_files"
+# The real entry point over the real test files: any file that runs a test makes it exit 0, not 1.
+test_entry_point_runs_no_test_file_for_a_name_fragment_that_matches_no_test() {
+  EXIT_CODE=0
+  "$BASH" "$HARNESS_DIR/canary-report.sh" zzz-matches-no-test-anywhere > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 1
+  assert_out_has 'No tests ran'
+  assert_out_lacks 'PASS '
 }
 
 run_tests "$@"
