@@ -9,8 +9,9 @@ session.
 Success means fewer cache-read tokens per turn in long sessions, measured against the shadow
 baseline that `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.302, but nothing here has been watched
-> in a live terminal yet. See [What has not been verified](#what-has-not-been-verified).
+> **Status:** early. The tests pass against Claude Code 2.1.302. Parts of the handoff have been
+> watched in live terminals (a hand run on 2.1.299, a tmux harness on 2.1.302); the rest has not.
+> See [What has not been verified](#what-has-not-been-verified).
 
 ## Install
 
@@ -50,7 +51,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    is a weak one.
 4. **It hands off.** The steps, in order:
    1. Replace the band's content with a status line, "Writing a handoff note — this takes a few
-      seconds…", with no buttons and no hotkeys, and show the same text as a toast. The status line shows
+      seconds…", with no buttons and no hotkeys, and show the same text as a toast. With
+      `compactBeforeClear` on, the line stays up for the whole compaction, which took about 30 seconds
+      on 2.1.299, so "a few seconds" understates it there. The status line shows
       whatever started the handoff: a band press, act mode, `/handoff`, or a held prompt handed off
       first. Presses and hotkeys do nothing while it is up.
       It comes down when the clear runs, when the handoff is abandoned, or when a step throws. If you
@@ -77,14 +80,14 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
    5. Check for background work again, because a turn may have started some while the handoff
       waited.
       - Work is running and the handoff did not come from a typed `/handoff`: stop. Nothing is
-        cleared. A toast and a transcript line say a handoff would cut the work off, whether the
-        session was compacted, and that typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
+        cleared. A toast and a transcript line say the work's results would reach a fresh session without
+        this conversation, whether the session was compacted, and that typing `/handoff` hands off anyway. Held prompts go back as they do on any failure, and a
         `none` record with reason `background_busy` is written.
       - Work is running and the handoff came from a typed `/handoff`: go on, as it does when it
         starts while work is busy.
       - A turn started during this check: go back to step 3.
-      - Otherwise queue `/clear` in the same tick as the last check for a running turn. `$.command.run`
-        only queues the command, and a prompt the engine queued earlier (a peer's message, a task
+      - Otherwise queue `/clear` after the last check for a running turn. `$.command.run`
+        only queues the command, so the clear does not run in the same tick, and a prompt the engine queued earlier (a peer's message, a task
         notification) runs first, in the old session, so a turn can still start before the clear
         takes effect. Such a turn is a late turn: it adds the "A turn ran in the previous session"
         line in step 6 and sets `late_turn` on the `cleared` record. The plugin reports a late turn; it
@@ -185,8 +188,9 @@ only when the prompt holds a ticket-shaped token.
 `Bash` or `Monitor` task that has not reported back. A `<task-notification>` prompt that carries the
 task id marks it done, and so does a `TaskStop` or `KillShell` call that was not denied. Task ids
 are validated against `^[A-Za-z0-9_-]+$`. If the agent list cannot be read, the plugin assumes background work is running.
-A handoff would orphan the session that background work reports to, so it turns a strong signal
-into a weak one.
+Background work survives a clear and reports in the fresh session (seen with background `Bash` on
+2.1.299; subagents were not tested). Its results would reach a session that has only the note, not the
+conversation that started the work, so background work turns a strong signal into a weak one.
 
 ### What each mode does
 
@@ -294,7 +298,7 @@ from being evaluated.
   first settles. A held press for a prompt that is no longer held says so and takes the band down.
 - Background work is checked again when a press runs. If work started since the band was drawn and
   the press would clear (Hand off and clear, Hand off and send it), nothing is cleared: a toast says
-  a handoff would cut the work off and that typing `/handoff` hands off anyway, the band is redrawn in its busy shape (Compact and Not now, or
+  the work's results would reach a fresh session without this conversation and that typing `/handoff` hands off anyway, the band is redrawn in its busy shape (Compact and Not now, or
   Send here alone for a held prompt), and a `none` record with reason `background_busy` is written. The record's signal is `weak`, which is what
   a busy session classifies as. A band that was taken down or replaced since the press is not redrawn.
   A turn that ends interrupted or in error likewise refreshes a standing band's busy state.
@@ -303,8 +307,9 @@ from being evaluated.
 - The band comes down when you press a button that runs, when the turn-end evaluation offers
   nothing, or when you press Enter again on a held prompt. A task notification or your next
   prompt no longer takes it down.
-- A band still up when the plugin reloads (a code change, or a setting changed in `/config`) comes
-  down when the reload fires `session.start` (not yet verified live for a `/config` change).
+- A band still up when the plugin starts again comes down when `session.start` fires. A setting
+  changed in `/config` fires `session.start` (seen twice live on 2.1.299). `/reload-plugins` does not
+  (see Engine assumptions below).
 - Pressing Send here or Hand off and send it takes the held prompt out of the box and leaves any
   draft typed beside it.
 
@@ -382,7 +387,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `ts` | ISO 8601 UTC |
 | `session_id` | The session the decision is about. A `cleared` record, and any record a handoff writes after the wait (an abandon, a failed or vetoed compaction), carries the id of the session the handoff started in, even if the session changed meanwhile. |
 | `component` | Always `handoff` |
-| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press on a band shown before a plugin reload can arrive while the plugin runs in `off`, before the reload's own `session.start`: the record still says `active`, and `trigger_values.effective_mode` says `off`. |
+| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press on a band shown before a `/config` change can arrive while the plugin runs in `off`, before the `session.start` that follows: the record still says `active`, and `trigger_values.effective_mode` says `off`. A press right after `/reload-plugins` logged `active` with `effective_mode` `ask` on 2.1.299, because the plugin kept its mode. |
 | `action` | `none`, `advised` (a band was shown), `cleared`, `compacted`, or `untested_engine` |
 | `engine_version` | The Claude Code release (`base`), or the full version when there is no `base`. A change in behavior shows up as a split between versions. |
 | `trigger_values.point` | `turn-end`, `prompt`, `command`, `button`, or `session-start` |
@@ -391,7 +396,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.threshold` | `handoffContextTokens` |
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode`. The plugin may run as `off` anyway (see Compatibility); `effective_mode` shows the mode it ran in |
-| `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a plugin reload. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
+| `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when Claude had not finished a reply in the session to fork (a new session before its first turn ends, right after a `/clear`, or a resume that starts the conversation afresh). Absent for every other reason the fork wrote no note |
@@ -427,9 +432,11 @@ plugin without any error. Four layers guard against that:
    is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
    shows one notice as a toast and in the transcript (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
    fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
-   an interactive run, so after a hot reload it stays `off` until the reload's own `session.start`
-   has run. The engine's declarations say `session.start` fires once per fresh load of a plugin, a reload included
-   (never for a `/clear`); whether it does for a setting changed in `/config` is not yet verified live.
+   an interactive run, so after a restart of the plugin it stays `off` until `session.start` has run.
+   The engine's declarations say `session.start` fires once per fresh load of a plugin (never for a
+   `/clear`). On 2.1.299 a setting changed in `/config` fired it, but `/reload-plugins` did not: the
+   plugin kept its state and mode. Editing a file under `--plugin-dir` does not reload the plugin; the
+   change waits for `/reload-plugins`.
    In an interactive session `/handoff` still works, because you asked for it at a moment you
    chose, and the toast says so. A session with no prompt (`-p`, the SDK) never registers
    `/handoff`, so there the toast does not mention it.
@@ -439,32 +446,58 @@ plugin without any error. Four layers guard against that:
 |---|---|
 | 0.1.0 | 2.1.302 |
 
+## What has been verified live
+
+Most of this is covered by tests against the engine's own test kit. These were also watched in real
+sessions, by hand on Claude Code 2.1.299 and with `scripts/live/live.sh` on 2.1.302 (see issue #43
+for the runs):
+
+- `/handoff` is registered again after a handoff's clear: one menu entry, one dispatch, one record.
+- A prompt typed during the note is sent after the note in the fresh session, and several are held in
+  order and joined with blank lines. The harness (`held-prompt-origin`, 2.1.302) checks that the
+  fresh session's transcript has them as the person's (`asUser`), not as a plugin message.
+- A person-origin held prompt leaves the box once it is delivered (`held-prompt-box`, harness).
+- A prompt the engine queued during a handoff (a peer's, during the compaction) runs in the old
+  session, so the plugin reports it as a late turn (`peer-during-compaction`, harness).
+- `/clear` typed during a handoff is queued behind the handoff's own clear. Both run, the
+  `cleared` record has `cleared_by: person`, and the note lands in the final session. It leaves an
+  empty session in the resume list.
+- The waiting status shows ("Handoff note written. The handoff continues when the current turn
+  ends. Your prompts stay held.") and wraps cleanly at about 90 columns.
+- A busy abandon after `compactBeforeClear` (`busy-abandon`, 2.1.302): a `none` record with
+  `background_busy` and `compacted_before_clear: true`, no `cleared` record, the held prompt back in
+  the box, and `claude --resume <old id>` reopens the old session compacted.
+- Background `Bash` survives a clear and reports in the fresh session (2.1.299).
+- The decision-log writer exits 0 on macOS, and the untested-engine notice reads as documented in
+  an interactive session. Under `-p` no notice reaches stdout or the transcript.
+
 ## What has not been verified
 
-Everything above is covered by tests against the engine's own test kit. These need a live
-terminal and have not been watched yet:
+These need a live terminal and have not been watched yet:
 
 - How the band renders (its `subtle` shading, the `h:` labels, whether the colour reads well in light
   and dark themes), that `0` in an empty prompt, ctrl+x Tab then a letter or Enter, and a click each
   press a button, and that each button does what its label says.
 - How the band lays out in a narrow terminal (around 40 columns), in fullscreen and on the main
   screen: that the buttons wrap onto new rows rather than clip, and that the message and hint lines
-  wrap.
-- A press that waited colliding with a prompt queued mid-turn: the queued prompt may start the next
-  turn before the scheduled clear or compaction runs.
+  wrap. The waiting status was seen at about 90 columns only.
 - That `turn.start` and `turn.complete` bracket every model turn, so a press made mid-turn is held and
   then released.
-- That `/handoff` survives a `/clear`, and that the plugin's re-registration after a clear works.
 - That the advisor's call count is `1 + the advisor entries` in `serverToolUses`, and that
   `$.session.usage().context.tokens` is not a step behind the step's own total.
-- That `claude --resume <old id>` reopens the old session after a handoff.
-- That the status lines (writing, then waiting for a turn) show and are gone after the clear, and that no `handoff:`
-  appears twice in a transcript line or toast.
 - Whether the appended note shows in the fresh session's transcript, or only in its context. If it
   does not show, a "note loaded" line would be needed; none is written yet.
-- That a held prompt refills the box, and what the box does across a `/clear`.
-- That a held prompt typed at this terminal leaves the box empty once the fresh session has it, and that a draft typed meanwhile survives (#56).
-- That a background shell turns a handoff into a compact.
+- That a held prompt refills the box in `act` and `ask` modes.
+- Held prompts from a bridge or SDK client, a scheduled prompt that is resubmitted, and the drop
+  reason a remote sender sees.
+- The paths that need a refused submit or fill: a second held group refused, `fill` returning
+  `isFilled: false`, and both refused (#67).
+- `/resume` while a handoff is compacting or waiting, and a `/handoff` typed before `session.start`.
+- That `/handoff` in a session with no reply yet shows the "Nothing to hand off yet" message (#54).
+- That the writing status comes down after the clear, and that no `handoff:` appears twice in a
+  transcript line or toast.
+- That a background shell makes the band offer Compact instead of a handoff, and that background
+  subagents behave like background `Bash` across a clear.
 
 ## Development
 
@@ -477,11 +510,12 @@ claude plugin test plugins/handoff
 `claude plugin test` measures no coverage. Review enforces it: every exported function and every
 branch in `hooks/` has a test whose name says which.
 
-A hot reload in the middle of a handoff (a code change under `--plugin-dir` watch, or a setting
-changed in `/config`) starts fresh state. The handoff already running keeps the old state: its
+A restart of the plugin in the middle of a handoff (a setting changed in `/config` fires
+`session.start`; on 2.1.299 `/reload-plugins` kept the plugin's state, and a code change waits for
+`/reload-plugins`) may start fresh state. The handoff already running keeps the old state: its
 prompts are no longer held, `/clear` can land inside a turn, and it waits forever if it was waiting
-for a turn to end. This needs a reload while a handoff runs, from the note being written until its
-prompts are delivered, and it is not guarded. After a reload, run `/handoff` again.
+for a turn to end. This needs a restart while a handoff runs, from the note being written until its
+prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 
 | File | What it holds |
 |---|---|
