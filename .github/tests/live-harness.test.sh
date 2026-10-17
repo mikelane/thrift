@@ -59,6 +59,19 @@ test_cleanup_kills_each_own_session_by_exact_name_and_never_the_server() {
   assert_tmux_not_called 'kill-server'
 }
 
+# claude writes its debug log while it shuts down, after kill-session returns. A cleanup that removes
+# the run directory at once has it made again a second later, with the logs in it, after a PASS.
+# The stand-in for claude is not a child of the harness, as a session's process is not.
+test_cleanup_waits_for_each_session_process_to_exit_before_it_removes_the_run_directory() {
+  run_live 'live_init
+    session_process=$(sh -c "sleep 1; mkdir -p \"\$1\"; : > \"\$1/debug-a.log\"" sh "$LIVE_RUN" >/dev/null 2>&1 & echo $!)
+    tmux() { [[ "$1" != display-message ]] || echo "$session_process"; }
+    LIVE_SESSIONS=(live-1-a); check ok detail true; live_verdict s'
+  sleep 2
+  assert_exit_code 0
+  [[ -z "$(find "$TEST_DIR/tmp" -maxdepth 1 -name 'live.*')" ]] || fail 'the run directory came back after a PASS'
+}
+
 test_hangup_kills_the_sessions_and_keeps_the_run_directory() {
   run_live 'live_init; LIVE_SESSIONS=(live-2-a); kill -HUP $$; sleep 5 & wait $!'
   assert_exit_code 129

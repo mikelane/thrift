@@ -55,9 +55,13 @@ live_cleanup() {
     interrupt_message="interrupted while waiting for $LIVE_WAITING"
     screens=$(live_pane_report 'at the interrupt')
   fi
+  local session_processes=() process
   for session in ${LIVE_SESSIONS[@]+"${LIVE_SESSIONS[@]}"}; do
+    process=$(tmux display-message -p -t "=$session:" '#{pane_pid}' 2>/dev/null)
+    [[ "$process" =~ ^[1-9][0-9]*$ ]] && session_processes+=("$process")
     tmux kill-session -t "=$session" 2>/dev/null
   done
+  live_await_exit ${session_processes[@]+"${session_processes[@]}"}
   # A session deletes its kept-variables file once it reads it; one that never started leaves it.
   [[ -z "$LIVE_RUN" ]] || rm -f -- "$LIVE_RUN"/session-env-* 2>/dev/null \
     || live_say "warning: could not remove the session environment files in $LIVE_RUN (they can hold the OAuth token)"
@@ -72,6 +76,19 @@ live_cleanup() {
     fi
   fi
   exit "$status"
+}
+
+# live_await_exit <pid...>: waits, at most LIVE_EXIT_WAIT seconds, for a killed session's claude to
+# exit. claude writes its debug log while it shuts down, after kill-session returns, and a debug log
+# written after the run directory is removed makes the directory again. The pane's process is claude:
+# the session command execs it.
+LIVE_EXIT_WAIT=10
+live_await_exit() {
+  local deadline=$((SECONDS + LIVE_EXIT_WAIT)) process
+  for process in "$@"; do
+    while kill -0 "$process" 2>/dev/null && ((SECONDS < deadline)); do sleep "$LIVE_POLL"; done
+  done
+  return 0
 }
 
 # live_say <text>: a diagnostic line on stderr. A closed or broken stderr loses it and nothing more.
