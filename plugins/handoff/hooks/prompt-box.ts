@@ -1,9 +1,10 @@
 import type { EngineInterface } from 'claude-code'
 
+import { forgetBoxLeftover, noteBoxCleared } from './box-leftover'
 import { debug } from './engine-log'
 import { boxCopiesOf, holdsPrompt, withoutBoxCopy, withoutPrompt, type Carried } from './handoff-note'
 import { isComposerOrigin } from './prompt-plan'
-import { forgetBoxLeftover, noteBoxCleared, type BoxPlacement, type HeldPrompt, type SessionState } from './session-state'
+import { type BoxPlacement, type HeldPrompt, type SessionState } from './session-state'
 
 export const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
 export const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'

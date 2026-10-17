@@ -1,6 +1,7 @@
 import type { EngineInterface, PromptSubmitInput } from 'claude-code'
 
 import { debug, logFailure } from './engine-log'
+import { noteBoxLeftover, noteLeftoverStrip, typedAfterBoxLeftover } from './box-leftover'
 import { clearBoxCopyWhileHeld, returnToBox } from './prompt-box'
 import { carriesExtras, isComposerOrigin, isUnattendedOrigin, planPromptDuringHandoff, senderLabel } from './prompt-plan'
 import {
@@ -8,10 +9,7 @@ import {
   isAwaitingDelivery,
   isCarriedByHandoff,
   isHoldingForHandoff,
-  noteBoxLeftover,
-  noteLeftoverStrip,
   refusedPromptPlacement,
-  typedAfterBoxLeftover,
   type BoxPlacement,
   type HeldPrompt,
   type SessionState,

@@ -40,6 +40,7 @@ import {
 } from './decision-record'
 import { debug, logFailure } from './engine-log'
 import { decideDuringHandoff } from './handoff-hold'
+import { noteBoxLeftover } from './box-leftover'
 import { isUntestedEngine } from './engine-version'
 import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import {
@@ -109,7 +110,6 @@ import {
   startSubagentTurn,
   endSubagentTurn,
   takeHeldPrompts,
-  noteBoxLeftover,
   takeLateArrivalsOrEndSending,
   waitForTurnEnd,
   type BoxPlacement,
