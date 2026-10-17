@@ -193,13 +193,13 @@ test('It says the note could not be added to this session, with the resume comma
 
 test('It says the session is unchanged from busyRefusalMessage when nothing was compacted', () => {
   expect(busyRefusalMessage(false)).toBe(
-    'Background work is running, and a handoff would cut it off. This session is unchanged. Type /handoff to hand off anyway.',
+    'Background work is running, and its results would reach a fresh session without this conversation. This session is unchanged. Type /handoff to hand off anyway.',
   )
 })
 
 test('It says the session was compacted, not cleared, from busyRefusalMessage after a compaction', () => {
   expect(busyRefusalMessage(true)).toBe(
-    'Background work is running, and a handoff would cut it off. This session was compacted, not cleared. Type /handoff to hand off anyway.',
+    'Background work is running, and its results would reach a fresh session without this conversation. This session was compacted, not cleared. Type /handoff to hand off anyway.',
   )
 })
 

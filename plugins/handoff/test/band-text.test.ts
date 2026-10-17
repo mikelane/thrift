@@ -43,11 +43,11 @@ const questionCases = [
   ],
   [
     { signal: 'strong', contextTokens: 152_400, hasHeldPrompt: true, isBusy: true },
-    'A handoff would orphan that work, so send it here?',
+    'Background work is still running, and its results would reach a fresh session without this conversation, so send it here?',
   ],
   [
     { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true },
-    'A handoff would orphan that work, so compact instead?',
+    'Background work is still running, and its results would reach a fresh session without this conversation, so compact instead?',
   ],
   [
     { signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: false },
@@ -61,9 +61,9 @@ for (const [offer, question] of questionCases) {
   })
 }
 
-test('It warns that a handoff would orphan background work from bandMessage', () => {
+test('It warns that background work would reach a fresh session without this conversation from bandMessage', () => {
   const message = bandMessage({ signal: 'weak', contextTokens: 190_000, hasHeldPrompt: false, isBusy: true })
-  expect(message).toContain('orphan')
+  expect(message).toContain('results would reach a fresh session')
 })
 
 const labelCases = [

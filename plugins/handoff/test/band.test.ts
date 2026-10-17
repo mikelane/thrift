@@ -89,7 +89,7 @@ test('It offers no handoff button while background work runs', ASK, async ($, on
   expect(await labelsOf(band)).toEqual(['Compact', 'Not now'])
 })
 
-test('It says a handoff would orphan background work in that band', ASK, async ($, on) => {
+test('It says background work is still running in that band', ASK, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)

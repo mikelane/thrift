@@ -89,10 +89,10 @@ export const isSameOffer = (a: BandState, b: BandState): boolean =>
   a.signal === b.signal && a.contextTokens === b.contextTokens && a.hasHeldPrompt === b.hasHeldPrompt && a.isBusy === b.isBusy
 
 const question = ({ signal, hasHeldPrompt, isBusy }: Offer): string => {
-  if (hasHeldPrompt && isBusy) return 'A handoff would orphan that work, so send it here?'
+  if (hasHeldPrompt && isBusy) return 'Background work is still running, and its results would reach a fresh session without this conversation, so send it here?'
   if (hasHeldPrompt) return 'Hand off and send it in a fresh session, or send it here?'
   if (signal === 'strong') return 'Hand off to a fresh session now?'
-  if (isBusy) return 'A handoff would orphan that work, so compact instead?'
+  if (isBusy) return 'Background work is still running, and its results would reach a fresh session without this conversation, so compact instead?'
   return 'Compact, or hand off to a fresh session?'
 }
 
