@@ -35,6 +35,7 @@ import {
   submitOrKeepInTranscript,
 } from './handoff-delivery'
 import { isBackgroundBusy } from './background-busy'
+import { scheduleCompaction } from './compaction'
 import { CLEARED_BY, abandonAfterWait, type AbandonHandoff, waitForClearWindow } from './clear-window'
 import { inspectPrompt } from './prompt-inspection'
 import { writeRecord } from './record-writer'
@@ -114,35 +115,6 @@ const reportedContext = async ($: EngineInterface): Promise<number | undefined> 
     debug($, `could not read session usage: ${String(error)}`)
     return undefined
   }
-}
-
-const runCompaction = async ($: EngineInterface, state: SessionState, trigger: Trigger) => {
-  const sizeBefore = state.contextTokens
-  try {
-    const compaction = await $.session.compact()
-    if (compaction.skip !== undefined) {
-      state.backoffFrom = sizeBefore
-      await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
-    } else {
-      await writeRecord($, state, { ...trigger, action: 'compacted' })
-      state.backoffFrom = compaction.tokensAfter ?? sizeBefore
-      state.contextTokens = compaction.tokensAfter ?? sizeBefore
-    }
-  } catch (error) {
-    state.backoffFrom = sizeBefore
-    debug($, `compaction failed: ${String(error)}`)
-    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed' })
-  } finally {
-    state.pending = null
-  }
-}
-
-const scheduleCompaction = ($: EngineInterface, state: SessionState, trigger: Trigger): boolean => {
-  if (!claimPending(state, 'compact')) return false
-  $.clock.after(0, () => {
-    void logFailure($, runCompaction($, state, trigger))
-  })
-  return true
 }
 
 // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
