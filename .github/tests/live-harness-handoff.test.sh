@@ -13,10 +13,8 @@ test_start_waiting_handoff_types_the_peer_message_before_it_presses_the_band_and
     start_waiting_handoff a b "do the task"'
   assert_exit_code 0
   assert_out_has 'CALL start a --allowedTools Bash(sleep *)'
-  local order
-  order=$(grep -o 'CALL type b\|CALL press a h\|CALL press b Enter\|CALL wait the handoff to wait' "$OUTPUT" | paste -sd, -)
-  [[ "$order" == 'CALL type b,CALL press a h,CALL press b Enter,CALL wait the handoff to wait' ]] \
-    || fail "the calls came in this order: $order"
+  grep -o 'CALL type b\|CALL press a h\|CALL press b Enter\|CALL wait the handoff to wait' "$OUTPUT" | paste -sd, - > "$TEST_DIR/order"
+  assert_file_has "$TEST_DIR/order" 'CALL type b,CALL press a h,CALL press b Enter,CALL wait the handoff to wait'
 }
 
 # run_restore_order <screen> <debug-log-lines>: the scenario with the screen, the debug log and one
@@ -93,7 +91,7 @@ run_judge() {
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
     judge_case c '"$expectation"' '"$ends"'
-    live_verdict s' NOTE_FILE="${NOTE_FILE:-fresh}"
+    live_verdict s'
 }
 
 cleared_record() { echo "{\"action\":\"cleared\",\"session_id\":\"${1:-old1}\",\"trigger_values\":{\"cleared_by\":\"${2:-person}\",\"effective_mode\":\"${3:-ask}\"}}"; }
