@@ -333,7 +333,8 @@ test('It keeps waiting for the main turn when a subagent turn starts and ends in
   await startTurn($)
   await finishNote()
   await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
-  await endTurn($, world, { agentId: 'sub1' })
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 'sub-t1', reason: 'answer', agentId: 'sub1' })
+  await world.clock.settle()
   expect(world.effects).not.toContain('clear')
 })
 

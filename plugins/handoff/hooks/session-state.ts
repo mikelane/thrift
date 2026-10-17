@@ -263,7 +263,7 @@ export const startMainTurn = (state: SessionState, turnText: string): void => {
   const matchIndex = state.resubmittedPrompts.findIndex(prompt => turnText.includes(prompt.text))
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
-  noteTurnStarted(state)
+  recordTurnStart(state)
 }
 
 // A subagent's or teammate's turn is work the note missed, whoever started it, so it counts toward both lines. It is not a
@@ -273,7 +273,7 @@ export const startMainTurn = (state: SessionState, turnText: string): void => {
 // runs counts it as beginNoteWindow counts a running main turn.
 export const startSubagentTurn = (state: SessionState, turnId: string): void => {
   state.runningSubagentTurns.add(turnId)
-  noteTurnStarted(state)
+  recordTurnStart(state)
 }
 
 // A subagent turn whose start this plugin did not hear (its spawn was nested in a hook) ends with nothing to remove.
@@ -284,7 +284,7 @@ export const endSubagentTurn = (state: SessionState, turnId: string): void => {
 }
 
 // A turn in the session the person cleared to is not one the note missed, so it does not count.
-const noteTurnStarted = (state: SessionState): void => {
+const recordTurnStart = (state: SessionState): void => {
   if (state.sessionEndBeforeClear === null) state.hasTurnAfterNote = true
   if (state.isOwnClearQueued) state.hasLateTurn = true
 }

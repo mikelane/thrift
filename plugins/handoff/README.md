@@ -69,8 +69,9 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       prompts stay held meanwhile, and presses and hotkeys still do nothing. The wait is written to
       the debug log when it begins and when it ends. The waiting text says "continues", not "clears",
       because the handoff can still stop after the wait (step 5).
-      Only a main-thread turn counts as running: a subagent's turn never holds the handoff, though one that
-      starts after the note, or is still running when the note begins, still adds the "turn ran" line.
+      Only a main-thread turn counts as running, so a subagent's turn never holds the handoff. A
+      subagent turn that starts after the note, or is still running when the note begins, does add
+      the "A turn ran in the previous session" line in step 6.
    4. If `compactBeforeClear` is on, compact the old session now, after the wait, so the compaction
       never lands inside a turn. A failed or vetoed compaction is logged and the handoff goes on. A
       successful one writes no record of its own. The record that ends the handoff carries
