@@ -154,7 +154,7 @@ test_live_sh_runs_a_plugin_that_has_scenarios_but_no_common_sh() {
   write_live_stubs
   local repo=$TEST_DIR/repo
   mkdir -p "$repo/scripts/live/bare/scenarios"
-  cp "$LIVE_DIR/live.sh" "$LIVE_DIR/lib.sh" "$repo/scripts/live/"
+  cp "$LIVE_DIR/live.sh" "$LIVE_DIR/lib.sh" "$LIVE_DIR/session.sh" "$LIVE_DIR/evidence.sh" "$repo/scripts/live/"
   printf '%s\n' 'scenario_run() { check "scenario ran" "no" true; }' > "$repo/scripts/live/bare/scenarios/only.sh"
   make_plugin_fixture "$repo/plugins/bare"
   EXIT_CODE=0

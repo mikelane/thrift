@@ -76,7 +76,7 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   `CLAUDE_CODE_VERSION`, the session and messaging ids), so a run from inside Claude Code's Bash
   tool starts sessions like one from a terminal. It then sets the login and provider choice from
   the harness's own environment (`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`,
-  `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is `LIVE_KEPT_ENV` in `lib.sh`), not
+  `CLAUDE_CODE_USE_*`, `CLAUDE_CODE_SKIP_*_AUTH`; the pattern is `LIVE_KEPT_ENV` in `session.sh`), not
   from a tmux server that was started earlier with other values. These values pass through an
   owner-only file in the run directory that the session deletes once read, so the OAuth token is
   never in the command text. The dropping happens inside the tmux session, so it also covers a tmux
@@ -148,8 +148,10 @@ previous session" line. Those two are the evidence for #57; the scenario checks 
 
 - `live.sh` parses the arguments, loads `lib.sh` and `<plugin>/common.sh`, then the scenario file,
   and calls `scenario_run`.
-- `lib.sh` holds the plugin-independent parts: starting and answering tmux sessions, `wait_for`,
-  reading the pane, the prompt box, the debug log and the decision log, and `check`.
+- `lib.sh` holds the plugin-independent parts: the cleanup and signal handling, `wait_for`, `check`
+  and the verdict. It sources `session.sh` (starting and answering tmux sessions, the keyboard) and
+  `evidence.sh` (reading the pane, the prompt box, the debug log and the decision log), so a caller
+  sources `lib.sh` alone.
 - `<plugin>/common.sh`, when present, holds that plugin's setup and shared flows.
 - `<plugin>/scenarios/<name>.sh` defines `scenario_run`, which drives the sessions, prints its
   evidence with the `show_*` helpers, and states its verdict with `check`.
