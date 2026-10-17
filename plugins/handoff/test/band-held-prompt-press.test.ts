@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import {
   bash,
@@ -6,10 +6,12 @@ import {
   clears,
   completeTurn,
   dropOf,
+  entered,
   growTo200k,
   install,
   mountBand,
   notify,
+  runCommand,
   startSession,
   startTurn,
   submitPerson,
@@ -17,11 +19,13 @@ import {
 } from './helpers'
 import { ASK, weakBand } from './band-turn-fixtures'
 
+const HELD = 'now ENG-2'
+
 const heldPromptBand = async ($: Parameters<typeof mountBand>[0], world: Parameters<typeof growTo200k>[1]) => {
   world.branch = 'alice/eng-1-start'
   await growTo200k($, world)
   await submitPerson($, 'start on ENG-1')
-  const dropped = await submitPerson($, 'now ENG-2')
+  const dropped = await submitPerson($, HELD)
   expect(dropOf(dropped)).toBe('Held your prompt. Choose below, or press Enter again to send it here.')
   return mountBand($)
 }
@@ -112,4 +116,36 @@ test('It does not tell the person to type 0 in an empty prompt while the held pr
   expect(world.box.text).toContain('now ENG-2')
   const band = await mountBand($)
   expect(await band.find({ text: /0 to dismiss|empty prompt/ })).toBeUndefined()
+})
+
+describe('pressHeldPromptButton', () => {
+  test('It empties the held prompt from the box when Send here is pressed', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await heldPromptBand($, world)
+    await world.clock.settle()
+    expect(world.box.text).toContain(HELD)
+    await band.press({ key: 'send-here' })
+    expect(world.box.text).not.toContain(HELD)
+  })
+
+  test('It empties the held prompt from the box when Hand off and send is pressed', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await heldPromptBand($, world)
+    await world.clock.settle()
+    await band.press({ key: 'handoff-send' })
+    expect(world.box.text).not.toContain(HELD)
+  })
+
+  test('It does not carry a prompt Send here already sent into a later /handoff', ASK, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await heldPromptBand($, world)
+    await band.press({ key: 'send-here' })
+    await world.clock.settle()
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(entered(world).filter(effect => effect.includes(HELD))).toHaveLength(1)
+  })
 })

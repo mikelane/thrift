@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, test, type Engine } from 'claude-code/testing'
 
+import { WAITING as WAITING_BAND } from '../hooks/band-text'
 import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
 import type { SettledHandoff } from '../hooks/decision-record'
-import { compacted, completeTurn, lastRecord, mountBand, startTurn } from './helpers'
-import { turnRunningWhenTheNoteIsWritten } from './wait-for-turn-helpers'
+import { compacted, completeTurn, lastRecord, mountBand, startTurn, type World } from './helpers'
 import {
   ACT,
   BUSY_MESSAGE,
@@ -15,8 +15,20 @@ import {
   endTurn,
   personClearedThenTurnInFreshSession,
   shownText,
+  turnRunningWhenTheNoteIsWritten,
   writingTheNote,
 } from './wait-for-turn-helpers'
+
+const WAITING_WRITE = JSON.stringify({ shape: 'offer-has-held-prompt', value: WAITING_BAND })
+
+// Ends the running turn inside the write that draws the waiting status, while the plugin awaits that write.
+const endTurnWhileWaitingIsDrawn = ($: Engine, world: World) => {
+  world.onOfferWrite = async value => {
+    if (JSON.stringify(value) !== WAITING_WRITE) return
+    await completeTurn($)
+    await world.clock.settle()
+  }
+}
 
 const settledHandoff: SettledHandoff = {
   trigger: { point: 'turn-end', signal: 'strong', isBusy: false, contextTokens: 200_000, cacheReadTokens: 0, effectiveMode: 'ask' },
@@ -119,11 +131,7 @@ describe('waitForClearWindow', () => {
 
   test('It clears when the running turn ends while the waiting status is being drawn', async ($, on) => {
     const { world, finishNote } = await turnRunningWhenTheNoteIsWritten($, on)
-    world.onOfferWrite = async value => {
-      if (!JSON.stringify(value).includes('"stage":"wait"')) return
-      await completeTurn($)
-      await world.clock.settle()
-    }
+    endTurnWhileWaitingIsDrawn($, world)
     await finishNote()
     expect(world.effects).toContain('clear')
   })
