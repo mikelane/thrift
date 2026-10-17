@@ -600,6 +600,19 @@ test_the_session_command_drops_the_claude_variables_it_inherited() {
   assert_out_lacks 'CLAUDE_CODE_SESSION_ID='
 }
 
+# tmux runs the command through its default-shell, which can be a POSIX sh (dash on Linux). printf %q
+# writes a string with a newline as $'...', which only bash and zsh read.
+test_the_session_command_runs_under_a_posix_sh() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_PID=4242 CLAUDE_CODE_OAUTH_TOKEN=tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; dash -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'BIN='
+  assert_out_has 'CLAUDE_CODE_OAUTH_TOKEN=tok'
+  assert_out_lacks 'CLAUDE_PID='
+}
+
 test_the_session_command_keeps_the_login_and_the_variables_the_harness_sets() {
   write_live_stubs
   write_env_dumping_claude "$TEST_DIR/bin/claude"
