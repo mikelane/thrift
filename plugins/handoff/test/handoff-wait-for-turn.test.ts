@@ -302,3 +302,19 @@ test('It waits for the turn instead of clearing when one starts during the pre-c
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'clear')).toHaveLength(1)
 })
+
+test('It clears when a subagent turn started with no main turn running and never sent a main turn complete', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await finishNote()
+  await world.clock.settle()
+  expect(world.effects).toContain('clear')
+})
+
+test('It adds the turn-after-note line when a subagent turn started during the note', async ($, on) => {
+  const { world, finishNote } = await writingTheNote($, on)
+  await $.turn.start({ text: 'background work', turnId: 'sub-t1', agentId: 'sub1' })
+  await finishNote()
+  await world.clock.settle()
+  expect(world.appended).toEqual([LATE_TURN_MESSAGE])
+})

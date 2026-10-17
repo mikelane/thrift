@@ -27,6 +27,25 @@ test('It marks a turn running and started since the note from startMainTurn', ()
   expect(state).toMatchObject({ isTurnRunning: true, hasTurnAfterNote: true })
 })
 
+test('It leaves isTurnRunning false for a subagent turn in startMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state, '', true)
+  expect(state.isTurnRunning).toBe(false)
+})
+
+test('It still marks a subagent turn after the note as missing from the note in startMainTurn', () => {
+  const state = createState(settings)
+  startMainTurn(state, '', true)
+  expect(state.hasTurnAfterNote).toBe(true)
+})
+
+test('It still marks a subagent turn after beginOwnClear as late in startMainTurn', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  startMainTurn(state, '', true)
+  expect(state.hasLateTurn).toBe(true)
+})
+
 test('It counts a turn already running when the note began as missing from the note in beginNoteWindow', () => {
   const state = createState(settings)
   startMainTurn(state, '')
