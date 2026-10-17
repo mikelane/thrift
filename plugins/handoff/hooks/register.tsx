@@ -10,8 +10,6 @@ import type {
 import type { BandState, Offer, Writing } from '../types'
 import {
   BUTTON_LABELS,
-  WAITING,
-  WAITING_STATUS,
   WRITING,
   WRITING_STATUS,
   bandControls,
@@ -27,7 +25,6 @@ import {
   heldGroupFields,
   leftoverStripFields,
   snapshotTrigger,
-  type ClearedBy,
   type DecisionReason,
   type HandoffRequest,
   type SettledHandoff,
@@ -41,6 +38,8 @@ import {
   sendOrKeepInBox,
   submitOrKeepInTranscript,
 } from './handoff-delivery'
+import { isBackgroundBusy } from './background-busy'
+import { CLEARED_BY, abandonAfterWait, type AbandonHandoff, waitForClearWindow } from './clear-window'
 import { inspectPrompt } from './prompt-inspection'
 import { writeRecord } from './record-writer'
 import { decideDuringHandoff } from './handoff-hold'
@@ -50,9 +49,7 @@ import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import {
   NO_HANDOFF_MESSAGE,
   busyRefusalMessage,
-  clearFailedMessage,
   noHandoffMessage,
-  sessionEndedMessage,
   HANDOFF_PROMPT,
   groupHeldPrompts,
 } from './handoff-note'
@@ -70,12 +67,9 @@ import {
   beginSending,
   beginHandoffHold,
   beginBeforeClear,
-  beginOwnClear,
   beginNoteWindow,
   claimPending,
   createState,
-  preClearOutcome,
-  type PreClearOutcome,
   endHandoff,
   endMainTurn,
   noteCacheReads,
@@ -88,7 +82,6 @@ import {
   startSubagentTurn,
   endSubagentTurn,
   takeHeldPrompts,
-  waitForTurnEnd,
   type ButtonPress,
   type SessionState,
 } from './session-state'
@@ -104,7 +97,6 @@ import { notifiedTaskId } from './tasks'
 import { noteToolCall } from './tool-call-tracking'
 import { planTurnEnd } from './turn-end-plan'
 
-const BUSY_AGENT_STATUSES = new Set(['pending', 'running', 'waiting'])
 const WRITING_COMMAND_REPLY = 'Writing a handoff for a fresh session...'
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
@@ -118,16 +110,6 @@ const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): st
 
 // The shape names the Offer fields, so a reload finds an offer an older version wrote (heldPrompt, not hasHeldPrompt) absent.
 const offerAtom = atom({ plugin: 'handoff', key: 'offer' } as const, null, { shape: 'offer-has-held-prompt' })
-
-const isBackgroundBusy = async ($: EngineInterface, state: SessionState): Promise<boolean> => {
-  if (state.backgroundTasks.size > 0) return true
-  try {
-    return (await $.agent.list()).some(agent => BUSY_AGENT_STATUSES.has(agent.status))
-  } catch (error) {
-    debug($, `could not list agents, treating background work as busy: ${String(error)}`)
-    return true
-  }
-}
 
 const readVersion = async ($: EngineInterface) => {
   try {
@@ -273,34 +255,6 @@ const writeNote = async ($: EngineInterface): Promise<NoteOutcome> => {
   }
 }
 
-// Whether the session was compacted: a vetoed or failed compaction leaves it as it was.
-const compactBeforeClearing = async (
-  $: EngineInterface,
-  state: SessionState,
-  trigger: Trigger,
-  sessionId: string,
-): Promise<boolean> => {
-  try {
-    const compaction = await $.session.compact()
-    if (compaction.skip === undefined) return true
-    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
-  } catch (error) {
-    debug($, `compaction before the clear failed: ${String(error)}`)
-    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
-  }
-  return false
-}
-
-const clearSession = async ($: EngineInterface): Promise<boolean> => {
-  try {
-    await $.command.run({ command: 'clear' })
-    return true
-  } catch (error) {
-    debug($, `/clear failed: ${String(error)}`)
-    return false
-  }
-}
-
 const prepareHandoff = async ($: EngineInterface, state: SessionState, request: HandoffRequest) => {
   let oldId: string | undefined
   try {
@@ -325,112 +279,6 @@ const prepareHandoff = async ($: EngineInterface, state: SessionState, request: 
   }
 }
 
-// A session end already decided the outcome, so the wait is no longer about a clear the handoff will issue.
-const showWaitingStatus = async ($: EngineInterface, state: SessionState) => {
-  if (state.sessionEndBeforeClear !== null) return
-  await redrawBand($, state, WAITING)
-  $.ui.toast(WAITING_STATUS)
-}
-
-// Once a session end decided the outcome, no clear will run: the wait is for delivering the note or for stopping.
-const WAIT_STARTED_LINES = {
-  none: 'waiting for a running turn to end before the handoff goes on',
-  cleared_by_person: 'waiting for a running turn to end before delivering the note',
-  other: 'waiting for a running turn to end before stopping the handoff',
-} as const satisfies Record<'none' | NonNullable<SessionState['sessionEndBeforeClear']>, string>
-
-const waitStartedLine = (state: SessionState): string => WAIT_STARTED_LINES[state.sessionEndBeforeClear ?? 'none']
-
-// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
-const CLEARED_BY = {
-  clear: 'handoff',
-  deliver_to_person_clear: 'person',
-} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy'>, ClearedBy>
-
-type ClearWindow = {
-  outcome: PreClearOutcome
-  hasCompactedBeforeClear: boolean
-  // Read in the same synchronous run that starts the clear, so a turn that the clear lets in cannot change it.
-  hasTurnAfterNote: boolean
-  // Set only when the outcome is 'clear': the handoff's own /clear, already started.
-  clearing: Promise<boolean> | null
-}
-
-// Waits out running turns, compacts if asked, and checks for background work, then starts the clear.
-// SAFETY: on the clear path, no await sits between the last isTurnRunning read and the $.command.run inside
-// clearSession. Every awaited step before the clear (the waiting status, the compaction, the busy check) is followed by
-// another pass through the wait, and the loop resumes straight from waitForTurnEnd, so a turn.start cannot land in the
-// gap. That is why the clear starts here, in the same synchronous run as the last read, and the caller only awaits the
-// promise it gets back: returning the outcome first and clearing in the caller would put an await in the gap.
-// clearSession's first step is the synchronous command call. Do not add an await after the loop, or move the clear
-// behind a helper that awaits first. The person-cleared branch may await in the caller: no clear runs there.
-const waitForClearWindow = async (
-  $: EngineInterface,
-  state: SessionState,
-  request: HandoffRequest,
-  oldId: string,
-): Promise<ClearWindow> => {
-  const mustRefuseWhenBusy = request.trigger.point !== 'command'
-  let isCompacted = !state.compactBeforeClear
-  let isBusy = false
-  let hasShownWaiting = false
-  let hasCompactedBeforeClear = false
-  for (;;) {
-    while (state.isTurnRunning) {
-      if (!hasShownWaiting) {
-        hasShownWaiting = true
-        debug($, waitStartedLine(state))
-        await showWaitingStatus($, state)
-        continue
-      }
-      await waitForTurnEnd(state)
-      debug($, 'resumed after the wait for a running turn')
-    }
-    if (state.sessionEndBeforeClear !== null) break
-    if (!isCompacted) {
-      isCompacted = true
-      hasCompactedBeforeClear = await compactBeforeClearing($, state, request.trigger, oldId)
-      continue
-    }
-    if (!mustRefuseWhenBusy) break
-    isBusy = await isBackgroundBusy($, state)
-    if (!state.isTurnRunning) break
-  }
-  const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy)
-  const clearWindow = { outcome, hasCompactedBeforeClear, hasTurnAfterNote: state.hasTurnAfterNote }
-  if (outcome !== 'clear') return { ...clearWindow, clearing: null }
-  beginOwnClear(state)
-  return { ...clearWindow, clearing: clearSession($) }
-}
-
-type AbandonCause = 'session_ended' | 'busy' | 'clear_failed'
-
-// Abandons a handoff after the wait: the session ended, background work was running, or the clear failed.
-// No clear starts here, so the no-await rule on waitForClearWindow does not apply.
-const abandonAfterWait = (
-  $: EngineInterface,
-  state: SessionState,
-  settledHandoff: SettledHandoff,
-  cause: AbandonCause,
-  hasCompactedBeforeClear: boolean,
-  oldId: string,
-): ReturnType<typeof abandonHandoff> => {
-  switch (cause) {
-    case 'session_ended':
-      return abandonHandoff($, state, settledHandoff, 'session_ended', sessionEndedMessage(hasCompactedBeforeClear, oldId), oldId)
-    case 'busy': {
-      const busySettled = { ...settledHandoff, trigger: busyRefusalTrigger(settledHandoff.trigger) }
-      return abandonHandoff($, state, busySettled, 'background_busy', busyRefusalMessage(hasCompactedBeforeClear), oldId)
-    }
-    case 'clear_failed':
-      return abandonHandoff($, state, settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
-    default: {
-      const unhandled: never = cause
-      return unhandled
-    }
-  }
-}
-
 const runHandoff = async (
   $: EngineInterface,
   state: SessionState,
@@ -444,10 +292,12 @@ const runHandoff = async (
     await beforeRun?.()
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
-    const { outcome, hasCompactedBeforeClear, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId)
+    const redraw = (band: BandState) => redrawBand($, state, band)
+    const abandon: AbandonHandoff = (settled, reason, message, sessionId) => abandonHandoff($, state, settled, reason, message, sessionId)
+    const { outcome, hasCompactedBeforeClear, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId, redraw)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
-    if (outcome === 'abandon_session_ended') return await abandonAfterWait($, state, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
-    if (outcome === 'abandon_busy') return await abandonAfterWait($, state, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_session_ended') return await abandonAfterWait(abandon, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_busy') return await abandonAfterWait(abandon, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {
@@ -460,7 +310,7 @@ const runHandoff = async (
     }
     const settledHandoff = settleAfterWait()
     if (!isCleared) {
-      return await abandonAfterWait($, state, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
+      return await abandonAfterWait(abandon, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
     const clearedBy = CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
