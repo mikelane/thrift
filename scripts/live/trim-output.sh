@@ -19,16 +19,16 @@ LIVE_TRIM_HOME=${HOME:-} awk '
   home == "" { print; next }
   {
     line = $0
-    out = ""
+    trimmed = ""
     while ((position = index(line, home)) > 0) {
-      after = substr(line, position + length(home), 1)
-      if (after ~ /[A-Za-z0-9._-]/) {
-        out = out substr(line, 1, position + length(home) - 1)
+      char_after_home = substr(line, position + length(home), 1)
+      if (char_after_home ~ /[A-Za-z0-9._-]/) {
+        trimmed = trimmed substr(line, 1, position + length(home) - 1)
       } else {
-        out = out substr(line, 1, position - 1) "~"
+        trimmed = trimmed substr(line, 1, position - 1) "~"
       }
       line = substr(line, position + length(home))
     }
-    print out line
+    print trimmed line
   }' \
   | sed -E 's/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/<session-id>/g'

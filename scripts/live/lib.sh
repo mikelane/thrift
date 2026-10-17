@@ -24,6 +24,14 @@ LIVE_WAITING=''
 
 # --- lifecycle -----------------------------------------------------------------------------------
 
+live_ignore_signals() { trap '' INT TERM HUP PIPE QUIT; }
+# The signal handlers ignore further signals before they exit, so a second one cannot cut in between
+# the handler and the first line of live_cleanup.
+live_exit_on_signal() {
+  live_ignore_signals
+  exit "$1"
+}
+
 # The cleanup must finish whatever happens to the terminal. errexit is off inside it, signals and
 # SIGPIPE are ignored while it runs (a second Ctrl-C, or a closed pipe from `| tee`, must not cut it
 # short), the screens are read first and the sessions killed before anything is written, and every
@@ -34,14 +42,6 @@ LIVE_WAITING=''
 # Likewise only live_verdict may produce 0: bash 3.2 hands this trap $? = 0 after a `set -u` abort.
 # Inside a trap BASH_COMMAND is still the command the trap interrupted, so the ERROR names it.
 # A failure to clean up is a warning and never changes the verdict's exit status.
-live_ignore_signals() { trap '' INT TERM HUP PIPE QUIT; }
-# The signal handlers ignore further signals before they exit, so a second one cannot cut in between
-# the handler and the first line of live_cleanup.
-live_exit_on_signal() {
-  live_ignore_signals
-  exit "$1"
-}
-
 live_cleanup() {
   local status=$? failed_command=$BASH_COMMAND
   live_ignore_signals
@@ -59,7 +59,8 @@ live_cleanup() {
     tmux kill-session -t "=$session" 2>/dev/null
   done
   # A session deletes its kept-variables file once it reads it; one that never started leaves it.
-  [[ -z "$LIVE_RUN" ]] || rm -f -- "$LIVE_RUN"/session-env-* 2>/dev/null
+  [[ -z "$LIVE_RUN" ]] || rm -f -- "$LIVE_RUN"/session-env-* 2>/dev/null \
+    || live_say "warning: could not remove the session environment files in $LIVE_RUN (they can hold the OAuth token)"
   [[ -z "$error_message" ]] || live_say "$error_message"
   [[ -z "$interrupt_message" ]] || live_say "$interrupt_message"
   [[ -z "$screens" ]] || live_say "$screens"
@@ -128,14 +129,14 @@ live_init() {
 # A note is never cleared, so one bad read ends the run. The plugin appends each decision record with
 # one small write, so a read that lands mid-record is not expected; if one ever shows up as a spurious
 # "could not be read" ERROR, read only up to the last newline rather than retrying.
-live_note_error() { [[ -z "${LIVE_RUN:-}" ]] || printf '%s\n' "$*" >"$LIVE_RUN/harness-error" 2>/dev/null || true; }
+live_note_error() { [[ -z "${LIVE_RUN:-}" ]] || printf '%s\n' "$*" >"$LIVE_RUN/harness-error" 2>/dev/null || live_say "warning: could not record a harness error: $*"; }
 
 # live_raise_noted_error: ends the run with an ERROR when a helper noted a problem.
 live_raise_noted_error() {
-  local noted
+  local noted_message
   [[ -n "${LIVE_RUN:-}" && -f "$LIVE_RUN/harness-error" ]] || return 0
-  noted=$(cat -- "$LIVE_RUN/harness-error")
-  live_abort "${noted:-a harness helper failed}"
+  noted_message=$(cat -- "$LIVE_RUN/harness-error")
+  live_abort "${noted_message:-a harness helper failed}"
 }
 
 # --- waiting -------------------------------------------------------------------------------------
@@ -181,8 +182,8 @@ LIVE_KEPT_ENV='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_[A-Z0
 # or a control character, and outside a UTF-8 locale for any non-ASCII one, and a POSIX sh (dash, a
 # tmux default-shell of /bin/sh on Linux) reads $'...' as a literal $ and a quoted string.
 live_sh_words() {
-  local word words='' quote_in_quotes="'\\''"
-  for word in "$@"; do words+="'${word//\'/$quote_in_quotes}' "; done
+  local word words='' escaped_quote="'\\''"
+  for word in "$@"; do words+="'${word//\'/$escaped_quote}' "; done
   printf '%s' "$words"
 }
 
@@ -210,8 +211,8 @@ live_claude_command() {
   local env_file="$LIVE_RUN/session-env-$name"
   (umask 077 && live_kept_env >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
-  local drop_script='env_file=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
-  live_sh_words sh -c "$drop_script" sh "$env_file" env \
+  local session_launch_script='env_file=$1; shift; for variable in $(env | sed -n "s/^\(CLAUDE[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
+  live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"
@@ -285,9 +286,9 @@ press() {
 # under pipefail reads a SIGPIPE'd producer as "no match", and `! pane_has` would then pass.
 text_matches() { grep -E -- "$1" >/dev/null <<<"$2"; }
 box_shows() {
-  local box
-  box=$(box_text "$1") || return 1
-  grep -F -- "${2:0:LIVE_BOX_MATCH_CHARS}" >/dev/null <<<"$box"
+  local box_contents
+  box_contents=$(box_text "$1") || return 1
+  grep -F -- "${2:0:LIVE_BOX_MATCH_CHARS}" >/dev/null <<<"$box_contents"
 }
 
 # type_text <name> <text>: types without Enter and waits until the box shows it. Enter pressed in
@@ -332,15 +333,19 @@ turns_done_above() { (($(turns_done "$1") > $2)); }
 # not "0 records": `! record_exists cleared` would pass on it. These run in command substitutions and
 # cannot stop the harness, so they note the problem and live_raise_noted_error (run by wait_for,
 # check and live_verdict) ends the run with an ERROR.
-live_note_unreadable_decisions() { live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines"; }
+live_note_unreadable_decisions() {
+  local reason
+  reason=$(head -n 1 -- "$LIVE_RUN/jq-error" 2>/dev/null)
+  live_note_error "the decision log $LIVE_DECISIONS could not be read as JSON lines${reason:+ (jq: $reason)}"
+}
 record_count() {
   [[ -f "$LIVE_DECISIONS" ]] || { echo 0; return 0; }
-  jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" 2>/dev/null \
+  jq -s --arg action "$1" '[.[] | select(.action == $action)] | length' "$LIVE_DECISIONS" 2>"$LIVE_RUN/jq-error" \
     || { live_note_unreadable_decisions; echo 0; }
 }
 records_with() {
   [[ -f "$LIVE_DECISIONS" ]] || return 0
-  jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" 2>/dev/null || live_note_unreadable_decisions
+  jq -c --arg action "$1" 'select(.action == $action)' "$LIVE_DECISIONS" 2>"$LIVE_RUN/jq-error" || live_note_unreadable_decisions
   return 0
 }
 record_exists() { (($(record_count "$1") > ${2:-0})); }
@@ -371,10 +376,10 @@ check() {
   local name=$1 detail=$2
   shift 2
   LIVE_CHECKED=$((LIVE_CHECKED + 1))
-  local passed=0
-  "$@" && passed=1
+  local did_pass=0
+  "$@" && did_pass=1
   live_raise_noted_error
-  if [[ "$passed" == 1 ]]; then
+  if [[ "$did_pass" == 1 ]]; then
     printf 'PASS  %s\n' "$name"
   else
     LIVE_FAILED=$((LIVE_FAILED + 1))

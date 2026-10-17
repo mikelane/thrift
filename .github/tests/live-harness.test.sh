@@ -18,8 +18,18 @@ write_live_stubs() {
 }
 
 # hermetic_env <command...>: drops the owner's settings that would steer the harness out of the
-# test's own directories or change its timeouts and cleanup.
-hermetic_env() { env -u XDG_CACHE_HOME -u LIVE_CWD -u LIVE_KEEP -u LIVE_TIMEOUT -u CLAUDE_CONFIG_DIR "$@"; }
+# test's own directories or change its timeouts and cleanup, and every CLAUDE* and ANTHROPIC*
+# variable: the owner's login and keys. The stubs print CLAUDE* values, and a failing test prints its
+# output. A test's own NAME=value arguments still arrive, because env applies them after every -u.
+hermetic_env() {
+  local name dropped=()
+  for name in $(compgen -e); do
+    case "$name" in
+      CLAUDE* | ANTHROPIC* | XDG_CACHE_HOME | LIVE_CWD | LIVE_KEEP | LIVE_TIMEOUT) dropped+=(-u "$name") ;;
+    esac
+  done
+  env ${dropped[@]+"${dropped[@]}"} "$@"
+}
 
 # run_live <bash-snippet>: the snippet runs under `set -euo pipefail` with lib.sh sourced.
 run_live() {
@@ -125,12 +135,12 @@ test_log_count_is_zero_before_the_debug_log_exists() {
 
 test_ts_before_orders_timestamps_and_refuses_empty_ones() {
   run_live 'live_init
-    ts_before 2026-10-14T05:00:00.100Z 2026-10-14T05:00:00.900Z
-    ! ts_before 2026-10-14T05:00:00.900Z 2026-10-14T05:00:00.100Z
-    ! ts_before 2026-10-14T05:00:00.100Z 2026-10-14T05:00:00.100Z
-    ! ts_before "" 2026-10-14T05:00:00.100Z
-    ! ts_before 2026-10-14T05:00:00.100Z ""
-    check ok detail true; live_verdict s'
+    check earlier detail ts_before 2026-10-14T05:00:00.100Z 2026-10-14T05:00:00.900Z
+    check later detail eval "! ts_before 2026-10-14T05:00:00.900Z 2026-10-14T05:00:00.100Z"
+    check equal detail eval "! ts_before 2026-10-14T05:00:00.100Z 2026-10-14T05:00:00.100Z"
+    check "empty first" detail eval "! ts_before \"\" 2026-10-14T05:00:00.100Z"
+    check "empty second" detail eval "! ts_before 2026-10-14T05:00:00.100Z \"\""
+    live_verdict s'
   assert_exit_code 0
 }
 
@@ -140,10 +150,10 @@ test_busy_abandon_waits_for_the_reason_not_for_any_none_record() {
   run_live 'source "$LIVE_DIR/handoff/scenarios/busy-abandon.sh"
     live_init
     printf "%s\n" "{\"action\":\"none\",\"trigger_values\":{\"point\":\"turn-end\"}}" > "$LIVE_DECISIONS"
-    ! record_has_reason background_busy
+    check "no reason yet" detail eval "! record_has_reason background_busy"
     printf "%s\n" "{\"action\":\"none\",\"trigger_values\":{\"reason\":\"background_busy\"}}" >> "$LIVE_DECISIONS"
-    record_has_reason background_busy
-    check ok detail true; live_verdict s'
+    check "the reason" detail record_has_reason background_busy
+    live_verdict s'
   assert_exit_code 0
 }
 
@@ -422,8 +432,8 @@ test_start_dialogs_cleared_is_an_error_when_the_session_exited() {
 test_start_dialogs_cleared_answers_the_claude_md_imports_dialog_and_keeps_waiting() {
   run_live 'live_init; tmux() { command tmux "$@" || true; }
     pane() { echo "Allow external CLAUDE.md file imports"; }
-    ! start_dialogs_cleared a
-    check ok detail true; live_verdict s'
+    check "keeps waiting" detail eval "! start_dialogs_cleared a"
+    live_verdict s'
   assert_exit_code 0
   assert_tmux_called 'send-keys -t =live-'
   assert_tmux_called '-a: Enter'
@@ -456,7 +466,7 @@ test_box_text_prints_the_box_between_the_last_two_rules_without_the_glyph() {
 }
 
 test_record_count_is_zero_before_the_decision_log_exists() {
-  run_live 'live_init; echo "COUNT=$(record_count none)"; ! record_exists none; check ok detail true; live_verdict s'
+  run_live 'live_init; echo "COUNT=$(record_count none)"; check "no record" detail eval "! record_exists none"; live_verdict s'
   assert_exit_code 0
   assert_out_has 'COUNT=0'
 }
@@ -548,23 +558,31 @@ test_no_tmux_target_in_the_harness_is_a_bare_session_name() {
 test_pane_has_finds_a_match_in_a_capture_larger_than_the_pipe_buffer() {
   run_live 'live_init
     pane() { echo needle; head -c 400000 /dev/zero | tr "\\0" x; echo; }
-    for _ in 1 2 3 4 5 6 7 8 9 10; do pane_has a needle; done
+    pane_has a needle
     check x detail true; live_verdict s'
   assert_exit_code 0
 }
 
 test_pane_has_is_false_when_the_pane_cannot_be_read() {
-  run_live 'live_init; pane() { return 1; }
-    ! pane_has a anything
-    check x detail true; live_verdict s'
+  run_live 'live_init; pane() { echo anything; return 1; }
+    check "pane_has is false" detail eval "! pane_has a anything"
+    live_verdict s'
   assert_exit_code 0
 }
 
 test_box_shows_finds_the_typed_text_in_a_large_box() {
   run_live 'live_init
     box_text() { echo "hello there"; head -c 400000 /dev/zero | tr "\\0" x; echo; }
-    for _ in 1 2 3 4 5 6 7 8 9 10; do box_shows a "hello there"; done
+    box_shows a "hello there"
     check x detail true; live_verdict s'
+  assert_exit_code 0
+}
+
+# The failed read still printed the text, so only the failure itself can make box_shows false.
+test_box_shows_is_false_when_the_box_cannot_be_read() {
+  run_live 'live_init; box_text() { echo anything; return 1; }
+    check "box_shows is false" detail eval "! box_shows a anything"
+    live_verdict s'
   assert_exit_code 0
 }
 
@@ -679,12 +697,34 @@ test_the_session_command_keeps_the_oauth_token_out_of_its_text_and_the_run_direc
   ! grep -rqa secret-tok "$TEST_DIR/tmp" || fail 'the token was left in the run directory'
 }
 
+# chmod 500 does not stop root, so under root this test starts the session and fails.
+test_live_start_starts_no_session_when_it_cannot_write_the_kept_variables_file() {
+  run_live 'live_init; LIVE_CWD=$TMPDIR; chmod 500 "$LIVE_RUN"; live_start a'
+  chmod -R u+w "$TEST_DIR/tmp"
+  assert_exit_code 2
+  assert_out_has 'before it reached a verdict'
+  assert_tmux_not_called 'new-session'
+}
+
 test_a_run_directory_kept_after_an_error_holds_no_token_of_a_session_that_never_started() {
   write_live_stubs
   run_claude_command CLAUDE_CODE_OAUTH_TOKEN=secret-tok -- 'live_init; live_claude_command a >/dev/null; false'
   assert_exit_code 2
   assert_out_has 'run directory kept'
   ! grep -rqa secret-tok "$TEST_DIR/tmp" || fail 'the token was left in the run directory'
+}
+
+# The tests run in the owner's shell, which can hold a login and API keys. None of it reaches the
+# harness under test unless a test sets it, so a stub that prints its environment prints fixtures only.
+test_the_harness_under_test_inherits_no_login_or_key_from_the_shell_running_the_tests() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  CLAUDE_CODE_OAUTH_TOKEN=owner-tok ANTHROPIC_ADMIN_KEY=owner-admin run_claude_command -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR
+     echo "OAUTH=${CLAUDE_CODE_OAUTH_TOKEN-unset} ADMIN=${ANTHROPIC_ADMIN_KEY-unset}"; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'OAUTH=unset ADMIN=unset'
+  assert_out_lacks 'owner-tok'
 }
 
 # A tmux server that was already running hands new sessions its own environment, so a bare `claude`
@@ -792,13 +832,27 @@ test_a_wait_on_a_record_ends_at_once_when_the_decision_log_is_malformed() {
   assert_out_lacks 'timed out'
 }
 
-test_records_with_notes_a_malformed_decision_log() {
+# No check runs after the note, so the verdict is the one that raises it.
+test_records_with_notes_a_malformed_decision_log_and_the_verdict_raises_it() {
   run_live 'live_init; printf "%s\n" "{not json" > "$LIVE_DECISIONS"
     records_with cleared >/dev/null
-    check x detail true
     live_verdict s'
   assert_exit_code 2
   assert_out_has 'could not be read'
+  assert_out_lacks 'ran no checks'
+}
+
+# The note is raised before the condition is tried, so a condition that holds cannot hide it.
+test_a_wait_whose_condition_holds_is_an_error_for_a_problem_noted_before_it() {
+  run_live 'live_init; printf "%s\n" "{not json" > "$LIVE_DECISIONS"
+    records_with cleared >/dev/null
+    wait_for "a thing that already holds" true
+    echo "the wait returned"
+    check x detail true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'the wait returned'
+  assert_out_lacks 'PASS s'
 }
 
 test_a_well_formed_decision_log_is_counted() {
@@ -860,6 +914,7 @@ test_trim_output_replaces_the_home_directory_and_session_ids() {
 test_trim_output_leaves_other_text_alone_when_home_has_sed_special_characters() {
   trim_with_home '/a.b&c' '/a.b&c/x /aXb&c'
   assert_exit_code 0
+  # shellcheck disable=SC2088 # a literal ~ is what trim-output writes
   assert_out_has '~/x /aXb&c'
 }
 
@@ -873,6 +928,7 @@ test_trim_output_leaves_a_longer_name_that_starts_with_the_home_directory() {
 test_trim_output_takes_a_home_directory_with_a_trailing_slash() {
   trim_with_home '/h/x/' '/h/x/foo and /h/x'
   assert_exit_code 0
+  # shellcheck disable=SC2088 # a literal ~ is what trim-output writes
   assert_out_has '~/foo and ~'
 }
 
@@ -880,9 +936,15 @@ test_trim_output_takes_a_home_directory_with_a_trailing_slash() {
 test_trim_output_takes_a_home_directory_with_a_backslash() {
   trim_with_home '/a\tb' '/a\tb/x'
   assert_exit_code 0
+  # shellcheck disable=SC2088 # a literal ~ is what trim-output writes
   assert_out_has '~/x'
 }
 
+test_trim_output_replaces_only_session_ids_when_home_is_empty() {
+  trim_with_home '' '/home/u/x 0a1b2c3d-4e5f-6789-abcd-ef0123456789'
+  assert_exit_code 0
+  assert_out_has '/home/u/x <session-id>'
+}
 
 # GNU cut -c splits a multibyte character; a BSD sed in a UTF-8 locale then stops at that byte and
 # drops every line after it, the verdict included.
@@ -892,6 +954,7 @@ test_trim_output_keeps_every_line_after_a_byte_that_is_not_utf8() {
   printf '%s\n' $'split \xc3' "$home/x" 'PASS held-prompt-box (3 checks)' \
     | LC_ALL=en_US.UTF-8 HOME="$home" "$BASH" "$LIVE_DIR/trim-output.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
   assert_exit_code 0
+  # shellcheck disable=SC2088 # a literal ~ is what trim-output writes
   assert_out_has '~/x'
   assert_out_has 'PASS held-prompt-box (3 checks)'
 }
