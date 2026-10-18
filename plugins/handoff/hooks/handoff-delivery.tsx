@@ -216,45 +216,55 @@ async function readSessionId($: EngineInterface): Promise<string | undefined> {
   }
 }
 
-function isContinuing(state: SessionState): boolean {
-  return state.continueAfterHandoff && state.mode !== 'off'
+// The same mode decideContinue reads, so the id is read exactly when a continue can follow.
+function isContinuing(state: SessionState, settledHandoff: SettledHandoff): boolean {
+  return state.continueAfterHandoff && settledHandoff.trigger.effectiveMode !== 'off'
 }
 
 // The fresh session's id, read straight after the clear; only when a continue is possible, so no other path reads it.
-function readFreshSessionId($: EngineInterface, state: SessionState): Promise<string | undefined> {
-  return isContinuing(state) ? readSessionId($) : Promise.resolve(undefined)
+function readFreshSessionId($: EngineInterface, state: SessionState, settledHandoff: SettledHandoff): Promise<string | undefined> {
+  return isContinuing(state, settledHandoff) ? readSessionId($) : Promise.resolve(undefined)
 }
 
-// Inside a clock tick: the continue prompt is submitted from a hook the turn may be waiting on, which the engine refuses.
-function submitContinueAfterTick($: EngineInterface, state: SessionState, isUnattended: boolean): Promise<boolean> {
-  const prompt: HeldPrompt = { text: CONTINUE_PROMPT, isUnattended, origin: noteOrigin(isUnattended), author: 'plugin' }
-  return new Promise(resolve => {
+// The submit runs in a clock tick, since the engine refuses one from a hook the turn may be waiting on.
+function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
     $.clock.after(0, () => {
-      void submitEntered($, state, prompt, 'could not submit the continue prompt', false).then(resolve)
+      run().then(resolve, reject)
     })
   })
 }
 
 type ContinueContext = { freshSessionId: string | undefined; noteDelivery: NoteDelivery; hasHeldPromptStartedTurn: boolean }
 
-async function continueAfterHandoff(
+async function submitContinuePrompt(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
   { freshSessionId, noteDelivery, hasHeldPromptStartedTurn }: ContinueContext,
 ): Promise<ContinueFields> {
-  const isSameSession = !isContinuing(state) || (freshSessionId !== undefined && (await readSessionId($)) === freshSessionId)
-  const decision = decideContinue({
-    isEnabled: state.continueAfterHandoff,
-    effectiveMode: settledHandoff.trigger.effectiveMode,
-    signal: settledHandoff.trigger.signal,
-    noteDelivery,
-    hasHeldPromptStartedTurn,
-    isSameSession,
+  const decide = (isSameSession: boolean, hasTurnStarted: boolean) =>
+    decideContinue({
+      isEnabled: state.continueAfterHandoff,
+      effectiveMode: settledHandoff.trigger.effectiveMode,
+      signal: settledHandoff.trigger.signal,
+      noteDelivery,
+      hasHeldPromptStartedTurn: hasTurnStarted,
+      isSameSession,
+    })
+  const beforeTick = decide(true, hasHeldPromptStartedTurn)
+  if (!beforeTick.submit) return beforeTick.fields
+  // The session and turn checks run inside the tick, straight before the submit: the hold on prompts has ended, so a
+  // /resume, /clear, or prompt the person sends before the tick is seen here rather than overtaken by the submit.
+  return afterTick($, async () => {
+    const isSameSession = freshSessionId !== undefined && (await readSessionId($)) === freshSessionId
+    const decision = decide(isSameSession, hasHeldPromptStartedTurn || state.isTurnRunning)
+    if (!decision.submit) return decision.fields
+    const { isUnattended } = settledHandoff
+    const prompt: HeldPrompt = { text: CONTINUE_PROMPT, isUnattended, origin: noteOrigin(isUnattended), author: 'plugin' }
+    const isSubmitted = await submitEntered($, state, prompt, 'could not submit the continue prompt', false)
+    return isSubmitted ? { continued: 'submitted' } : { continued: 'skipped', continue_skip: 'submit_failed' }
   })
-  if (!decision.submit) return decision.fields
-  const isSubmitted = await submitContinueAfterTick($, state, settledHandoff.isUnattended)
-  return isSubmitted ? { continued: 'submitted' } : { continued: 'skipped', continue_skip: 'submit_failed' }
 }
 
 export async function continueInFreshSession(
@@ -269,7 +279,7 @@ export async function continueInFreshSession(
   // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
-  const freshSessionId = await readFreshSessionId($, state)
+  const freshSessionId = await readFreshSessionId($, state, settledHandoff)
   await registerHandoffCommand($)
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
@@ -282,7 +292,7 @@ export async function continueInFreshSession(
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
   const late = await sendLateArrivals($, state, holdBackPerson)
   const hasHeldPromptStartedTurn = [...deliveries, ...late.deliveries].includes('submitted')
-  const continueFields = await continueAfterHandoff($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn })
+  const continueFields = await submitContinuePrompt($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn })
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',

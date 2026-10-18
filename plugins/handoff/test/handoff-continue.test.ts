@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { CONTINUE_PROMPT } from '../hooks/continue-decision'
-import { answered, entered, holdFork, install, lastRecord, runCommand, startSession, submitPerson } from './helpers'
+import { answered, entered, holdFork, install, lastRecord, runCommand, startSession, startTurn, submitPerson } from './helpers'
 import { bandAfterFinishedTask, weakBand } from './band-turn-fixtures'
 
 const CONTINUING = { options: { handoffMode: 'ask', continueAfterHandoff: true } } as const
@@ -99,6 +99,36 @@ describe('continuing after a handoff', () => {
     await handedOffFromWeakBand($, world)
     expect(entered(world)).toEqual([])
     expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
+  })
+
+  test('It submits nothing and logs session_moved when the person moves on in the tick before the submit', CONTINUING, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await weakBand($, world)
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      void world.clock.sleep(0).then(() => {
+        world.sessionId = 'resumed-elsewhere'
+      })
+    }
+    await band.press({ key: 'handoff' })
+    await world.clock.settle()
+    expect(entered(world)).toEqual([])
+    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
+  })
+
+  test('It submits nothing and logs held_prompt_sent when a prompt started a turn in the tick before the submit', CONTINUING, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    const band = await weakBand($, world)
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      void world.clock.sleep(0).then(() => startTurn($, 'typed in the fresh session'))
+    }
+    await band.press({ key: 'handoff' })
+    await world.clock.settle()
+    expect(entered(world)).toEqual([])
+    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'held_prompt_sent' })
   })
 
   test('It logs session_moved when the session id cannot be read', CONTINUING, async ($, on) => {
