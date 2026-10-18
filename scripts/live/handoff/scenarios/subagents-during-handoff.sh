@@ -13,8 +13,9 @@
 #    press is made while the turn that starts the agent runs; the engine keeps it until the turn ends
 #    ("This turn is still running, so your choice will run when it ends"), and the plugin then reads the
 #    busyness. The refusal must follow the turn's end, and the band must then offer no hand-off.
-# 3. A foreground Agent (the session runs with background tasks disabled) runs during a handoff's wait for a turn (C13.4). The handoff must not clear while
-#    the main turn runs, and must clear after it ends (no stall on the subagent's own turn).
+# 3. A foreground Agent (the session runs with background tasks disabled) runs during a handoff's wait for
+#    a turn (C13.4). The handoff must not clear while the main turn runs, and must clear after it ends (no
+#    stall on the subagent's own turn).
 #
 # Not driven: C13.3 (a named teammate). It needs the experimental agent-teams feature, which a harness
 # session does not turn on.
@@ -194,7 +195,7 @@ FOREGROUND_AGENTS='CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1'
 
 foreground_agent_during_the_wait() {
   local name=$1 peer=$2
-  LIVE_SESSION_ENV=$FOREGROUND_AGENTS start_waiting_handoff "$name" "$peer" \
+  LIVE_SESSION_ENV=$FOREGROUND_AGENTS WAITING_HANDOFF_TOOLS=$SUBAGENT_TOOLS start_waiting_handoff "$name" "$peer" \
     "Use the Agent tool with this prompt: $(agent_prompt "$SLEEP_CALLS_STEP_3") When the Agent call returns, reply with the word done." \
     --session-id "$STEP_3_ID"
   settle_for session_has_record "$STEP_3_ID" "$ENDS_THE_WAIT"

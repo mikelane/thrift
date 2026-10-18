@@ -286,4 +286,15 @@ test_the_scenario_gives_the_foreground_session_the_background_tasks_switch() {
   assert_out_has 'AFTER=[]'
 }
 
+test_the_scenario_allows_the_agent_tool_in_the_foreground_session() {
+  run_live "$SCENARIO"'
+    live_init
+    SETTLE_SECONDS=1
+    start_waiting_handoff() { echo "TOOLS=[${WAITING_HANDOFF_TOOLS:-}]"; }
+    foreground_agent_during_the_wait c p
+    echo "AFTER=[${WAITING_HANDOFF_TOOLS:-}]"' || true
+  assert_out_has 'TOOLS=[Agent,Bash(sleep *)]'
+  assert_out_has 'AFTER=[]'
+}
+
 run_tests "$@"
