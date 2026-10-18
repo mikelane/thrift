@@ -93,6 +93,8 @@ run_mode() {
   say_apple "$name"
   fire=$(schedule_prompt "$name")
   wait_for "the scheduling turn of '$name' to end" turns_done_above "$name" 1
+  # fire is read from the debug log and goes into arithmetic, which would evaluate anything but digits.
+  [[ "$fire" =~ ^[0-9]+$ ]] || live_abort "could not read the job's fire time from the log: '$fire'"
   (($(date +%s) < fire - HANDOFF_LEAD)) || live_abort "the job fires less than ${HANDOFF_LEAD}s from now: the window is missed; run it again"
   while (($(date +%s) < fire - HANDOFF_LEAD)); do sleep "$LIVE_POLL"; done
   submit "$name" '/handoff'
@@ -123,7 +125,7 @@ first_cleared() { records_after "$1" '.action == "cleared"' | head -n 1; }
 first_handoff_cleared() { [[ -n "$(first_cleared "$1")" ]]; }
 turn_end_record() { records_after "$1" '.trigger_values.point == "turn-end"' | head -n 1; }
 turn_end_record_after() { [[ -n "$(turn_end_record "$1")" ]]; }
-turn_end_field() { turn_end_record "$1" | jq -r ".trigger_values.$2"; }
+turn_end_field() { turn_end_record "$1" | jq -r --arg field "$2" '.trigger_values[$field]'; }
 show_records_after() {
   section "decision records written in this mode"
   records_after "$1" 'true' | cut -c 1-420

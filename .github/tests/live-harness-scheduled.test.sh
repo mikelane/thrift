@@ -108,6 +108,19 @@ test_it_is_an_error_not_a_pass_when_the_turn_end_was_not_strong() {
   assert_out_has "the turn end after the carried prompt was 'weak', not strong"
 }
 
+# The fire time goes into arithmetic, which would evaluate an expression read from the log.
+test_it_is_an_error_when_the_fire_time_read_from_the_log_is_not_epoch_seconds() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"
+    live_init
+    PUSH_REPO=/fixture/work
+    set_mode() { :; }; handoff_start() { :; }; say_apple() { :; }; submit() { :; }; wait_for() { :; }
+    schedule_prompt() { echo "x[\$(echo PWN\$((1+1)) >&2)]"; }
+    run_mode ask a'
+  assert_exit_code 2
+  assert_out_has "could not read the job's fire time from the log"
+  assert_out_lacks 'PWN2'
+}
+
 test_the_job_is_scheduled_for_a_minute_boundary_the_cron_fields_name() {
   run_live 'source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"; TZ=UTC cron_fields 86400'
   assert_exit_code 0
@@ -135,7 +148,7 @@ test_the_fixture_repository_runs_no_hook_from_the_owners_git_config() {
   chmod +x "$TEST_DIR/owner-hooks/pre-push"
   printf '[core]\n\thooksPath = %s\n' "$TEST_DIR/owner-hooks" > "$TEST_DIR/owner-gitconfig"
   run_live 'source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"
-    LIVE_RUN=$(mktemp -d)
+    LIVE_RUN="'"$TEST_DIR"'/run"; mkdir -p -- "$LIVE_RUN"
     work=$(make_push_repo)
     GIT_CONFIG_GLOBAL="'"$TEST_DIR"'/owner-gitconfig" git -C "$work" push origin main
     echo pushed past the owner hook'
@@ -145,7 +158,7 @@ test_the_fixture_repository_runs_no_hook_from_the_owners_git_config() {
 
 test_the_fixture_repository_takes_a_push_to_its_remote_twice() {
   run_live 'source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"
-    LIVE_RUN=$(mktemp -d)
+    LIVE_RUN="'"$TEST_DIR"'/run"; mkdir -p -- "$LIVE_RUN"
     work=$(make_push_repo)
     git -C "$work" push origin main
     git -C "$work" push origin main
@@ -156,7 +169,7 @@ test_the_fixture_repository_takes_a_push_to_its_remote_twice() {
 
 test_set_mode_changes_only_the_handoff_mode_in_the_settings() {
   run_live 'source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"
-    LIVE_RUN=$(mktemp -d)
+    LIVE_RUN="'"$TEST_DIR"'/run"; mkdir -p -- "$LIVE_RUN"
     printf "%s" "{\"pluginConfigs\":{\"handoff@inline\":{\"options\":{\"handoffMode\":\"ask\",\"compactBeforeClear\":true}}}}" > "$LIVE_RUN/settings.json"
     set_mode act
     jq -c . "$LIVE_RUN/settings.json"'
