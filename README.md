@@ -31,8 +31,8 @@ Answer `y` to add the marketplace, then choose a scope.
 
 Claude Code installs a copy of each plugin and replaces it only when the plugin's `version` changes.
 Each plugin is released on its own: a release PR bumps the `version` in its `plugin.json` and writes
-its `CHANGELOG.md`, and merging that PR tags `<plugin>-vX.Y.Z` and publishes a GitHub release. Until
-a release lands, an update finds nothing new.
+its `CHANGELOG.md`, and merging that PR tags `<plugin>-vX.Y.Z` and publishes a GitHub release. The
+release PR merges itself once CI passes on it. Until a release lands, an update finds nothing new.
 
 To update by hand, either type this in a session:
 

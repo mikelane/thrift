@@ -1,0 +1,98 @@
+name: Release Merge
+
+# Merges a release-please PR once CI has passed on it, so a release needs no one at the keyboard.
+# Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
+# so a successful CI run means the PR met them. The release App must be on the review-bypass list
+# of main's branch protection, because the PR needs one code-owner approval and the App opens it.
+#
+# This runs from the default branch on workflow_run and has write access, so it never checks out
+# or runs the PR's code. It reads the gate script and release-please-config.json from the default
+# branch and asks the API about the PR. The merge happens only when every condition holds:
+#   - the PR is open, targets main, and its head branch is release-please--* in this repository
+#   - the PR author is this release App (the bot login comes from the token step's app-slug)
+#   - the PR head is the commit CI tested, and the merge is pinned to it (--match-head-commit)
+#   - the PR changes only files release-please writes (see release_merge_allowlist)
+# Anything else is logged and skipped, and the PR waits for a person.
+#
+# Needs the same variable and secret as release-please.yml: RELEASE_APP_ID, RELEASE_APP_PRIVATE_KEY.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+# One merge attempt per release branch at a time. A newer CI run on the same branch waits, then
+# fails the head-commit check if the branch moved.
+concurrency:
+  group: release-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'pull_request'
+      && startsWith(github.event.workflow_run.head_branch, 'release-please--')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint a short-lived App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        # contents: write and pull-requests: write are what a squash merge needs. The token also
+        # reads the default branch for the checkout below, so the workflow's GITHUB_TOKEN has none.
+        with:
+          client-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # workflow_run checks out the default branch, never the PR. Only the gate and the config.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/tests/release-merge-lib.sh
+            release-please-config.json
+          sparse-checkout-cone-mode: false
+
+      - name: Squash-merge the release PR if the gate passes
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BASE: ${{ github.event.repository.default_branch }}
+          BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=.github/tests/release-merge-lib.sh
+          source .github/tests/release-merge-lib.sh
+
+          # head=<owner>:<branch> matches only a branch in this repository, never a fork's.
+          number=$(gh api "repos/$REPO/pulls" -f head="$OWNER:$BRANCH" -f state=open --jq '.[0].number // empty')
+          if [[ -z "$number" ]]; then
+            echo "No open PR from $BRANCH in $REPO. Nothing to merge."
+            exit 0
+          fi
+
+          pr=$(mktemp)
+          files=$(mktemp)
+          gh api "repos/$REPO/pulls/$number" >"$pr"
+          gh api --paginate "repos/$REPO/pulls/$number/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' >"$files"
+
+          problems=$(release_merge_problems "$pr" "$files" release-please-config.json \
+            "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA")
+          if [[ -n "$problems" ]]; then
+            echo "Not merging PR #$number:"
+            echo "$problems"
+            exit 0
+          fi
+
+          echo "Merging PR #$number at $TESTED_SHA."
+          gh pr merge "$number" --repo "$REPO" --squash --match-head-commit "$TESTED_SHA"

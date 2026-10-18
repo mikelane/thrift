@@ -28,8 +28,12 @@ specific to this repo.
   `marketplace.json` (`.github/tests/release-config.test.sh` fails otherwise, when the component
   is not the marketplace name, and when a manifest version differs from `plugin.json`). The release
   PR is opened with a GitHub App token (`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`), because a PR
-  opened with `GITHUB_TOKEN` runs no CI. It goes through the normal gauntlet, review and
-  merge-guardian like any other PR.
+  opened with `GITHUB_TOKEN` runs no CI. `.github/workflows/release-merge.yml` squash-merges it
+  once the CI workflow succeeds on it: the PR must be open, from a `release-please--*` branch in
+  this repo, authored by the App, at the commit CI tested, and change only the manifest and each
+  package's changelog and extra-files (`.github/tests/release-merge-lib.sh`, tested by
+  `release-merge.test.sh`). Anything else waits for a person. The App must be on main's
+  review-bypass list, or the merge is refused for want of a code-owner approval.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
 
