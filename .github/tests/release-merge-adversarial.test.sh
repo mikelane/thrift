@@ -89,4 +89,14 @@ test_allowlist_lets_a_package_override_the_top_level_extra_files_and_version_fil
   [[ "$got" == $'.release-please-manifest.json\np/a/CHANGELOG.md\np/a/top.txt\np/a/top.json\np/b/CHANGELOG.md\np/b/b.txt\np/b/b.json' ]] || fail "got [$got]"
 }
 
+# release-please's Simple strategy (v5.0.0 bundle, class Simple) always adds an update for
+# addPath(versionFile), where versionFile defaults to "version.txt", with createIfMissing: false.
+# So a simple package that has a version.txt gets it bumped with no version-file in the config,
+# and the gate must allow it or that plugin's release PRs never merge on their own.
+test_allowlist_names_the_default_version_txt_of_a_simple_package() {
+  local got
+  got=$(allowlist_for '{"packages": {"plugins/handoff": {"release-type": "simple"}}}')
+  [[ $'\n'"$got"$'\n' == *$'\nplugins/handoff/version.txt\n'* ]] || fail "got [$got]"
+}
+
 run_tests "$@"
