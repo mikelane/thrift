@@ -183,4 +183,33 @@ test_the_session_env_file_is_owner_only() {
   assert_out_has '-rw-------'
 }
 
+# run_session_under <shell> <snippet>: builds the command, runs the snippet (which may tamper with the login
+# file), then runs the command with <shell> as its `sh`. The stub claude prints BIN= when it starts.
+run_session_under() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_SESSION_ENV='CLAUDE_CODE_SCENARIO_FLAG=1' PROBE_SH="$1" CLAUDE_CODE_OAUTH_TOKEN=fake-login-tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a); '"$2"'
+     mkdir -p "$TMPDIR/../shbin"; ln -sf "$PROBE_SH" "$TMPDIR/../shbin/sh"
+     env -u LIVE_SESSION_ENV PATH="$TMPDIR/../shbin:$PATH" sh -c "$command" 2>&1; echo "SESSION_EXIT=$?"'
+}
+
+# A login file that cannot be read stops the session: starting claude without it would drop the login and
+# the scenario's variables, and a run would then judge the wrong session.
+test_the_session_does_not_start_claude_when_the_login_file_is_missing_dash() {
+  run_session_under dash 'rm -f "$LIVE_RUN/session-env-a"'
+  assert_out_lacks 'BIN='
+}
+
+test_the_session_does_not_start_claude_when_the_login_file_is_missing_bin_sh() {
+  run_session_under /bin/sh 'rm -f "$LIVE_RUN/session-env-a"'
+  assert_out_lacks 'BIN='
+}
+
+test_the_session_does_not_start_claude_when_the_login_file_is_unreadable() {
+  run_session_under dash 'chmod 000 "$LIVE_RUN/session-env-a"'
+  assert_out_lacks 'BIN='
+  assert_dir_lacks fake-login-tok "$TEST_DIR/tmp"
+}
+
 run_tests "$@"
