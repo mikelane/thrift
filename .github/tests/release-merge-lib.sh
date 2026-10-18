@@ -67,13 +67,20 @@ release_merge_problems() {
   done <"$files"
 }
 
-# release_merge_ci_passed <repo> <sha>: succeeds only when the latest CI run for the pull request
-# event at <sha> has concluded with success. No run, a run still going, a failed run, and a success
-# that is older than a later failure all fail. Runs of other workflows do not count.
+# release_merge_ci_passed <repo> <sha> <head-ref>: succeeds only when the latest CI run for the pull
+# request event at <sha> has concluded with success. A run counts only when it is the workflow file
+# .github/workflows/ci.yml (not a workflow that merely has the display name CI), ran for a head in
+# <repo> itself (not a fork that pushed the same commit) and on branch <head-ref>. No run, a run
+# still going, a failed run, and a success that is older than a later failure all fail.
 release_merge_ci_passed() {
   local conclusion
   conclusion=$(gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100" \
-    | jq -rs '[.[].workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last | .conclusion // empty')
+    | jq -rs --arg repo "$1" --arg ref "$3" '
+        [.[].workflow_runs[]
+         | select(.path == ".github/workflows/ci.yml"
+                  and .head_repository.full_name == $repo
+                  and .head_branch == $ref)]
+        | sort_by(.created_at) | last | .conclusion // empty')
   [[ "$conclusion" == success ]]
 }
 
@@ -81,12 +88,12 @@ release_merge_ci_passed() {
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
 # one still running, is left out: its own CI completion triggers the merge.
 release_merge_sweep() {
-  local number sha
+  local number sha ref
   gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
     | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
-        and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha)"' \
-    | while read -r number sha; do
-        if release_merge_ci_passed "$1" "$sha"; then echo "$number $sha"; fi
+        and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' \
+    | while read -r number sha ref; do
+        if release_merge_ci_passed "$1" "$sha" "$ref"; then echo "$number $sha"; fi
       done
 }
 

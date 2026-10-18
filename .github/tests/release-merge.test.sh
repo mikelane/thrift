@@ -265,7 +265,8 @@ open_pr() {
 write_pulls() { printf '%s\n' "$@" | jq -s '.' >"$TEST_DIR/pulls.json"; }
 
 # write_runs <sha> <run>...: the CI runs the stub serves for a head commit. A run is
-# `<name> <status> <conclusion|null> <created_at>`.
+# `<name> <status> <conclusion|null> <created_at> [path] [repo] [branch]`; the last three default
+# to CI's workflow file, this repository and the release branch.
 write_runs() {
   local sha=$1 run
   shift
@@ -273,7 +274,11 @@ write_runs() {
     # shellcheck disable=SC2086
     set -- $run
     jq -n --arg name "$1" --arg status "$2" --arg conclusion "$3" --arg at "$4" \
-      '{name: $name, status: $status, conclusion: (if $conclusion == "null" then null else $conclusion end), created_at: $at}'
+      --arg path "${5:-.github/workflows/ci.yml}" --arg repo "${6:-$REPO}" \
+      --arg branch "${7:-release-please--branches--main--components--handoff}" \
+      '{name: $name, path: $path, status: $status, head_branch: $branch,
+        head_repository: {full_name: $repo},
+        conclusion: (if $conclusion == "null" then null else $conclusion end), created_at: $at}'
   done | jq -s '{workflow_runs: .}' >"$TEST_DIR/runs-$sha.json"
 }
 
@@ -347,6 +352,30 @@ test_a_sweep_ignores_runs_of_other_workflows() {
   write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z' 'Lint completed failure 2026-10-18T11:00:00Z'
   got=$(sweep)
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_a_sweep_ignores_a_successful_run_from_a_fork() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z .github/workflows/ci.yml someone/thrift'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_ignores_a_successful_run_from_a_differently_named_branch() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A "CI completed success 2026-10-18T10:00:00Z .github/workflows/ci.yml $REPO main"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_ignores_a_successful_run_of_another_workflow_file_named_ci() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z .github/workflows/fake.yml'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
 }
 
 test_a_sweep_skips_a_pr_the_other_path_already_merged() {
