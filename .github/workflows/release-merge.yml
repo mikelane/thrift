@@ -41,11 +41,13 @@ permissions: {}
 
 # One merge attempt per release branch at a time. A newer CI run on the same branch waits, then
 # fails the head-commit check if the branch moved. The group names the head repository too, so a
-# fork's branch with the same name cannot take the real branch's place in the queue. The sweep
-# runs in the group of main. It can overlap a CI-path run, which is harmless: the loser finds the
-# PR merged or moved and exits 0 (see release_merge_lost_race).
+# fork's branch with the same name cannot take the real branch's place in the queue. It names the
+# triggering workflow too: the sweep's group is main's, and CI's own push-to-main completion (which
+# the job `if` skips) would otherwise join that group and cancel a queued sweep. The sweep can
+# overlap a CI-path run, which is harmless: the loser finds the PR merged or moved and exits 0 (see
+# release_merge_lost_race).
 concurrency:
-  group: release-merge-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  group: release-merge-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:

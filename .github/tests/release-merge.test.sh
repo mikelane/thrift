@@ -458,6 +458,15 @@ test_the_workflow_runs_the_sweep_only_for_a_successful_release_please_push_to_ma
     || fail 'the job condition does not pin the Release Please trigger to a push to main'
 }
 
+# A run that the job `if` skips still joins the concurrency group, and a newer pending run replaces
+# an older pending one. CI's push to main completes with head_branch main, the branch the sweep
+# also runs for, so a group without the workflow name lets that skipped run cancel a queued sweep.
+test_the_concurrency_group_names_the_workflow_so_a_skipped_ci_push_run_cannot_cancel_a_queued_sweep() {
+  local got
+  got=$(grep -E '^  group: ' "$REPO_ROOT/.github/workflows/release-merge.yml")
+  [[ "$got" == *'github.event.workflow_run.name'* ]] || fail "got [$got]"
+}
+
 test_the_merge_command_treats_a_lost_race_as_success() {
   local got
   got=$(merge_commands)
