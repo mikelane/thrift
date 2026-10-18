@@ -5,19 +5,27 @@
 # every package in release-please-config.json its changelog and its extra-files.
 release_merge_allowlist() {
   jq -r '
-    ".release-please-manifest.json",
-    (.packages | to_entries[] | .key as $dir | .value as $pkg
-      | "\($dir)/\($pkg["changelog-path"] // "CHANGELOG.md")",
-        ($pkg["extra-files"][]? | (if type == "string" then . else .path end) | "\($dir)/\(.)"))
+    def in_package($dir; $file):
+      ($file | sub("^/"; "")) as $relative
+      | if ($file | startswith("/")) or $dir == "." or $dir == "" then $relative else "\($dir)/\($relative)" end;
+    . as $config
+    | ".release-please-manifest.json",
+      (.packages | to_entries[] | .key as $dir | .value as $pkg
+        | def setting($key): $pkg[$key] // $config[$key];
+          in_package($dir; setting("changelog-path") // "CHANGELOG.md"),
+          (setting("version-file") // empty | in_package($dir; .)),
+          (setting("extra-files")[]? | (if type == "string" then . else .path end) // empty
+            | in_package($dir; .)))
   ' "$1"
 }
 
-# release_merge_open_pr_number <repo> <owner> <branch>: prints the number of the open PR whose head
-# is <branch> in <owner>'s copy of the repository, and nothing when there is none. head=<owner>:<branch>
-# matches only a branch in this repository, never a fork's. --method GET is required: `gh api`
+# release_merge_open_pr_number <repo> <owner> <branch> <base>: prints the number of the open PR whose
+# head is <branch> in <owner>'s copy of the repository and whose base is <base>, and nothing when
+# there is none. head=<owner>:<branch> matches only a branch in this repository, never a fork's, and
+# base keeps a second PR from the same branch to another base from taking its place. --method GET is required: `gh api`
 # turns -f fields into a POST, which would try to create a pull request.
 release_merge_open_pr_number() {
-  gh api --method GET "repos/$1/pulls" -f head="$2:$3" -f state=open --jq '.[0].number // empty'
+  gh api --method GET "repos/$1/pulls" -f head="$2:$3" -f base="$4" -f state=open --jq '.[0].number // empty'
 }
 
 # release_merge_changed_files: reads the JSON of the pull request files API (one array per page, as

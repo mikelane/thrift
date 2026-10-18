@@ -70,9 +70,23 @@ test_the_pr_lookup_finds_the_release_pr_that_targets_main_when_another_pr_shares
   local dir got
   dir=$(mktemp -d)
   stub_pulls_api "$dir"
-  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane "$BRANCH" 2>&1)
+  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane "$BRANCH" main 2>&1)
   rm -rf "$dir"
   [[ "$got" == 5 ]] || fail "got [$got]"
+}
+
+# An extra-files object with no path has nothing to change, so it must not allow "<pkg>/null".
+test_allowlist_skips_an_extra_file_object_without_a_path() {
+  local got
+  got=$(allowlist_for '{"packages": {"plugins/handoff": {"extra-files": [{"type": "json"}, "a.json"]}}}')
+  [[ "$got" == $'.release-please-manifest.json\nplugins/handoff/CHANGELOG.md\nplugins/handoff/a.json' ]] || fail "got [$got]"
+}
+
+# A per-package key replaces the top-level one, as in release-please's mergeReleaserConfig.
+test_allowlist_lets_a_package_override_the_top_level_extra_files_and_version_file() {
+  local got
+  got=$(allowlist_for '{"extra-files": ["top.json"], "version-file": "top.txt", "packages": {"p/a": {}, "p/b": {"extra-files": ["b.json"], "version-file": "b.txt"}}}')
+  [[ "$got" == $'.release-please-manifest.json\np/a/CHANGELOG.md\np/a/top.txt\np/a/top.json\np/b/CHANGELOG.md\np/b/b.txt\np/b/b.json' ]] || fail "got [$got]"
 }
 
 run_tests "$@"

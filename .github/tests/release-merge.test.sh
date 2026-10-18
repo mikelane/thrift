@@ -182,7 +182,7 @@ test_the_pr_lookup_sends_a_get_request_so_gh_does_not_create_a_pull_request() {
     '[[ "${method:-GET}" == GET ]] || { echo "gh would send a $method and create a pull request" >&2; exit 1; }' \
     'echo 42' >"$dir/gh"
   chmod +x "$dir/gh"
-  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane release-please--branches--main--components--handoff 2>&1)
+  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane release-please--branches--main--components--handoff main 2>&1)
   rm -rf "$dir"
   [[ "$got" == 42 ]] || fail "got [$got]"
 }

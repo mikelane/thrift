@@ -75,7 +75,7 @@ jobs:
           # shellcheck source=.github/tests/release-merge-lib.sh
           source .github/tests/release-merge-lib.sh
 
-          number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH")
+          number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE")
           if [[ -z "$number" ]]; then
             echo "No open PR from $BRANCH in $REPO. Nothing to merge."
             exit 0
