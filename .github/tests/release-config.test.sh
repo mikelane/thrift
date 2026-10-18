@@ -86,4 +86,42 @@ test_reports_a_marketplace_plugin_with_no_plugin_json() {
   [[ "$got" == *'plugins/handoff has no readable plugin.json'* ]] || fail "got [$got]"
 }
 
+# Without a component the tag loses its <name>- prefix, so two plugins would share v-tags.
+test_reports_a_package_with_no_component() {
+  local root got
+  root=$(mktemp -d)
+  copy_repo_json "$root"
+  edit_json "$root/release-please-config.json" 'del(.packages."plugins/handoff".component)'
+  got=$(problems_for "$root")
+  rm -rf "$root"
+  [[ "$got" == *'plugins/handoff: component is (none) but the marketplace name is handoff'* ]] || fail "got [$got]"
+}
+
+test_reports_a_package_whose_component_differs_from_the_marketplace_name() {
+  local root got
+  root=$(mktemp -d)
+  copy_repo_json "$root"
+  edit_json "$root/release-please-config.json" '.packages."plugins/handoff".component = "hand off"'
+  got=$(problems_for "$root")
+  rm -rf "$root"
+  [[ "$got" == *'plugins/handoff: component is hand off but the marketplace name is handoff'* ]] || fail "got [$got]"
+}
+
+test_accepts_a_marketplace_source_without_the_leading_dot_slash() {
+  local root got
+  root=$(mktemp -d)
+  copy_repo_json "$root"
+  edit_json "$root/.claude-plugin/marketplace.json" '.plugins[0].source = "plugins/handoff"'
+  got=$(problems_for "$root")
+  rm -rf "$root"
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# release-please groups every package into one PR unless this is set, once there are two or more.
+test_the_config_opens_a_separate_release_pr_per_plugin() {
+  local got
+  got=$(jq '."separate-pull-requests"' "$REPO_ROOT/release-please-config.json")
+  [[ "$got" == true ]] || fail "separate-pull-requests is $got"
+}
+
 run_tests "$@"
