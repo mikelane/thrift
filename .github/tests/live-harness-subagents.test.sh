@@ -15,6 +15,9 @@ T4=2026-10-17T10:00:04.000Z
 
 record() { echo "{\"ts\":\"$1\",\"session_id\":\"${4:-s1}\",\"action\":\"$2\",\"trigger_values\":$3}"; }
 cleared() { record "$1" cleared "{\"point\":\"command\",\"is_background_busy\":${2:-true}}" "${3:-s1}"; }
+turn_end() { record "$1" none "{\"point\":\"turn-end\",\"is_background_busy\":${2:-true}}"; }
+# after_a_busy_turn_end <record>: the turn that started the agent ended busy at T1, then the record.
+after_a_busy_turn_end() { printf '%s\n%s' "$(turn_end $T1)" "$1"; }
 refused() { record "$1" none "{\"point\":\"${2:-button}\",\"reason\":\"background_busy\",\"is_background_busy\":${3:-true}}" "${4:-s1}"; }
 
 # run_judge <name> <snippet>: the scenario's helpers with the decision log in $TEST_DIR/decisions, the
@@ -50,15 +53,24 @@ NOTE_LINE='A turn ran in the previous session while or after this note was writt
 NOTIFICATION_TURN_LOG="$T4 [DEBUG] attribution header x-anthropic-billing-header: cc_turn_origin=task_notification"
 
 test_background_agent_passes_when_the_note_and_the_notification_reach_the_fresh_session() {
-  judge_fixture "$(cleared $T2)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$NOTIFICATION_TURN_LOG"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 0
-  assert_out_has 'PASS s (5 checks)'
+  assert_out_has 'PASS s (6 checks)'
+}
+
+test_background_agent_is_a_fail_when_the_turn_that_started_the_agent_ended_idle() {
+  judge_fixture "$(turn_end $T1 false)"$'\n'"$(cleared $T2)" "$NOTIFICATION_TURN_LOG"
+  fresh_note "$NOTE_LINE" '<task-notification>'
+  run_judge 'judge_background_agent x s1'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the turn that started the agent ended with background work running'
+  assert_out_lacks 'FAIL  the handoff cleared'
 }
 
 test_background_agent_is_a_fail_when_the_note_lacks_the_turn_after_note_line() {
-  judge_fixture "$(cleared $T2)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$NOTIFICATION_TURN_LOG"
   fresh_note '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -67,7 +79,7 @@ test_background_agent_is_a_fail_when_the_note_lacks_the_turn_after_note_line() {
 }
 
 test_background_agent_is_a_fail_when_the_notification_never_reaches_the_fresh_session() {
-  judge_fixture "$(cleared $T2)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$NOTIFICATION_TURN_LOG"
   fresh_note "$NOTE_LINE"
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -75,7 +87,7 @@ test_background_agent_is_a_fail_when_the_notification_never_reaches_the_fresh_se
 }
 
 test_background_agent_is_a_fail_when_no_notification_turn_began_after_the_clear() {
-  judge_fixture "$(cleared $T2)" "$T1 [DEBUG] attribution header: cc_turn_origin=task_notification"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$T1 [DEBUG] attribution header: cc_turn_origin=task_notification"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -83,7 +95,7 @@ test_background_agent_is_a_fail_when_no_notification_turn_began_after_the_clear(
 }
 
 test_background_agent_is_a_fail_when_the_log_shows_no_notification_turn_at_all() {
-  judge_fixture "$(cleared $T2)" "$T3 [DEBUG] attribution header: cc_turn_origin=human"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$T3 [DEBUG] attribution header: cc_turn_origin=human"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -91,16 +103,17 @@ test_background_agent_is_a_fail_when_the_log_shows_no_notification_turn_at_all()
 }
 
 test_background_agent_is_a_fail_when_no_fresh_session_holds_a_note() {
-  judge_fixture "$(cleared $T2)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2)")" "$NOTIFICATION_TURN_LOG"
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
   assert_out_has 'FAIL  the note in the fresh session has the turn-after-note line'
   assert_out_has "FAIL  the agent's task notification reached the fresh session"
   assert_out_has 'no transcript of a fresh session holds the note of s1'
+  assert_out_has 'holds the note of s1 under ~/.claude'
 }
 
 test_background_agent_is_a_fail_when_the_handoff_did_not_clear() {
-  judge_fixture "$(refused $T2)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(refused $T2)")" "$NOTIFICATION_TURN_LOG"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -108,7 +121,7 @@ test_background_agent_is_a_fail_when_the_handoff_did_not_clear() {
 }
 
 test_background_agent_is_a_fail_when_nothing_was_running_at_the_handoff() {
-  judge_fixture "$(cleared $T2 false)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2 false)")" "$NOTIFICATION_TURN_LOG"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -116,7 +129,7 @@ test_background_agent_is_a_fail_when_nothing_was_running_at_the_handoff() {
 }
 
 test_background_agent_ignores_the_records_of_another_session() {
-  judge_fixture "$(cleared $T2 true other)" "$NOTIFICATION_TURN_LOG"
+  judge_fixture "$(after_a_busy_turn_end "$(cleared $T2 true other)")" "$NOTIFICATION_TURN_LOG"
   fresh_note "$NOTE_LINE" '<task-notification>'
   run_judge 'judge_background_agent x s1'
   assert_exit_code 1
@@ -171,6 +184,13 @@ test_press_is_a_fail_when_the_handoff_cleared() {
   assert_out_has 'FAIL  nothing was cleared'
 }
 
+test_press_is_a_fail_when_a_clear_follows_the_refusal() {
+  judge_press "$(refused $T3)"$'\n'"$(cleared $T4)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  nothing was cleared'
+  assert_out_lacks 'FAIL  the hand-off press was refused as busy'
+}
+
 test_press_is_a_fail_when_the_refusal_did_not_come_from_a_button() {
   judge_press "$(refused $T3 turn-end)"
   assert_exit_code 1
@@ -206,7 +226,7 @@ judge_foreground() { judge_fixture "$@"; run_judge 'judge_foreground_agent x s1'
 test_foreground_agent_passes_when_the_clear_follows_the_main_turn_and_the_subagent() {
   judge_foreground "$(cleared $T4 false)" "$PEER_LOG" "$AGENT_LOG" "$MAIN_END_LOG"
   assert_exit_code 0
-  assert_out_has 'PASS s (4 checks)'
+  assert_out_has 'PASS s (5 checks)'
 }
 
 test_foreground_agent_is_a_fail_when_the_clear_lands_before_the_main_turn_ended() {
@@ -223,10 +243,18 @@ test_foreground_agent_is_a_fail_when_the_clear_lands_before_the_subagent_finishe
   assert_out_lacks 'FAIL  the clear landed after the main turn ended'
 }
 
+test_foreground_agent_is_a_fail_when_the_subagent_finished_after_the_main_turn_ended() {
+  judge_foreground "$(cleared $T4 false)" "$PEER_LOG" "$T1 [DEBUG] [engine] turn 2 end (turns=2)" "$AGENT_LOG"
+  assert_exit_code 1
+  assert_out_has 'FAIL  the subagent ran in the foreground'
+  assert_out_has 'PASS  the clear landed after the main turn ended'
+  assert_out_has 'PASS  the clear landed after the subagent finished'
+}
+
 test_foreground_agent_is_a_fail_when_the_handoff_never_clears() {
   judge_foreground "$(refused $T4)" "$PEER_LOG" "$AGENT_LOG" "$MAIN_END_LOG"
   assert_exit_code 1
-  assert_out_has 'FAIL  the handoff cleared once the main turn ended'
+  assert_out_has 'FAIL  the handoff cleared'
   assert_out_has 'FAIL  the clear landed after the main turn ended'
 }
 
@@ -278,6 +306,14 @@ test_records_of_keeps_only_the_sessions_records_that_match() {
   assert_out_has 'OTHER=0'
 }
 
+test_records_of_stops_the_run_on_a_session_id_that_is_not_a_uuid() {
+  run_live "$SCENARIO"'
+    live_init
+    records_of "s1\" or true or \"" true'
+  assert_exit_code 2
+  assert_out_has 'records_of was given a session id that is not a uuid'
+}
+
 test_settle_for_returns_after_the_deadline_when_the_condition_never_holds() {
   run_live "$SCENARIO"'
     live_init
@@ -286,6 +322,7 @@ test_settle_for_returns_after_the_deadline_when_the_condition_never_holds() {
     echo SETTLED
     check ok detail true; live_verdict s'
   assert_exit_code 0
+  assert_out_has '(stopped waiting after 1s: false did not hold)'
   assert_out_has 'SETTLED'
 }
 
@@ -295,7 +332,7 @@ test_the_scenario_gives_the_foreground_session_the_background_tasks_switch() {
     SETTLE_SECONDS=1
     start_waiting_handoff() { echo "ENV=$LIVE_SESSION_ENV ARGS=$*"; }
     foreground_agent_during_the_wait c p
-    echo "AFTER=[${LIVE_SESSION_ENV:-}]"' || true
+    echo "AFTER=[${LIVE_SESSION_ENV:-}]"'
   assert_out_has 'ENV=CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 ARGS=c p'
   assert_out_has 'AFTER=[]'
 }
@@ -306,7 +343,7 @@ test_the_scenario_allows_the_agent_tool_in_the_foreground_session() {
     SETTLE_SECONDS=1
     start_waiting_handoff() { echo "TOOLS=[${WAITING_HANDOFF_TOOLS:-}]"; }
     foreground_agent_during_the_wait c p
-    echo "AFTER=[${WAITING_HANDOFF_TOOLS:-}]"' || true
+    echo "AFTER=[${WAITING_HANDOFF_TOOLS:-}]"'
   assert_out_has 'TOOLS=[Agent,Bash(sleep *)]'
   assert_out_has 'AFTER=[]'
 }
