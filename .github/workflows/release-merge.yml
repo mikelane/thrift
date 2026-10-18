@@ -136,7 +136,7 @@ jobs:
             fi
 
             echo "Merging PR #$number at $TESTED_SHA."
-            gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA" || release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" || return 1
+            gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA" </dev/null || release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" || return 1
           }
 
           if [[ "$TRIGGER" == "Release Please" ]]; then

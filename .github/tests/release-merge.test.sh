@@ -267,8 +267,10 @@ open_pr() {
 write_pulls() { printf '%s\n' "$@" | jq -s '.' >"$TEST_DIR/pulls.json"; }
 
 # write_runs <sha> <run>...: the CI runs the stub serves for a head commit. A run is
-# `<name> <status> <conclusion|null> <created_at> [path] [repo] [branch]`; the last three default
-# to CI's workflow file, this repository and the release branch.
+# `<name> <status> <conclusion|null> <created_at> [path] [repo] [branch] [pr]`; the last four
+# default to CI's workflow file, this repository, the release branch and pull request 111 into
+# main. [pr] is the number of the pull request the run belongs to, or `none` for a run whose
+# pull_requests array is empty.
 write_runs() {
   local sha=$1 run
   shift
@@ -278,8 +280,10 @@ write_runs() {
     jq -n --arg name "$1" --arg status "$2" --arg conclusion "$3" --arg at "$4" \
       --arg path "${5:-.github/workflows/ci.yml}" --arg repo "${6:-$REPO}" \
       --arg branch "${7:-release-please--branches--main--components--handoff}" \
+      --arg pr "${8:-111}" \
       '{name: $name, path: $path, status: $status, head_branch: $branch,
         head_repository: {full_name: $repo},
+        pull_requests: (if $pr == "none" then [] else [{number: ($pr | tonumber), base: {ref: "main"}}] end),
         conclusion: (if $conclusion == "null" then null else $conclusion end), created_at: $at}'
   done | jq -s '{workflow_runs: .}' >"$TEST_DIR/runs-$sha.json"
 }
@@ -541,10 +545,94 @@ test_the_merge_command_squashes() {
   [[ "$got" == *' --squash '* ]] || fail "got [$got]"
 }
 
+test_the_merge_command_does_not_read_the_sweep_loops_stdin() {
+  local got
+  got=$(merge_commands)
+  [[ "$got" == *' </dev/null '* ]] || fail "got [$got]"
+}
+
 test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
   local got
   got=$(merge_commands)
   [[ "$got" == *' --match-head-commit "$TESTED_SHA"'* ]] || fail "got [$got]"
+}
+
+# --- Adversarial QA (gate 3) findings. ---
+
+# ci_run <id> <conclusion> <created_at> <pr-number> <pr-base>: one CI run object as the runs API
+# returns it for a same-repo pull request, with its pull_requests entry.
+ci_run() {
+  jq -nc --argjson id "$1" --arg c "$2" --arg at "$3" --argjson n "$4" --arg base "$5" --arg repo "$REPO" '{
+    id: $id, name: "CI", path: ".github/workflows/ci.yml", status: "completed", conclusion: $c,
+    created_at: $at, head_branch: "release-please--branches--main--components--handoff",
+    head_repository: {full_name: $repo},
+    pull_requests: [{number: $n, base: {ref: $base}}]}'
+}
+
+# write_ci_runs <sha> <run>...: the runs the stub serves for <sha>, in the order given (the API
+# lists the newest run first).
+write_ci_runs() {
+  local sha=$1
+  shift
+  printf '%s\n' "$@" | jq -s '{workflow_runs: .}' >"$TEST_DIR/runs-$sha.json"
+}
+
+# ci.yml runs on pull_request with no branch filter, and anyone who can read the repo can open a PR
+# from this repo's release branch into some other base. That PR's CI run has the same head SHA,
+# head branch, head repository and workflow file, but it tested a merge into another base. It must
+# not stand in for the release PR's own CI run, which here failed.
+test_a_sweep_ignores_a_successful_run_from_a_pr_of_the_same_branch_into_another_base() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_ci_runs $SHA_A \
+    "$(ci_run 2 success 2026-10-18T11:00:00Z 999 old-feature)" \
+    "$(ci_run 1 failure 2026-10-18T10:00:00Z 111 main)"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# created_at has one-second resolution. Two runs created in the same second tie, and sort_by keeps
+# the API's newest-first order, so `last` picks the older run. The newer run failed.
+test_a_sweep_counts_the_newer_of_two_ci_runs_created_in_the_same_second() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_ci_runs $SHA_A \
+    "$(ci_run 2 failure 2026-10-18T10:00:00Z 111 main)" \
+    "$(ci_run 1 success 2026-10-18T10:00:00Z 111 main)"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# A person converts the release PR to a draft to hold the release. The merge API refuses a draft,
+# release_merge_lost_race sees an open PR at the tested head and fails, so with the sweep every
+# push to main turns the job red until someone undrafts it. The gate should refuse it instead.
+test_a_draft_pr_blocks_the_merge() {
+  local got
+  got=$(problems '.draft = true')
+  [[ "$got" == *draft* ]] || fail "got [$got]"
+}
+
+test_a_pr_that_is_not_a_draft_has_no_draft_problem() {
+  local got
+  got=$(problems '.draft = false')
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# A run with an empty pull_requests array names no pull request, so it cannot be tied to this one.
+test_a_sweep_ignores_a_successful_run_with_no_pull_requests() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z .github/workflows/ci.yml mikelane/thrift release-please--branches--main--components--handoff none'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_ci_runs $SHA_A "$(ci_run 1 success 2026-10-18T10:00:00Z 999 main)"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
 }
 
 run_tests "$@"

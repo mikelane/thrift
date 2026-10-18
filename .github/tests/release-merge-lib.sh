@@ -48,6 +48,7 @@ release_merge_problems() {
   local pr_state pr_base_ref head_repo head_ref pr_author head_sha
   pr_state=$(jq -r '.state' "$pr")
   [[ "$pr_state" == open ]] || echo "the PR is $pr_state, not open"
+  [[ "$(jq -r '.draft // false' "$pr")" == false ]] || echo "the PR is a draft"
   pr_base_ref=$(jq -r '.base.ref' "$pr")
   [[ "$pr_base_ref" == "$base" ]] || echo "the PR targets $pr_base_ref, not $base"
   head_repo=$(jq -r '.head.repo.full_name // "(deleted)"' "$pr")
@@ -67,10 +68,13 @@ release_merge_problems() {
   done <"$files"
 }
 
-# release_merge_ci_passed <repo> <sha> <head-ref>: succeeds only when the latest CI run for the pull
-# request event at <sha> has concluded with success. A run counts only when it is the workflow file
-# .github/workflows/ci.yml (not a workflow that merely has the display name CI), ran for a head in
-# <repo> itself (not a fork that pushed the same commit) and on branch <head-ref>. No run, a run
+# release_merge_ci_passed <repo> <sha> <head-ref> <number> <base>: succeeds only when the latest CI
+# run for the pull request event at <sha> has concluded with success. A run counts only when it is
+# the workflow file .github/workflows/ci.yml (not a workflow that merely has the display name CI),
+# ran for a head in <repo> itself (not a fork that pushed the same commit), on branch <head-ref>,
+# and for pull request <number> into <base> (another PR from the same branch into another base has
+# the same head but tested a different merge; a run listing no pull request counts for none). Of
+# two runs created in the same second the higher id is the later. No run, a run
 # still going, a failed run, and a success that is older than a later failure return 1. A lookup
 # that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
@@ -78,12 +82,13 @@ release_merge_problems() {
 release_merge_ci_passed() {
   local runs conclusion
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
-  conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" '
+  conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" --argjson number "$4" --arg base "$5" '
     [.[].workflow_runs[]
      | select(.path == ".github/workflows/ci.yml"
               and .head_repository.full_name == $repo
-              and .head_branch == $ref)]
-    | sort_by(.created_at) | last | .conclusion // empty' <<<"$runs") || return 2
+              and .head_branch == $ref
+              and any(.pull_requests[]?; .number == $number and .base.ref == $base))]
+    | sort_by(.created_at, .id) | last | .conclusion // empty' <<<"$runs") || return 2
   [[ "$conclusion" == success ]]
 }
 
@@ -100,7 +105,7 @@ release_merge_sweep() {
     | {
         local lookup_failed=0
         while read -r number sha ref; do
-          if release_merge_ci_passed "$1" "$sha" "$ref"; then
+          if release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2"; then
             echo "$number $sha"
           elif [[ $? != 1 ]]; then
             echo "Cannot read the CI runs of PR #$number at $sha." >&2
