@@ -40,6 +40,19 @@ release_merge_changed_files() {
   jq -r '.[] | (.filename, (.previous_filename // empty)) | if test("[[:cntrl:]]") then @json else . end'
 }
 
+# release_merge_sibling_problem <repo> <head-ref> <number>: prints a reason when an open PR other than
+# <number> has <head-ref> as its head in <repo> (head=<owner>:<branch> matches only this repository,
+# and the jq filter checks again). A run's pull_requests cannot say which PR triggered it, so with a
+# sibling no CI run can be tied to one PR. A lookup that fails prints a reason too: fail closed.
+release_merge_sibling_problem() {
+  local siblings
+  siblings=$(gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
+    | jq -r --arg repo "$1" --arg ref "$2" --argjson number "$3" '.[]
+        | select(.number != $number and .head.ref == $ref and .head.repo.full_name == $repo)
+        | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2"; return; }
+  [[ -z "$siblings" ]] || echo "another open PR shares the branch $2: $siblings"
+}
+
 # release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha>:
 # prints one line per reason the PR must not be merged, and nothing when it may be.
 # <pr.json> is the REST pull request object, <changed-files> lists one path per line.
@@ -59,6 +72,7 @@ release_merge_problems() {
   [[ "$pr_author" == "$bot" ]] || echo "the PR author is $pr_author, not $bot"
   head_sha=$(jq -r '.head.sha' "$pr")
   [[ "$head_sha" == "$tested_sha" ]] || echo "the PR head is $head_sha but CI tested $tested_sha"
+  release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")"
   allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config"; return; }
   # A failed `<"$files"` skips the loop and prints no problem, which would pass every file.
   [[ -r "$files" ]] || { echo "cannot read the changed files from $files"; return; }
@@ -72,8 +86,10 @@ release_merge_problems() {
 # run for the pull request event at <sha> has concluded with success. A run counts only when it is
 # the workflow file .github/workflows/ci.yml (not a workflow that merely has the display name CI),
 # ran for a head in <repo> itself (not a fork that pushed the same commit), on branch <head-ref>,
-# and for pull request <number> into <base> (another PR from the same branch into another base has
-# the same head but tested a different merge; a run listing no pull request counts for none). Of
+# and for pull request <number> into <base>. The runs API lists every open PR at the run's head, "not
+# necessarily the pull requests that triggered the run", so only a run listing exactly that one PR
+# counts; a run listing none or several counts for none (the gate refuses a PR that shares its
+# head branch with another open PR, so this never strands a lone release PR). Of
 # two runs created in the same second the higher id is the later. No run, a run
 # still going, a failed run, and a success that is older than a later failure return 1. A lookup
 # that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
@@ -87,7 +103,8 @@ release_merge_ci_passed() {
      | select(.path == ".github/workflows/ci.yml"
               and .head_repository.full_name == $repo
               and .head_branch == $ref
-              and any(.pull_requests[]?; .number == $number and .base.ref == $base))]
+              and ((.pull_requests // []) | length == 1
+                   and .[0].number == $number and .[0].base.ref == $base))]
     | sort_by(.created_at, .id) | last | .conclusion // empty' <<<"$runs") || return 2
   [[ "$conclusion" == success ]]
 }

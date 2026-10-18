@@ -16,7 +16,7 @@ CONFIG=$REPO_ROOT/release-please-config.json
 # write_pr <file> [jq filter]: a release PR that passes the gate, edited by the filter.
 write_pr() {
   jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" '{
-    state: "open", base: {ref: "main"},
+    number: 111, state: "open", base: {ref: "main"},
     head: {ref: "release-please--branches--main--components--handoff", sha: $sha,
            repo: {full_name: $repo}},
     user: {login: $bot}}' | jq "${2:-.}" >"$1"
@@ -27,13 +27,21 @@ plugins/handoff/CHANGELOG.md
 plugins/handoff/version.txt
 plugins/handoff/.claude-plugin/plugin.json'
 
-# problems <pr-filter> [files]: the gate's output for a PR edited by the filter.
-problems() {
+# gate_problems <pr-filter> [files]: the gate's output for a PR edited by the filter, with the open
+# pull requests the stub `gh` serves from pulls.json.
+gate_problems() {
   local dir
   dir=$TEST_DIR
+  stub_gh
   write_pr "$dir/pr.json" "$1"
   printf '%s\n' "${2:-$GOOD_FILES}" >"$dir/files"
   release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA"
+}
+
+# problems <pr-filter> [files]: gate_problems when the release PR is the only open PR.
+problems() {
+  write_pulls "$(open_pr 111 "$SHA")"
+  gate_problems "$@"
 }
 
 test_allowlist_names_the_manifest_and_each_packages_changelog_and_extra_files() {
@@ -156,6 +164,8 @@ test_an_unreadable_config_blocks_the_merge() {
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
   echo 'plugins/handoff/CHANGELOG.md' >"$dir/files"
+  stub_gh
+  write_pulls "$(open_pr 111 "$SHA")"
   got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
   [[ "$got" == *'cannot read the allowlist'* ]] || fail "got [$got]"
 }
@@ -164,6 +174,8 @@ test_an_unreadable_changed_files_list_blocks_the_merge() {
   local dir got
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
+  stub_gh
+  write_pulls "$(open_pr 111 "$SHA")"
   got=$(release_merge_problems "$dir/pr.json" "$dir/missing-files" "$CONFIG" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
   [[ "$got" == "cannot read the changed files from $dir/missing-files" ]] || fail "got [$got]"
 }
@@ -207,6 +219,8 @@ problems_for_names() {
   dir=$TEST_DIR
   changed_files "$1" >"$dir/files"
   write_pr "$dir/pr.json"
+  stub_gh
+  write_pulls "$(open_pr 111 "$SHA")"
   release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA"
 }
 
@@ -633,6 +647,54 @@ test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
   write_ci_runs $SHA_A "$(ci_run 1 success 2026-10-18T10:00:00Z 999 main)"
   got=$(sweep)
   [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# --- Adversarial QA (gate 3, run 2) findings. ---
+
+# The runs API documents pull_requests as "Pull requests that are open with a head_sha or
+# head_branch that matches the workflow run. The returned pull requests do not necessarily indicate
+# pull requests that triggered the run." So while PR 999 (same release branch, into old-feature) is
+# open, every run at that head lists both PRs, the run PR 999 triggered included. Its success must
+# not stand in for the release PR's own CI run, which failed.
+test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
+  local got both
+  both='[{"number":999,"base":{"ref":"old-feature"}},{"number":111,"base":{"ref":"main"}}]'
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_ci_runs $SHA_A \
+    "$(ci_run 2 success 2026-10-18T11:00:00Z 999 old-feature | jq -c --argjson p "$both" '.pull_requests = $p')" \
+    "$(ci_run 1 failure 2026-10-18T10:00:00Z 111 main | jq -c --argjson p "$both" '.pull_requests = $p')"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# The sibling check: the runs API does not say which PR a run triggered, so a second open PR from
+# the release branch makes every run at that head ambiguous.
+test_another_open_pr_from_the_release_branch_blocks_the_merge() {
+  local got
+  write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.base.ref = "old-feature"')"
+  got=$(gate_problems .)
+  [[ "$got" == *'another open PR'* ]] || fail "got [$got]"
+}
+
+test_the_release_pr_alone_at_its_head_branch_has_no_sibling_problem() {
+  local got
+  write_pulls "$(open_pr 111 "$SHA")"
+  got=$(gate_problems .)
+  [[ "$got" != *'another open PR'* ]] || fail "got [$got]"
+}
+
+test_an_open_pr_from_another_branch_is_not_a_sibling() {
+  local got
+  write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.head.ref = "feature/x"')"
+  got=$(gate_problems .)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_failed_open_pr_lookup_blocks_the_merge() {
+  local got
+  touch "$TEST_DIR/pulls.error"
+  got=$(gate_problems . 2>/dev/null)
+  [[ "$got" == *'cannot list the open PRs'* ]] || fail "got [$got]"
 }
 
 run_tests "$@"

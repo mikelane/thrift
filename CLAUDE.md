@@ -38,7 +38,9 @@ specific to this repo.
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
   head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
   still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
-  red instead of reading as "no run yet". If a PR is still stuck, rerun its last CI run with
+  red instead of reading as "no run yet". The gate refuses a release PR while another open PR has
+  the same head branch, because a run's `pull_requests` lists every open PR at its head, not just
+  the one that triggered it. If a PR is still stuck, rerun its last CI run with
   `gh run rerun <CI run id>`. The sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job
   permission `actions: read`), because the App token has no Actions access; the PR list, the gate
   and the merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
