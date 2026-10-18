@@ -2,8 +2,9 @@ name: Release Merge
 
 # Merges a release-please PR once CI has passed on it, so a release needs no one at the keyboard.
 # Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
-# so a successful CI run means the PR met them. The release App must be on the review-bypass list
-# of main's branch protection, because the PR needs one code-owner approval and the App opens it.
+# so a successful CI run means the PR met them. The release App must be on the pull-request review
+# bypass list of main's branch protection, because the PR needs one code-owner approval and the App
+# opens it. It must not be a ruleset bypass actor, which would also skip the required status checks.
 #
 # This runs from the default branch on workflow_run and has write access, so it never checks out
 # or runs the PR's code. It reads the gate script and release-please-config.json from the default
@@ -14,7 +15,8 @@ name: Release Merge
 #   - the PR changes only files release-please writes (see release_merge_allowlist)
 # Anything else is logged and skipped, and the PR waits for a person.
 #
-# Needs the same variable and secret as release-please.yml: RELEASE_APP_ID, RELEASE_APP_PRIVATE_KEY.
+# Needs the same variable and secret as release-please.yml: RELEASE_APP_ID, RELEASE_APP_PRIVATE_KEY
+# (the secret in the `release` environment).
 
 on:
   workflow_run:
@@ -38,6 +40,8 @@ jobs:
       && github.event.workflow_run.head_repository.full_name == github.repository
       && startsWith(github.event.workflow_run.head_branch, 'release-please--')
     runs-on: ubuntu-latest
+    # The App key lives in this environment, which only main may deploy to (see release-please.yml).
+    environment: release
     timeout-minutes: 10
     steps:
       - name: Mint a short-lived App token

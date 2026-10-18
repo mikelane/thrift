@@ -7,7 +7,8 @@ name: Release Please
 # The release PR is opened with a GitHub App token, not GITHUB_TOKEN. A PR opened with GITHUB_TOKEN
 # triggers no workflows, so the release PR would get no CI and could not merge. The App needs
 # repository permissions Contents, Pull requests and Issues set to read and write. It is configured
-# with the repository variable RELEASE_APP_ID and the repository secret RELEASE_APP_PRIVATE_KEY.
+# with the repository variable RELEASE_APP_ID and the secret RELEASE_APP_PRIVATE_KEY of the `release`
+# environment, which is limited to the main branch.
 #
 # The workflow's own GITHUB_TOKEN gets no permissions: the App token does all the writing. The job
 # checks out and runs no repository code.
@@ -27,6 +28,9 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # The App key lives in this environment, which only main may deploy to. A branch workflow
+    # cannot read it, so no one with write access can mint an App token from a branch.
+    environment: release
     timeout-minutes: 10
     steps:
       - name: Mint a short-lived App token
