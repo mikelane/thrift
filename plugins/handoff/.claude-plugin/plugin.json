@@ -1,6 +1,6 @@
 {
   "name": "handoff",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes.",
   "author": { "name": "Mike Lane" },
   "license": "MIT",

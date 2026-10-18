@@ -6,14 +6,16 @@ Every model call re-reads the whole session context, so a long session pays for 
 every turn, mostly as cache reads. Accuracy also drops as context grows. Each plugin here pulls
 one lever on that cost and logs what it decided, so you can measure whether it helped.
 
-> **Status:** early development. `handoff` installs from this marketplace but has not yet been
-> verified in a live terminal.
+> **Status:** early development. `handoff` is listed in this marketplace; an install from it has
+> not been tried yet. Parts of the plugin have been verified in live terminals on Claude Code
+> 2.1.299 through 2.1.302, by hand and with a tmux harness; the rest has not. See the
+> [verified and unverified lists](plugins/handoff/README.md#what-has-been-verified-live).
 
 ## Plugins
 
 | Plugin | Status | What it does |
 |---|---|---|
-| [`handoff`](plugins/handoff) | early, not yet verified live | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
+| [`handoff`](plugins/handoff) | early, partly verified live on 2.1.302 ([details](plugins/handoff/README.md#what-has-been-verified-live)) | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
 
 ## Install
 
