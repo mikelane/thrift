@@ -26,6 +26,9 @@ THRESHOLD=50000
 # 20 s, so the job fires well inside them.
 HANDOFF_LEAD=6
 SCHEDULE_AHEAD=80
+# The longest legitimate wait for the fire time: the job's minute is up to a minute past the schedule
+# ahead, plus the time the scheduling turn takes and some slack. A fire time past this is not one.
+FIRE_WAIT_LIMIT=$((SCHEDULE_AHEAD + 60 + 30))
 SCHEDULED_TOKEN=SCHEDTOKEN
 
 scenario_run() {
@@ -62,7 +65,7 @@ epoch_of() {
   ts=${ts%.*}
   date -j -u -f '%Y-%m-%dT%H:%M:%S' "$ts" +%s 2>/dev/null || date -u -d "${ts}Z" +%s
 }
-cron_fields() { date -r "$1" '+%M %H %d %m *' 2>/dev/null || date -d "@$1" '+%M %H %d %m *'; }
+cron_fields() { date -d "@$1" '+%M %H %d %m *' 2>/dev/null || date -r "$1" '+%M %H %d %m *'; }
 
 # set_mode <mode>: the plugin's mode for the sessions started after this.
 set_mode() {
@@ -96,6 +99,7 @@ run_mode() {
   # fire is read from the debug log and goes into arithmetic, which would evaluate anything but digits.
   [[ "$fire" =~ ^[0-9]+$ ]] || live_abort "could not read the job's fire time from the log: '$fire'"
   (($(date +%s) < fire - HANDOFF_LEAD)) || live_abort "the job fires less than ${HANDOFF_LEAD}s from now: the window is missed; run it again"
+  (($(date +%s) + FIRE_WAIT_LIMIT >= fire)) || live_abort "the job fires more than ${FIRE_WAIT_LIMIT}s from now (at $fire): its minute was not the one asked for; run it again"
   while (($(date +%s) < fire - HANDOFF_LEAD)); do sleep "$LIVE_POLL"; done
   submit "$name" '/handoff'
   wait_for "the first handoff of '$name' to clear" first_handoff_cleared "$baseline"
@@ -109,6 +113,8 @@ run_mode() {
   [[ -n "$(first_cleared "$baseline")" ]] || live_abort 'no cleared record'
   first_cleared "$baseline" | jq -e '.trigger_values.held_groups >= 1' >/dev/null \
     || live_abort "the job did not fire inside the handoff (held_groups 0), so the run proves nothing; run it again"
+  [[ "$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')" == "$mode" ]] \
+    || live_abort "the first handoff's record says the session ran in '$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')', not in $mode: the $mode checks would prove nothing"
   [[ "$(turn_end_field "$after_handoff" signal)" == strong ]] \
     || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing"
 

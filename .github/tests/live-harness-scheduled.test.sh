@@ -9,23 +9,25 @@ CLEARED_CARRIED='{"action":"cleared","trigger_values":{"point":"command","held_g
 STRONG_HANDED_OFF='{"action":"cleared","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":63000,"handoff_unattended":true}}'
 SUBMIT_LINE='prompt.submit (handoff): "SCHEDTOKEN: run these Bash commands"'
 
-# run_mode_case <first-cleared-record> <turn-end-record> <debug-log-line> [mode]: run_mode for the mode
-# (default `ask`) in session a. handoff_start writes its arguments to handoff-start-args. The stubbed
+# run_mode_case <first-cleared-record> <turn-end-record> <debug-log-line> [mode] [fire-offset]: run_mode for
+# the mode (default `ask`) in session a. The first record gets effective_mode set to the mode unless it
+# names one. The fire offset is the seconds from now the stubbed schedule_prompt answers (default: just
+# past the lead). handoff_start writes its arguments to handoff-start-args. The stubbed
 # wait_for stands in for the plugin: the wait for the first handoff writes the first record, the wait for
 # the turn end writes the second, so each lands after the baseline the scenario took. The job "fires" 2 s
 # past the lead: at 1 s a clock tick before the window check made a loaded run abort as a missed window.
 run_mode_case() {
   printf '%s\n' "$3" > "$TEST_DIR/debug-a.log"
-  printf '%s\n' "$1" > "$TEST_DIR/first-record"
+  printf '%s\n' "$1" | jq -c --arg mode "${4:-ask}" '.trigger_values.effective_mode //= $mode' > "$TEST_DIR/first-record"
   printf '%s\n' "$2" > "$TEST_DIR/turn-end-record"
-  local mode=${4:-ask}
+  local mode=${4:-ask} offset=${5:-HANDOFF_LEAD + 2}
   run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/scheduled-prompt-during-handoff.sh"
     live_init
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
     PUSH_REPO=/fixture/work
     set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; }; say_apple() { :; }; submit() { :; }; stop_session() { :; }
     turns_done_above() { :; }; show_pane() { :; }; show_log() { :; }
-    schedule_prompt() { echo $(($(date +%s) + HANDOFF_LEAD + 2)); }
+    schedule_prompt() { echo $(($(date +%s) + '"$offset"')); }
     wait_for() {
       case "$1" in
         *"first handoff"*) cat "'"$TEST_DIR"'/first-record" >> "$LIVE_DECISIONS" ;;
@@ -175,6 +177,38 @@ test_set_mode_changes_only_the_handoff_mode_in_the_settings() {
     jq -c . "$LIVE_RUN/settings.json"'
   assert_exit_code 0
   assert_out_has '{"pluginConfigs":{"handoff@inline":{"options":{"handoffMode":"act","compactBeforeClear":true}}}}'
+}
+
+test_it_does_not_pass_the_act_checks_when_the_records_show_the_session_ran_in_ask() {
+  run_mode_case '{"action":"cleared","trigger_values":{"held_groups":1,"held_unattended":true,"handoff_unattended":false,"held_other_delivery":"submitted","effective_mode":"ask"}}' \
+    "$STRONG_HANDED_OFF" "$SUBMIT_LINE" act
+  assert_exit_code 2
+  assert_out_has "ran in 'ask', not in act"
+  assert_out_lacks 'PASS s'
+}
+
+test_it_is_an_error_not_an_unbounded_wait_when_the_fire_time_is_far_beyond_the_schedule_window() {
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE" ask 3600
+  assert_exit_code 2
+  assert_out_has 'the job fires more than'
+}
+
+test_it_is_an_error_when_the_fire_time_is_inside_the_lead_even_with_a_held_group() {
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE" ask 1
+  assert_exit_code 2
+  assert_out_has 'the window is missed'
+}
+
+test_it_fails_when_an_advised_turn_end_carries_handoff_unattended() {
+  run_mode_case "$CLEARED_CARRIED" '{"action":"advised","trigger_values":{"point":"turn-end","signal":"strong","handoff_unattended":true}}' "$SUBMIT_LINE"
+  assert_exit_code 1
+  assert_out_has 'FAIL  [ask] the strong turn end after it handed off, as a scheduled turn does'
+}
+
+test_it_fails_when_the_submit_in_the_log_is_not_the_scheduled_prompt() {
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'prompt.submit (handoff): "some other prompt"'
+  assert_exit_code 1
+  assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
 }
 
 run_tests "$@"
