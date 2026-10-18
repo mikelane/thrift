@@ -191,16 +191,21 @@ for (const [button, clears] of clearsSessionCases) {
 const strongOffer = { signal: 'strong', contextTokens: 150_000, hasHeldPrompt: false, isBusy: false } as const
 
 test('It returns a weak signal for a busy band with no held prompt from offerWithBusyState', () => {
-  expect(offerWithBusyState(strongOffer, 160_000, true)).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
+  expect(offerWithBusyState(strongOffer, 160_000, true, 'strong')).toEqual({ ...strongOffer, contextTokens: 160_000, isBusy: true, signal: 'weak' })
 })
 
 test('It keeps the signal of a busy band holding a prompt from offerWithBusyState', () => {
   const held = { ...strongOffer, hasHeldPrompt: true }
-  expect(offerWithBusyState(held, 160_000, true)).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
+  expect(offerWithBusyState(held, 160_000, true, 'strong')).toEqual({ ...held, contextTokens: 160_000, isBusy: true })
+})
+
+test('It restores the signal the band was raised on once the busy state clears from offerWithBusyState', () => {
+  const busyWeak = { ...strongOffer, signal: 'weak', isBusy: true } as const
+  expect(offerWithBusyState(busyWeak, 160_000, false, 'strong')).toEqual({ ...strongOffer, contextTokens: 160_000 })
 })
 
 test('It keeps the signal of a band that is not busy from offerWithBusyState', () => {
-  expect(offerWithBusyState({ ...strongOffer, isBusy: true }, 160_000, false)).toEqual({ ...strongOffer, contextTokens: 160_000 })
+  expect(offerWithBusyState({ ...strongOffer, isBusy: true }, 160_000, false, 'strong')).toEqual({ ...strongOffer, contextTokens: 160_000 })
 })
 
 test('It returns true for offers with equal fields from isSameOffer', () => {

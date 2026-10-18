@@ -63,12 +63,13 @@ const CLEARS_SESSION: Readonly<Record<Button, boolean>> = {
 
 export const clearsSession = (button: Button): boolean => CLEARS_SESSION[button]
 
-// classify() gives a weak signal whenever work is busy; a held prompt keeps its own signal.
-export const offerWithBusyState = (offer: Offer, contextTokens: number, isBusy: boolean): Offer => ({
+// classify() gives a weak signal whenever work is busy; a held prompt keeps its own signal. Once the work is no longer busy
+// the band goes back to the signal it was raised on, so a band raised strong is not left weak by a busy redraw.
+export const offerWithBusyState = (offer: Offer, contextTokens: number, isBusy: boolean, raisedSignal: Offer['signal']): Offer => ({
   ...offer,
   contextTokens,
   isBusy,
-  signal: isBusy && !offer.hasHeldPrompt ? 'weak' : offer.signal,
+  signal: isBusy && !offer.hasHeldPrompt ? 'weak' : raisedSignal,
 })
 
 export const WRITING: Writing = { isWriting: true, stage: 'note' }

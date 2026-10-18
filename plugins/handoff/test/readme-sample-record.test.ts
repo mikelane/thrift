@@ -37,6 +37,9 @@ const evaluations: ReadonlyArray<readonly [string, Evaluation]> = [
   ['a reason', { ...cleared, action: 'none', reason: 'background_busy', note: undefined }],
   ['a person clear', { ...cleared, clearedBy: 'person' }],
   ['a late turn', { ...cleared, lateTurn: true }],
+  ['a continue that was skipped', { ...cleared, continueFields: { continued: 'skipped', continue_skip: 'strong_signal' } }],
+  ['a continue that was submitted', { ...cleared, continueFields: { continued: 'submitted' } }],
+  ['a continue that is off', { ...cleared, continueFields: { continued: 'off' } }],
   ['a held restore', { ...cleared, action: 'none', heldFields: { held_groups: 1, held_unattended: true, handoff_unattended: false, held_restore: 'in_box' } }],
   ['a record without held fields', { ...cleared, action: 'advised', note: undefined, clearedBy: undefined, compactedBeforeClear: undefined, heldFields: undefined }],
 ]
@@ -86,6 +89,20 @@ test('It reports drift when the README line has held_groups but leaves out held_
   expect(findSampleDrift(readmeWith(missing), recordFromEvaluation)).toHaveLength(1)
 })
 
+const skippedContinue: Evaluation = { ...cleared, continueFields: { continued: 'skipped', continue_skip: 'strong_signal' } }
+
+test('It reports drift when the README line has continued skipped but leaves out continue_skip', () => {
+  const missing = lineOf(skippedContinue).replace(',"continue_skip":"strong_signal"', '')
+  expect(missing).not.toBe(lineOf(skippedContinue))
+  expect(findSampleDrift(readmeWith(missing), recordFromEvaluation)).toHaveLength(1)
+})
+
+test('It reports drift when the README line has continue_skip beside a continued that is not skipped', () => {
+  const stray = lineOf(skippedContinue).replace('"continued":"skipped"', '"continued":"submitted"')
+  expect(stray).not.toBe(lineOf(skippedContinue))
+  expect(findSampleDrift(readmeWith(stray), recordFromEvaluation)).toHaveLength(1)
+})
+
 const malformedLines: ReadonlyArray<readonly [string, string]> = [
   ['is not an object', '[1,2]'],
   ['has no trigger_values', '{"ts":"x","session_id":"abc","action":"none","engine_version":"2.1.295"}'],
@@ -93,6 +110,8 @@ const malformedLines: ReadonlyArray<readonly [string, string]> = [
   ['has a string for context_tokens', lineOf(cleared).replace('"context_tokens":200000', '"context_tokens":"200000"')],
   ['has a number for an optional note', lineOf(cleared).replace('"note":"appended"', '"note":1')],
   ['has false for compacted_before_clear', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":false')],
+  ['has a number for continued', lineOf(skippedContinue).replace('"continued":"skipped"', '"continued":1')],
+  ['has a number for continue_skip', lineOf(skippedContinue).replace('"continue_skip":"strong_signal"', '"continue_skip":1')],
   ['has false for late_turn', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":true,"late_turn":false')],
 ]
 for (const [name, line] of malformedLines) {

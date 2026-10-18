@@ -1,6 +1,6 @@
 {
   "name": "handoff",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes.",
   "author": { "name": "Mike Lane" },
   "license": "MIT",
@@ -25,6 +25,12 @@
       "type": "boolean",
       "title": "Compact the old session before clearing",
       "description": "Costs one compaction per handoff. When on, claude --resume <old id> reopens the compacted transcript, not the full one.",
+      "default": false
+    },
+    "continueAfterHandoff": {
+      "type": "boolean",
+      "title": "Continue on the note after a handoff",
+      "description": "After a band press mid-work or a typed /handoff, the fresh session starts on the note without waiting for you. Never after a strong signal, and never while the plugin runs in off.",
       "default": false
     }
   }
