@@ -230,9 +230,12 @@ test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
 }
 
 # merge_commands: the lines of the workflow that run `gh pr merge`. A comment, an echo or trailing
-# text that merely mentions the command does not start with it, so it is not selected.
+# text that merely mentions the command does not start with it, so it is not selected. A trailing
+# comment on a merge line is stripped, so a flag named only in that comment does not count. Each
+# line gets one trailing space, so a flag at the end of the line matches the ' --flag ' patterns.
 merge_commands() {
-  grep -E '^[[:space:]]*gh pr merge ' "$REPO_ROOT/.github/workflows/release-merge.yml"
+  grep -E '^[[:space:]]*gh pr merge ' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    | sed -e "s/[[:space:]]#.*$//" -e "s/$/ /"
 }
 
 test_the_workflow_runs_exactly_one_merge_command() {
