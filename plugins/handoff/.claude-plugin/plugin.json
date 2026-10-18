@@ -29,7 +29,7 @@
     },
     "continueAfterHandoff": {
       "type": "boolean",
-      "title": "Continue after a mid-flight handoff",
+      "title": "Continue on the note after a handoff",
       "description": "After a handoff that did not follow a strong signal, the fresh session starts on the note without waiting for you.",
       "default": false
     }

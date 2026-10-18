@@ -1,4 +1,4 @@
-import type { ContinueFields } from './continue-decision'
+import type { ContinueFields, ContinueSkip } from './continue-decision'
 import type { DecisionReason } from './decision-reasons'
 import type { ForkReason } from './fork-outcome'
 import type { NoteDelivery } from './handoff-note'
@@ -34,7 +34,7 @@ export type TriggerValues = {
   compacted_before_clear?: true
   late_turn?: true
   continued?: ContinueFields['continued']
-  continue_skip?: Extract<ContinueFields, { continued: 'skipped' }>['continue_skip']
+  continue_skip?: ContinueSkip
 }
 
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>

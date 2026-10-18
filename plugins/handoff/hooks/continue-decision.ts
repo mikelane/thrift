@@ -8,7 +8,7 @@ export type ContinueFields =
   | { continued: 'submitted' }
   | { continued: 'skipped'; continue_skip: ContinueSkip }
 
-export type ContinueDecision = { submit: true } | { submit: false; fields: ContinueFields }
+type ContinueDecision = { submit: true } | { submit: false; fields: ContinueFields }
 
 export type ContinueInput = {
   isEnabled: boolean
