@@ -76,6 +76,27 @@ describe('decideContinue', () => {
       fields: { continued: 'off' },
     })
   })
+
+  test('It reports strong_signal before note_not_appended when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, signal: 'strong', noteDelivery: 'submitted' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'strong_signal' },
+    })
+  })
+
+  test('It reports note_not_appended before held_prompt_sent when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, noteDelivery: 'in_box', hasHeldPromptStartedTurn: true })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'note_not_appended' },
+    })
+  })
+
+  test('It reports held_prompt_sent before session_moved when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, hasHeldPromptStartedTurn: true, isSameSession: false })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'held_prompt_sent' },
+    })
+  })
 })
 
 test('It tells Claude to continue from the handoff note', () => {
