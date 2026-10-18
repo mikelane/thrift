@@ -4,7 +4,7 @@ import { createState } from '../hooks/session-state'
 import { noteToolCall, type TrackedCall, type TrackedResult } from '../hooks/tool-call-tracking'
 
 const noteCall = (call: TrackedCall, ran: TrackedResult, tasksBefore: readonly string[]) => {
-  const state = createState({ setting: 'ask', threshold: 150_000, compactBeforeClear: false })
+  const state = createState({ setting: 'ask', threshold: 150_000, compactBeforeClear: false, continueAfterHandoff: false })
   state.backgroundTasks = new Set(tasksBefore)
   noteToolCall(state, call, ran)
   return { tasks: [...state.backgroundTasks], hasFinishedTask: state.hasFinishedTask }

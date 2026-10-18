@@ -320,6 +320,7 @@ export const register: Register = (on, options) => {
     setting,
     threshold: asThreshold(options.handoffContextTokens),
     compactBeforeClear: options.compactBeforeClear === true,
+    continueAfterHandoff: options.continueAfterHandoff === true,
   })
 
   registerLifecycleHooks(on, state, setting)

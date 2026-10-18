@@ -6,6 +6,7 @@ type Settings = {
   setting: Mode
   threshold: number
   compactBeforeClear: boolean
+  continueAfterHandoff: boolean
 }
 
 export type ButtonPress = { offer: Offer; button: Button }

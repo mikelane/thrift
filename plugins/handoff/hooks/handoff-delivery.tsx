@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
 import { announce } from './announcement'
+import { CONTINUE_PROMPT, decideContinue, type ContinueFields } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
 import {
@@ -206,6 +207,56 @@ function sendLateArrivals($: EngineInterface, state: SessionState, holdBackPerso
   })
 }
 
+async function readSessionId($: EngineInterface): Promise<string | undefined> {
+  try {
+    return await $.session.id()
+  } catch (error) {
+    debug($, `could not read the session id: ${String(error)}`)
+    return undefined
+  }
+}
+
+function isContinuing(state: SessionState): boolean {
+  return state.continueAfterHandoff && state.mode !== 'off'
+}
+
+// The fresh session's id, read straight after the clear; only when a continue is possible, so no other path reads it.
+function readFreshSessionId($: EngineInterface, state: SessionState): Promise<string | undefined> {
+  return isContinuing(state) ? readSessionId($) : Promise.resolve(undefined)
+}
+
+// Inside a clock tick: the continue prompt is submitted from a hook the turn may be waiting on, which the engine refuses.
+function submitContinueAfterTick($: EngineInterface, state: SessionState, isUnattended: boolean): Promise<boolean> {
+  const prompt: HeldPrompt = { text: CONTINUE_PROMPT, isUnattended, origin: noteOrigin(isUnattended), author: 'plugin' }
+  return new Promise(resolve => {
+    $.clock.after(0, () => {
+      void submitEntered($, state, prompt, 'could not submit the continue prompt', false).then(resolve)
+    })
+  })
+}
+
+type ContinueContext = { freshSessionId: string | undefined; noteDelivery: NoteDelivery; hasHeldPromptStartedTurn: boolean }
+
+async function continueAfterHandoff(
+  $: EngineInterface,
+  state: SessionState,
+  settledHandoff: SettledHandoff,
+  { freshSessionId, noteDelivery, hasHeldPromptStartedTurn }: ContinueContext,
+): Promise<ContinueFields> {
+  const isSameSession = !isContinuing(state) || (freshSessionId !== undefined && (await readSessionId($)) === freshSessionId)
+  const decision = decideContinue({
+    isEnabled: state.continueAfterHandoff,
+    effectiveMode: settledHandoff.trigger.effectiveMode,
+    signal: settledHandoff.trigger.signal,
+    noteDelivery,
+    hasHeldPromptStartedTurn,
+    isSameSession,
+  })
+  if (!decision.submit) return decision.fields
+  const isSubmitted = await submitContinueAfterTick($, state, settledHandoff.isUnattended)
+  return isSubmitted ? { continued: 'submitted' } : { continued: 'skipped', continue_skip: 'submit_failed' }
+}
+
 export async function continueInFreshSession(
   $: EngineInterface,
   state: SessionState,
@@ -218,6 +269,7 @@ export async function continueInFreshSession(
   // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
+  const freshSessionId = await readFreshSessionId($, state)
   await registerHandoffCommand($)
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
@@ -229,6 +281,8 @@ export async function continueInFreshSession(
   const { holdBackPerson, placement } = deliveryAfterNote(noteDelivery)
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
   const late = await sendLateArrivals($, state, holdBackPerson)
+  const hasHeldPromptStartedTurn = [...deliveries, ...late.deliveries].includes('submitted')
+  const continueFields = await continueAfterHandoff($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn })
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
@@ -237,6 +291,7 @@ export async function continueInFreshSession(
     clearedBy,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     lateTurn: hasLateTurn,
+    continueFields,
     heldFields: {
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
       handoff_unattended: settledHandoff.isUnattended,

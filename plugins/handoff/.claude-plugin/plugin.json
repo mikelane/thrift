@@ -26,6 +26,12 @@
       "title": "Compact the old session before clearing",
       "description": "Costs one compaction per handoff. When on, claude --resume <old id> reopens the compacted transcript, not the full one.",
       "default": false
+    },
+    "continueAfterHandoff": {
+      "type": "boolean",
+      "title": "Continue after a mid-flight handoff",
+      "description": "After a handoff that began mid-work, the fresh session starts on the note without waiting for you.",
+      "default": false
     }
   }
 }
