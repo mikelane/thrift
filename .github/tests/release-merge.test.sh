@@ -229,6 +229,179 @@ test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
+# stub_gh: a `gh` on PATH that answers the pull request list, the CI runs of a head commit and a
+# single pull request from files in $TEST_DIR (pulls.json, runs-<sha>.json, pr-<n>.json). A head
+# commit with no runs-<sha>.json has no CI run.
+stub_gh() {
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    "dir=$TEST_DIR" \
+    'path= ; for arg in "$@"; do [[ "$arg" == repos/* ]] && path=$arg; done' \
+    'case "$path" in' \
+    '  */actions/runs\?head_sha=*)' \
+    '    sha=${path#*head_sha=}; sha=${sha%%&*}' \
+    '    [[ "$path" == *event=pull_request* ]] || { echo "no event filter" >&2; exit 1; }' \
+    '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
+    '  */pulls\?*) cat "$dir/pulls.json" ;;' \
+    '  */pulls/*) cat "$dir/pr-${path##*/}.json" ;;' \
+    '  *) echo "unexpected gh call: $*" >&2; exit 1 ;;' \
+    'esac' >"$TEST_DIR/gh"
+  chmod +x "$TEST_DIR/gh"
+  PATH="$TEST_DIR:$PATH"
+}
+
+SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+# write_open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
+open_pr() {
+  jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" '{
+    number: ($n | tonumber), state: "open", base: {ref: "main"},
+    head: {ref: "release-please--branches--main--components--handoff", sha: $sha, repo: {full_name: $repo}}}' \
+    | jq -c "${3:-.}"
+}
+
+# write_pulls <entry>...: the pulls list the stub serves.
+write_pulls() { printf '%s\n' "$@" | jq -s '.' >"$TEST_DIR/pulls.json"; }
+
+# write_runs <sha> <run>...: the CI runs the stub serves for a head commit. A run is
+# `<name> <status> <conclusion|null> <created_at>`.
+write_runs() {
+  local sha=$1 run
+  shift
+  for run in "$@"; do
+    # shellcheck disable=SC2086
+    set -- $run
+    jq -n --arg name "$1" --arg status "$2" --arg conclusion "$3" --arg at "$4" \
+      '{name: $name, status: $status, conclusion: (if $conclusion == "null" then null else $conclusion end), created_at: $at}'
+  done | jq -s '{workflow_runs: .}' >"$TEST_DIR/runs-$sha.json"
+}
+
+sweep() { stub_gh; release_merge_sweep "$REPO" main; }
+
+test_a_sweep_with_no_open_release_prs_selects_nothing() {
+  local got
+  write_pulls
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_selects_a_pr_whose_ci_succeeded_at_its_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_whose_ci_failed_at_its_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed failure 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_whose_ci_is_still_running_at_its_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI in_progress null 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_with_no_ci_run_at_its_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_whose_ci_succeeded_only_at_an_older_sha() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_B)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_counts_only_the_latest_ci_run_at_the_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z' 'CI completed failure 2026-10-18T11:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_accepts_a_rerun_that_succeeded_after_a_failure() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed failure 2026-10-18T10:00:00Z' 'CI completed success 2026-10-18T11:00:00Z'
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_a_sweep_ignores_runs_of_other_workflows() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z' 'Lint completed failure 2026-10-18T11:00:00Z'
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_the_other_path_already_merged() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A '.state = "closed"')"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_from_a_branch_without_the_release_please_prefix() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A '.head.ref = "feature/x"')"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_skips_a_pr_from_a_fork() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A '.head.repo.full_name = "someone/thrift"')"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)" "$(open_pr 112 $SHA_B)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  write_runs $SHA_B 'CI completed failure 2026-10-18T10:00:00Z'
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+# lost_race <pr-json-filter>: release_merge_lost_race's status and output for PR 111 at SHA_A.
+lost_race() {
+  write_pr "$TEST_DIR/pr-111.json" "$1"
+  stub_gh
+  release_merge_lost_race "$REPO" 111 "$SHA"
+}
+
+test_a_failed_merge_of_a_pr_that_is_already_merged_is_a_lost_race() {
+  lost_race '.state = "closed"' >/dev/null || fail 'treated a merged PR as a real failure'
+}
+
+test_a_failed_merge_of_a_pr_whose_head_moved_is_a_lost_race() {
+  lost_race '.head.sha = "ffffffffffffffffffffffffffffffffffffffff"' >/dev/null || fail 'treated a moved head as a real failure'
+}
+
+test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
+  lost_race . >/dev/null && fail 'hid a real merge failure'
+  return 0
+}
+
 # merge_commands: the lines of the workflow that run `gh pr merge`. A comment, an echo or trailing
 # text that merely mentions the command does not start with it, so it is not selected. A trailing
 # comment on a merge line is stripped, so a flag named only in that comment does not count. Each
