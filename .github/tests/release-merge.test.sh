@@ -229,4 +229,10 @@ test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
+test_the_merge_command_bypasses_the_ruleset_review_and_stays_pinned_to_the_tested_commit() {
+  local got
+  got=$(grep -F -- '--match-head-commit' "$REPO_ROOT/.github/workflows/release-merge.yml" | grep -v '^ *#')
+  [[ "$got" == *'--admin --squash --match-head-commit "$TESTED_SHA"'* ]] || fail "got [$got]"
+}
+
 run_tests "$@"
