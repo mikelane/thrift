@@ -48,8 +48,8 @@ live_kept_env() {
 
 # Variables the harness itself sets for a session (on the command line, or as kept login variables). A
 # scenario may not set them, even when this shell has no value for them: a scenario's CLAUDE_CONFIG_DIR
-# would send transcripts_dir to the wrong place, and its PATH would pick the `rm` the session runs.
-LIVE_HARNESS_ENV='^(PATH|THRIFT_HOME|CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CODE_DISABLE_CLAUDE_MDS)$'
+# would send transcripts_dir to the wrong place, its PATH would pick the `rm` the session runs, and its HOME moves the config directory when CLAUDE_CONFIG_DIR is unset.
+LIVE_HARNESS_ENV='^(PATH|HOME|THRIFT_HOME|CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CODE_DISABLE_CLAUDE_MDS)$'
 # Spelled out, because a bracket range such as [A-Z] follows the locale's collation in some shells.
 LIVE_NAME_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'
 
@@ -90,7 +90,8 @@ live_scenario_env() {
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
 # new session, and a server started earlier carries its own. So the session drops every CLAUDE and
 # ANTHROPIC variable it has and then reads this shell's kept ones from a file in the run directory
-# (owner-only), which it deletes at once: the OAuth token and any API key stay out of the command
+# (owner-only), which it reads and deletes before it applies any of it, so a scenario variable cannot
+# redirect or stop the delete: the OAuth token and any API key stay out of the command
 # text, which `ps` and tmux show. A scenario's variables (live_scenario_env) go in the same file; they may
 # not name a login variable or one the command line sets, so a scenario changes neither.
 # The binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
@@ -102,7 +103,7 @@ live_claude_command() {
   scenario_env=$(live_scenario_env) || return 1
   (umask 077 && { printf '%s\n' "$scenario_env" && live_kept_env; } >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
-  local session_launch_script='env_file=$1; shift; for variable in $(env | LC_ALL=C sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
+  local session_launch_script='login=$(cat -- "$1"); rm -f -- "$1"; shift; for variable in $(env | LC_ALL=C sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; eval "$login"; exec "$@"'
   live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \

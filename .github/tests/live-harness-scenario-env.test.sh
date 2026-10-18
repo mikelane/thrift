@@ -133,4 +133,54 @@ test_the_session_command_is_refused_when_a_scenario_turns_claude_md_loading_back
   assert_out_has 'REFUSED=1'
 }
 
+# run_decoy_session <LIVE_SESSION_ENV>: builds the command and runs it through sh as tmux would, with a
+# fake login token kept from this shell and a stub claude that prints nothing.
+run_decoy_session() {
+  write_live_stubs
+  printf '#!/bin/sh\nexit 0\n' > "$TEST_DIR/bin/claude"
+  chmod +x "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_SESSION_ENV="$1" CLAUDE_CODE_OAUTH_TOKEN=fake-login-tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR
+     if command=$(live_claude_command a 2>/dev/null); then env -u LIVE_SESSION_ENV sh -c "$command" >/dev/null 2>&1 || true; else echo REFUSED; fi'
+}
+
+# The login file is read and deleted before any scenario export runs, so a scenario variable named like the
+# launch script's own cannot redirect the delete, and a readonly name cannot stop it.
+test_the_login_file_is_deleted_when_a_scenario_sets_a_variable_named_env_file() {
+  printf 'keep\n' > "$TEST_DIR/decoy"
+  run_decoy_session "env_file=$TEST_DIR/decoy"
+  assert_dir_lacks fake-login-tok "$TEST_DIR/tmp"
+}
+
+test_a_file_the_scenario_names_in_env_file_is_not_deleted_by_the_session() {
+  printf 'keep\n' > "$TEST_DIR/decoy"
+  run_decoy_session "env_file=$TEST_DIR/decoy"
+  assert_file_has "$TEST_DIR/decoy" keep
+}
+
+test_the_login_file_is_deleted_when_a_scenario_sets_a_readonly_shell_variable() {
+  run_decoy_session 'UID=0'
+  assert_dir_lacks fake-login-tok "$TEST_DIR/tmp"
+}
+
+test_the_session_command_is_refused_when_a_scenario_sets_home() {
+  refuse_scenario_env 'HOME=/other'
+  assert_out_has 'REFUSED=1'
+  assert_out_has 'LIVE_SESSION_ENV sets HOME'
+}
+
+test_the_session_command_is_refused_when_a_scenario_name_is_empty() {
+  refuse_scenario_env '=on'
+  assert_out_has 'REFUSED=1'
+  assert_out_has 'is not NAME=value'
+}
+
+test_the_session_env_file_is_owner_only() {
+  write_live_stubs
+  run_claude_command CLAUDE_CODE_OAUTH_TOKEN=fake-login-tok -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; live_claude_command a >/dev/null; ls -l "$LIVE_RUN/session-env-a" | cut -c1-10'
+  assert_exit_code 0
+  assert_out_has '-rw-------'
+}
+
 run_tests "$@"

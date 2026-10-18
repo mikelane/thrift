@@ -215,6 +215,12 @@ test_press_is_a_fail_when_the_screen_cannot_be_read() {
   assert_out_has 'FAIL  the band offers no hand-off while the subagent runs'
 }
 
+test_press_is_a_fail_when_the_only_refusal_has_another_reason() {
+  judge_press '{"ts":"2026-10-17T10:00:03.000Z","session_id":"s1","action":"none","trigger_values":{"point":"button","reason":"turn_running","is_background_busy":true}}'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the hand-off press was refused as busy'
+}
+
 # --- 3. a foreground agent during the wait -----------------------------------------------------------------------
 
 PEER_LOG="$T0 [DEBUG] attribution header: cc_turn_origin=peer"
@@ -227,6 +233,12 @@ test_foreground_agent_passes_when_the_clear_follows_the_main_turn_and_the_subage
   judge_foreground "$(cleared $T4 false)" "$PEER_LOG" "$AGENT_LOG" "$MAIN_END_LOG"
   assert_exit_code 0
   assert_out_has 'PASS s (5 checks)'
+}
+
+test_foreground_agent_anchors_the_main_turn_end_on_the_peer_turn_not_an_earlier_turn() {
+  judge_foreground "$(cleared $T2 false)" "$T0 [DEBUG] [engine] turn 1 end" "$T1 [DEBUG] attribution header: cc_turn_origin=peer" "$T1 [INFO] [Stall] agent_completion agentId=a1" "$MAIN_END_LOG"
+  assert_exit_code 1
+  assert_out_has 'FAIL  the clear landed after the main turn ended'
 }
 
 test_foreground_agent_is_a_fail_when_the_clear_lands_before_the_main_turn_ended() {
