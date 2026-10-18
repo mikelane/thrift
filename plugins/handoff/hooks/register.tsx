@@ -187,8 +187,9 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
     return started
   }).catch(($, e, next) => next(e))
 
-  // The handoff's own clear can reach this hook (the declarations skip only the calling hook); recordForeignClear drops it
-  // by origin. The test kit skips the whole plugin instead, so only the pure tests cover the own-origin branch.
+  // The engine skips the calling plugin's hook for the plugin's own clear (seen live on 2.1.302: the re-entry line), so the
+  // handoff's own clear does not reach this hook. recordForeignClear still drops it by origin as a safeguard. The test kit
+  // skips the whole plugin too, so only the pure tests cover the own-origin branch.
   // Counted from the note on, before next, since the clear's session end may come inside it (the kit's does). Core sets ref on a run it made; a
   // hook beneath that answers in the clear's place leaves it off, and a clear that throws ran nothing: no end is coming.
   // SAFETY: a hook beneath that calls next and then rewrites the output also leaves ref off. The end already spent the count,
