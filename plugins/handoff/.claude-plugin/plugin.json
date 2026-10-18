@@ -30,7 +30,7 @@
     "continueAfterHandoff": {
       "type": "boolean",
       "title": "Continue after a mid-flight handoff",
-      "description": "After a handoff that began mid-work, the fresh session starts on the note without waiting for you.",
+      "description": "After a handoff that did not follow a strong signal, the fresh session starts on the note without waiting for you.",
       "default": false
     }
   }

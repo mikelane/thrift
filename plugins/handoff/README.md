@@ -392,7 +392,7 @@ Set these in `/config`.
 | `handoffMode` | `off`, `ask`, `act` | `off` | See [Modes](#modes). |
 | `handoffContextTokens` | number, 80,000 to 2,000,000 | `150000` | The context size at which a signal becomes strong or weak. A fresh session starts near 48,000 tokens. |
 | `compactBeforeClear` | boolean | `false` | Compact the old session before clearing, so resuming it later costs less. It costs one compaction per handoff. **When it is on, `claude --resume <old id>` reopens the compacted transcript, not the full one.** |
-| `continueAfterHandoff` | boolean | `false` | After a handoff that began mid-work, submit one prompt in the fresh session so Claude carries on from the note. See [Continuing after a handoff](#continuing-after-a-handoff). |
+| `continueAfterHandoff` | boolean | `false` | After a handoff that did not follow a strong signal (a band press mid-work, or a typed `/handoff`), submit one prompt in the fresh session so Claude carries on from the note. See [Continuing after a handoff](#continuing-after-a-handoff). |
 
 ### Continuing after a handoff
 
