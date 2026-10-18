@@ -1,8 +1,10 @@
 {
   "name": "handoff",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes.",
-  "author": { "name": "Mike Lane" },
+  "author": {
+    "name": "Mike Lane"
+  },
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -10,7 +12,11 @@
       "type": "string",
       "title": "Handoff mode",
       "description": "off logs a shadow baseline and acts on nothing. ask shows a band with buttons. act hands off or compacts without asking.",
-      "options": ["off", "ask", "act"],
+      "options": [
+        "off",
+        "ask",
+        "act"
+      ],
       "default": "off"
     },
     "handoffContextTokens": {
