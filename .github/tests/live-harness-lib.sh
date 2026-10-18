@@ -51,3 +51,29 @@ run_live_sh() {
 assert_tmux_called() { assert_file_has "$TMUX_LOG" "$1"; }
 assert_file_matches() { grep -qaE -- "$2" "$1" || { fail "${1#"$TEST_DIR"/} has no line matching: $2"; show_file "$1"; }; }
 assert_tmux_not_called() { assert_file_lacks "$TMUX_LOG" "$1"; }
+
+# live_claude_command is what the tmux server runs through sh. These tests run it as tmux would, with
+# a stub claude that prints its own path and the variables the harness sets or drops. Only those: a
+# failing test prints its output, and the rest of the owner's environment can hold keys.
+write_env_dumping_claude() { # write_env_dumping_claude <path>
+  mkdir -p "$(dirname "$1")"
+  printf '#!/bin/sh\necho "BIN=$0"\nenv | grep -E "^(CLAUDE|ANTHROPIC|THRIFT_HOME=|PATH=)" || true\n' > "$1"
+  chmod +x "$1"
+}
+
+run_claude_command() { # run_claude_command <env assignments...> -- <bash-snippet>
+  local assignments=()
+  while [[ "$1" != -- ]]; do assignments+=("$1"); shift; done
+  shift
+  EXIT_CODE=0
+  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" ${assignments[@]+"${assignments[@]}"} \
+    "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+}
+
+# assert_dir_lacks <text> <dir>: no file under the directory holds the text. grep's exit status must be
+# exactly 1 (no match): 2 means it could not read the directory, which is not proof of absence.
+assert_dir_lacks() {
+  local status=0
+  grep -rqa -- "$1" "$2" || status=$?
+  ((status == 1)) || fail "the run directory holds the text, or grep could not read it (status $status)"
+}

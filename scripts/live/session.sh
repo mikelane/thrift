@@ -46,18 +46,41 @@ live_kept_env() {
   done
 }
 
-# live_scenario_env: LIVE_SESSION_ENV, the NAME=value words (split on spaces and newlines) a scenario sets
-# for the sessions it starts next, as `export NAME='value'` lines for a POSIX sh. Empty by default. Fails
-# on any other word, which `env` would run as the command, and does not name the word: it may hold a value.
+# Variables the harness itself sets for a session (on the command line, or as kept login variables). A
+# scenario may not set them, even when this shell has no value for them: a scenario's CLAUDE_CONFIG_DIR
+# would send transcripts_dir to the wrong place, and its PATH would pick the `rm` the session runs.
+LIVE_HARNESS_ENV='^(PATH|THRIFT_HOME|CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CODE_DISABLE_CLAUDE_MDS)$'
+# Spelled out, because a bracket range such as [A-Z] follows the locale's collation in some shells.
+LIVE_NAME_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'
+
+# live_is_assignment <word>: succeeds when the word is NAME=value with a name of ASCII letters, digits and
+# underscores that does not start with a digit.
+live_is_assignment() {
+  local name=${1%%=*}
+  [[ "$1" == *=* ]] || return 1
+  case "$name" in
+    '' | [0123456789]* | *[!$LIVE_NAME_CHARS]*) return 1 ;;
+  esac
+}
+
+# live_scenario_env: LIVE_SESSION_ENV, the NAME=value words (split on spaces, tabs and newlines) a
+# scenario sets for the sessions it starts next, as `export NAME='value'` lines for a POSIX sh. Empty by
+# default. Fails on a word that is not NAME=value (`env` would run it as the command), and on a name the
+# harness sets; it never prints a value.
 live_scenario_env() {
-  local word words=()
+  local word name words=()
   [[ -z "${LIVE_SESSION_ENV:-}" ]] || read -r -d '' -a words <<<"$LIVE_SESSION_ENV" || true
   for word in ${words[@]+"${words[@]}"}; do
-    if [[ ! "$word" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+    name=${word%%=*}
+    if ! live_is_assignment "$word"; then
       echo 'LIVE_SESSION_ENV holds a word that is not NAME=value' >&2
       return 1
     fi
-    printf 'export %s=' "${word%%=*}"
+    if [[ "$name" =~ $LIVE_KEPT_ENV || "$name" =~ $LIVE_HARNESS_ENV ]]; then
+      echo "LIVE_SESSION_ENV sets $name, which the harness sets for every session" >&2
+      return 1
+    fi
+    printf 'export %s=' "$name"
     live_sh_words "${word#*=}"
     printf '\n'
   done
@@ -68,9 +91,8 @@ live_scenario_env() {
 # new session, and a server started earlier carries its own. So the session drops every CLAUDE and
 # ANTHROPIC variable it has and then reads this shell's kept ones from a file in the run directory
 # (owner-only), which it deletes at once: the OAuth token and any API key stay out of the command
-# text, which `ps` and tmux show. A scenario's variables (live_scenario_env) go in the same file, before
-# the kept ones, and the harness's own switches follow on the command line, so neither the login nor a
-# switch can be overridden by a scenario.
+# text, which `ps` and tmux show. A scenario's variables (live_scenario_env) go in the same file; they may
+# not name a login variable or one the command line sets, so a scenario changes neither.
 # The binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
 # reason.
 live_claude_command() {

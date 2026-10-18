@@ -89,11 +89,12 @@ Isolated, and how that was checked on 2.1.299 (`claude -p` probes from an empty 
   `live_require` found and passes the harness's own `PATH`, so the binary that was checked is the
   binary that runs.
 - **Per-scenario variables.** A scenario can set `LIVE_SESSION_ENV` (`NAME=value` words separated by
-  spaces or newlines, so a value holds neither) for the sessions it starts next, as
+  spaces, tabs or newlines, so a value holds none of them) for the sessions it starts next, as
   `subagents-during-handoff` does with `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` for its
   foreground-agent session. It is empty by default. The values travel in the owner-only file with the
-  login, not in the command text, and the harness's own variables (the login, `PATH`, `THRIFT_HOME`,
-  the two switches above) win over a scenario's. A word that is not `NAME=value` stops the run.
+  login, not in the command text. A word that is not `NAME=value`, or that names a variable the
+  harness sets (a kept login or provider variable, `PATH`, `THRIFT_HOME`, or the two switches above),
+  stops the run, even when the harness's shell has no value for it.
 - **Decision log.** `THRIFT_HOME` points into the run directory, so
   `~/.claude/thrift/decisions.jsonl` is not written.
 - **The plugin.** A scenario runs a copy of the plugin made in the run directory. The copy differs
