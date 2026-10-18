@@ -31,11 +31,8 @@ describe('decideContinue', () => {
     })
   })
 
-  test('It skips with strong_signal when the handoff was typed and carries no signal', () => {
-    expect(decideContinue({ ...MID_FLIGHT, signal: 'none' })).toEqual({
-      submit: false,
-      fields: { continued: 'skipped', continue_skip: 'strong_signal' },
-    })
+  test('It submits when the handoff was typed and carries no signal', () => {
+    expect(decideContinue({ ...MID_FLIGHT, signal: 'none' })).toEqual({ submit: true })
   })
 
   test('It skips with note_not_appended when the note was submitted', () => {

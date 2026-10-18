@@ -36,6 +36,8 @@ const isSampleRecord = (value: unknown): value is SampleRecord => {
     isOptional(values.reason, 'string') &&
     isOptional(values.note, 'string') &&
     isOptional(values.cleared_by, 'string') &&
+    isOptional(values.continued, 'string') &&
+    isOptional(values.continue_skip, 'string') &&
     (values.compacted_before_clear === undefined || values.compacted_before_clear === true) &&
     (values.late_turn === undefined || values.late_turn === true) &&
     isOptional(values.held_groups, 'number') &&
@@ -45,6 +47,14 @@ const isSampleRecord = (value: unknown): value is SampleRecord => {
     isOptional(values.held_restore, 'string') &&
     isOptional(values.leftover_strips, 'number')
   )
+}
+
+type SampleValues = SampleRecord['trigger_values']
+
+const continueFieldsOf = ({ continued, continue_skip }: SampleValues): Evaluation['continueFields'] => {
+  if (continued === undefined) return undefined
+  if (continued !== 'skipped') return { continued }
+  return continue_skip === undefined ? undefined : { continued, continue_skip }
 }
 
 export const extractReadmeSampleLine = (readme: string): string => {
@@ -75,6 +85,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
     clearedBy: values.cleared_by,
     compactedBeforeClear: values.compacted_before_clear,
     lateTurn: values.late_turn,
+    continueFields: continueFieldsOf(values),
     heldFields: hasHeldFields
       ? {
           held_groups: values.held_groups ?? 0,

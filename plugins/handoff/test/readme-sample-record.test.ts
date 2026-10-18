@@ -37,6 +37,9 @@ const evaluations: ReadonlyArray<readonly [string, Evaluation]> = [
   ['a reason', { ...cleared, action: 'none', reason: 'background_busy', note: undefined }],
   ['a person clear', { ...cleared, clearedBy: 'person' }],
   ['a late turn', { ...cleared, lateTurn: true }],
+  ['a continue that was skipped', { ...cleared, continueFields: { continued: 'skipped', continue_skip: 'strong_signal' } }],
+  ['a continue that was submitted', { ...cleared, continueFields: { continued: 'submitted' } }],
+  ['a continue that is off', { ...cleared, continueFields: { continued: 'off' } }],
   ['a held restore', { ...cleared, action: 'none', heldFields: { held_groups: 1, held_unattended: true, handoff_unattended: false, held_restore: 'in_box' } }],
   ['a record without held fields', { ...cleared, action: 'advised', note: undefined, clearedBy: undefined, compactedBeforeClear: undefined, heldFields: undefined }],
 ]

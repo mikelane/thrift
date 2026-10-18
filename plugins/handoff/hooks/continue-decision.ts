@@ -23,8 +23,8 @@ export const CONTINUE_PROMPT = 'Continue from the handoff note.'
 
 const skipped = (reason: ContinueSkip): ContinueDecision => ({ submit: false, fields: { continued: 'skipped', continue_skip: reason } })
 
-// Mid-flight work is a handoff that began on a weak signal. A typed /handoff carries no signal ('none'), so it is not
-// mid-flight: the person who typed it is at the terminal.
+// A strong signal is a natural stopping point, so the fresh session waits for the person. A weak signal (work was mid-flight)
+// and a typed /handoff (signal 'none', the person chose to move on) both continue.
 export const decideContinue = ({
   isEnabled,
   effectiveMode,
@@ -34,7 +34,7 @@ export const decideContinue = ({
   isSameSession,
 }: ContinueInput): ContinueDecision => {
   if (!isEnabled || effectiveMode === 'off') return { submit: false, fields: { continued: 'off' } }
-  if (signal !== 'weak') return skipped('strong_signal')
+  if (signal === 'strong') return skipped('strong_signal')
   if (noteDelivery !== 'appended') return skipped('note_not_appended')
   if (hasHeldPromptStartedTurn) return skipped('held_prompt_sent')
   if (!isSameSession) return skipped('session_moved')

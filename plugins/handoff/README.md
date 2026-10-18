@@ -402,12 +402,11 @@ handoff. The setting is independent of `handoffMode`.
 It continues only when all of these hold. Otherwise it submits nothing and the `cleared` record says
 why (`continue_skip`).
 
-- **The handoff began mid-work.** The trigger's signal was `weak`: a turn ended without the task
-  finishing, and you pressed Hand off on the band. After a `strong` signal (the task just finished)
-  the fresh session waits for you, because you are probably at a natural stopping point. A typed
-  `/handoff` carries no signal (`none`), so it counts as not mid-flight and never continues; this is
-  logged as `strong_signal` too, since that is the only "not weak" reason the log has. A handoff from
-  `act` mode always follows a strong signal, so it never continues either.
+- **The handoff did not follow a strong signal.** A `weak` signal (a turn ended without the task
+  finishing, and you pressed Hand off on the band) continues: the work was mid-flight. A typed
+  `/handoff` carries no signal (`none`) and also continues: you chose to move on. After a `strong`
+  signal (the task just finished) the fresh session waits for you, because you are at a natural
+  stopping point. Every `act`-mode handoff follows a strong signal, so none of them continues.
 - **The note was appended.** A note that was `submitted` already started a turn. One left in the
   prompt box or not carried needs you to act first.
 - **No held prompt started a turn.** A held prompt or late prompt that was submitted in the fresh
@@ -431,7 +430,7 @@ that decide nothing are logged too, so you can compute a trigger rate. Prompt te
 the log, and nothing from it is written into the session.
 
 ```json
-{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","cleared_by":"handoff","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
+{"ts":"2026-10-08T20:49:10.438Z","session_id":"abc","component":"handoff","mode":"active","action":"cleared","engine_version":"2.1.295","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":200000,"threshold":150000,"is_background_busy":false,"setting":"act","cache_read_tokens":180000,"note":"appended","cleared_by":"handoff","continued":"skipped","continue_skip":"strong_signal","held_groups":0,"held_unattended":false,"handoff_unattended":false,"held_other_delivery":"none","effective_mode":"act"}}
 ```
 
 A check rebuilds this line through the code that writes the log and fails if the two differ in key order, names, or types. It copies every value from the line into the rebuild, so it does not compare values: a value the code would never write passes. It also cannot tell that an optional field was left out of the sample.
@@ -459,7 +458,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.compacted_before_clear` | Present, as `true`, only on the record that ends a handoff (a `cleared` record, or the `none` record of an abandon) when `compactBeforeClear` was on and the compaction before the clear worked. It tells a `background_busy`, `clear_failed`, or `session_ended` record that left the session compacted from one that left it unchanged. A vetoed or failed compaction writes its own `none` record and leaves this off. A compaction in act mode outside a handoff writes a `compacted` record instead |
 | `trigger_values.late_turn` | Present, as `true`, only on a `cleared` record, when a turn started in the old session after the handoff queued its `/clear` and before that clear ended the session. A prompt the engine had queued ahead of the `/clear` ran first. The note then ends with the "A turn ran in the previous session" line. Absent when no such turn started |
 | `trigger_values.continued` | Present only on a `cleared` record: what `continueAfterHandoff` did. `submitted` (the continue prompt was submitted in the fresh session), `skipped` (it was on but a condition did not hold; see `continue_skip`), or `off` (the setting is off, or the plugin ran in `off`) |
-| `trigger_values.continue_skip` | Present only when `continued` is `skipped`: `strong_signal` (the signal was not weak, which includes a typed `/handoff`), `note_not_appended`, `held_prompt_sent`, `session_moved`, or `submit_failed` |
+| `trigger_values.continue_skip` | Present only when `continued` is `skipped`: `strong_signal` (the handoff followed a strong signal), `note_not_appended`, `held_prompt_sent`, `session_moved`, or `submit_failed` |
 | `trigger_values.held_groups` | Present only on a `cleared` record and on the `none` record that ends a handoff (reason `no_handoff_written`, `handoff_failed`, `session_ended`, `clear_failed`, or `background_busy` from a handoff). A refused press carries none, and neither does a `compaction_vetoed` or `compaction_failed` record written mid-handoff. How many groups of prompts the handoff held, counting the prompt it carries: `0`, `1`, or `2` (one from a person, one from a scheduled trigger). It holds prompts from when it is scheduled until the note, every held prompt, and every prompt that arrived while those were delivered have been delivered (submitted, put in the prompt box, or written to the transcript). A prompt that arrived during the delivery counts toward the group of its origin. A handoff that is abandoned (including one whose `/clear` failed) holds prompts until they, and every prompt that arrived while they were put back, are back. A prompt sent after that is not counted. A count, never prompt text |
 | `trigger_values.held_unattended` | Present exactly when `held_groups` is: `true` when one of the held groups came from a scheduled trigger (including a scheduled prompt the handoff carries), `false` otherwise |
 | `trigger_values.handoff_unattended` | Present exactly when `held_groups` is: `true` when the handoff began from a scheduled trigger, `false` when a person began it. When the note is not appended, a scheduled handoff's note carries the held scheduled group; an attended handoff's note carries none |
@@ -562,7 +561,7 @@ These need a live terminal and have not been watched yet:
 - That `ask` mode refills the box with a prompt it holds. A held prompt was seen back in the box
   after a busy abandon in `ask` mode only.
 - `continueAfterHandoff` (#102): that the continue prompt starts a turn in the fresh session after
-  a band press on a weak signal, that the id check catches a `/resume` or `/clear` made right after
+  a band press on a weak signal or a typed `/handoff`, that the id check catches a `/resume` or `/clear` made right after
   the clear, and that the turn it starts is treated as the plugin's, not yours. It is covered by the
   test kit only.
 - That a draft typed beside a held prompt survives its delivery (#56).

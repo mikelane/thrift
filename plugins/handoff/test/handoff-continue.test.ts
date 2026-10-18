@@ -49,13 +49,13 @@ describe('continuing after a handoff', () => {
     expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'strong_signal' })
   })
 
-  test('It submits nothing and logs strong_signal for a typed /handoff', CONTINUING, async ($, on) => {
+  test('It submits one continue prompt after a typed /handoff', CONTINUING, async ($, on) => {
     const world = install($, on)
     await startSession($)
     await runCommand($, 'handoff')
     await world.clock.settle()
-    expect(entered(world)).toEqual([])
-    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'strong_signal' })
+    expect(world.effects.filter(effect => effect === 'append' || effect === CONTINUE_ENTRY)).toEqual(['append', CONTINUE_ENTRY])
+    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'submitted' })
   })
 
   test('It submits nothing and logs continued off when the plugin runs in off', CONTINUING_OFF, async ($, on) => {
