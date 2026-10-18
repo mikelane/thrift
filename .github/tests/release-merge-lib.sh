@@ -2,7 +2,9 @@
 # Sourced by release-merge.test.sh and by the merge step of .github/workflows/release-merge.yml.
 #
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
-# every package in release-please-config.json its changelog and its extra-files.
+# every package in release-please-config.json its changelog, its version file and its extra-files.
+# A simple package's version file defaults to version.txt, as release-please's Simple strategy does
+# (the effective release-type is the package's, else the top level's, else release-please's node).
 release_merge_allowlist() {
   jq -r '
     def in_package($dir; $file):
@@ -12,8 +14,10 @@ release_merge_allowlist() {
     | ".release-please-manifest.json",
       (.packages | to_entries[] | .key as $dir | .value as $pkg
         | def setting($key): $pkg[$key] // $config[$key];
-          in_package($dir; setting("changelog-path") // "CHANGELOG.md"),
-          (setting("version-file") // empty | in_package($dir; .)),
+          ($pkg["release-type"] // $config["release-type"] // "node") as $type
+          | in_package($dir; setting("changelog-path") // "CHANGELOG.md"),
+          ((setting("version-file") // (if $type == "simple" then "version.txt" else empty end))
+            | in_package($dir; .)),
           (setting("extra-files")[]? | (if type == "string" then . else .path end) // empty
             | in_package($dir; .)))
   ' "$1"

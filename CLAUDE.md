@@ -31,9 +31,9 @@ specific to this repo.
   opened with `GITHUB_TOKEN` runs no CI. `.github/workflows/release-merge.yml` squash-merges it
   once the CI workflow succeeds on it: the PR must be open, from a `release-please--*` branch in
   this repo, authored by the App, at the commit CI tested, and change only the manifest and each
-  package's changelog and extra-files (`.github/tests/release-merge-lib.sh`, tested by
-  `release-merge.test.sh`). Anything else waits for a person. The private key is
-  `RELEASE_APP_PRIVATE_KEY` in the `release` environment, limited to `main` (both token-minting jobs
+  package's changelog, version file and extra-files
+  (`.github/tests/release-merge-lib.sh`, tested by `release-merge.test.sh`). Anything else waits
+  for a person. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release` environment, limited to `main` (both token-minting jobs
   set `environment: release`), so a branch workflow cannot mint a token. The App must be on main's
   pull-request review bypass list, or the merge is refused for want of a code-owner approval. It
   must not be a ruleset bypass actor, which would also skip the required status checks.

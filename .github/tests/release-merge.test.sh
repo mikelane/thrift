@@ -24,6 +24,7 @@ write_pr() {
 
 GOOD_FILES='.release-please-manifest.json
 plugins/handoff/CHANGELOG.md
+plugins/handoff/version.txt
 plugins/handoff/.claude-plugin/plugin.json'
 
 # problems <pr-filter> [files]: the gate's output for a PR edited by the filter.
