@@ -349,7 +349,7 @@ test_a_sweep_accepts_a_rerun_that_succeeded_after_a_failure() {
 test_a_sweep_ignores_runs_of_other_workflows() {
   local got
   write_pulls "$(open_pr 111 $SHA_A)"
-  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z' 'Lint completed failure 2026-10-18T11:00:00Z'
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z' 'Lint completed failure 2026-10-18T11:00:00Z .github/workflows/lint.yml'
   got=$(sweep)
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
