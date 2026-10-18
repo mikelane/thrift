@@ -229,4 +229,37 @@ test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
+# merge_commands: the lines of the workflow that run `gh pr merge`. A comment, an echo or trailing
+# text that merely mentions the command does not start with it, so it is not selected. A trailing
+# comment on a merge line is stripped, so a flag named only in that comment does not count. Each
+# line gets one trailing space, so a flag at the end of the line matches the ' --flag ' patterns.
+merge_commands() {
+  grep -E '^[[:space:]]*gh pr merge ' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    | sed -e "s/[[:space:]]#.*$//" -e "s/$/ /"
+}
+
+test_the_workflow_runs_exactly_one_merge_command() {
+  local got
+  got=$(merge_commands | wc -l | tr -d ' ')
+  [[ "$got" == 1 ]] || fail "got [$got]"
+}
+
+test_the_merge_command_skips_the_ruleset_review_with_admin() {
+  local got
+  got=$(merge_commands)
+  [[ "$got" == *' --admin '* ]] || fail "got [$got]"
+}
+
+test_the_merge_command_squashes() {
+  local got
+  got=$(merge_commands)
+  [[ "$got" == *' --squash '* ]] || fail "got [$got]"
+}
+
+test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
+  local got
+  got=$(merge_commands)
+  [[ "$got" == *' --match-head-commit "$TESTED_SHA"'* ]] || fail "got [$got]"
+}
+
 run_tests "$@"

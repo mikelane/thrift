@@ -2,9 +2,12 @@ name: Release Merge
 
 # Merges a release-please PR once CI has passed on it, so a release needs no one at the keyboard.
 # Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
-# so a successful CI run means the PR met them. The release App must be on the pull-request review
-# bypass list of main's branch protection, because the PR needs one code-owner approval and the App
-# opens it. It must not be a ruleset bypass actor, which would also skip the required status checks.
+# so a successful CI run means the PR met them. The PR needs one code-owner approval and the App
+# opens it, so the App is a bypass actor (pull requests only) on the "main code-owner review"
+# ruleset, which holds only the pull_request rule. The required status checks stay in classic branch
+# protection, because a bypass actor skips every rule in its ruleset. A user-owned repo cannot use
+# classic bypass_pull_request_allowances. gh refuses a BLOCKED PR on the client side, so the merge
+# passes --admin; the gate below still decides whether the merge happens.
 #
 # This runs from the default branch on workflow_run and has write access, so it never checks out
 # or runs the PR's code. It reads the gate script and release-please-config.json from the default
@@ -107,4 +110,4 @@ jobs:
           fi
 
           echo "Merging PR #$number at $TESTED_SHA."
-          gh pr merge "$number" --repo "$REPO" --squash --match-head-commit "$TESTED_SHA"
+          gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA"

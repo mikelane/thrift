@@ -37,8 +37,11 @@ release PR merges itself once CI passes on it. Until a release lands, an update 
 To run the release flow in a fork, create a GitHub App with Contents, Pull requests and Issues set
 to read and write. Set `RELEASE_APP_ID` as a repository variable. Store the private key as
 `RELEASE_APP_PRIVATE_KEY` in an environment named `release` that deploys only from `main`, so a
-branch workflow cannot read it. Add the App to main's pull-request review bypass list. Do not add it
-as a ruleset bypass actor, which would also skip the required status checks.
+branch workflow cannot read it. Make the App a bypass actor (pull requests only) on a ruleset for
+`main` that holds only the `pull_request` rule, so it can merge without a code-owner approval. A
+user-owned repo cannot use classic `bypass_pull_request_allowances`, so this has to be a ruleset.
+Keep the required status checks in classic branch protection, because a ruleset bypass actor skips
+every rule in its ruleset.
 
 To update by hand, either type this in a session:
 
