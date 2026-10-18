@@ -27,6 +27,32 @@ Type this at the prompt of a Claude Code terminal session:
 
 Answer `y` to add the marketplace, then choose a scope.
 
+## Update
+
+Claude Code installs a copy of each plugin and replaces it only when the plugin's `version` changes.
+Each plugin is released on its own: a release PR bumps the `version` in its `plugin.json` and writes
+its `CHANGELOG.md`, and merging that PR tags `<plugin>-vX.Y.Z` and publishes a GitHub release. Until
+a release lands, an update finds nothing new.
+
+To update by hand, either type this in a session:
+
+```
+/plugin marketplace update thrift
+```
+
+or run this in a shell:
+
+```sh
+claude plugin update <plugin>@thrift
+```
+
+The running session keeps the version it loaded. Run `/reload-plugins` to switch to the new one, or
+start a new session.
+
+Auto-update is off by default for a third-party marketplace like this one. To turn it on, type
+`/plugin`, go to **Marketplaces**, select `thrift`, and select **Enable auto-update**. Claude Code
+then refreshes the marketplace and its installed plugins in the background after a session starts.
+
 ## Decision log
 
 Every plugin appends one JSON object per evaluation to a shared log:

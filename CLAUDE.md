@@ -17,6 +17,18 @@ specific to this repo.
   fragment that matches no test exits 1. It runs every `.github/tests/*.test.sh`, so a new test file
   needs no wiring; each ends with `run_tests "$@"` so it honors the fragment. The shared code sits
   in the `*-lib.sh` and `*.awk` files beside them.
+- Releases come from release-please in manifest mode (`.github/workflows/release-please.yml`, on
+  push to `main`). `release-please-config.json` has one package per plugin
+  (`plugins/<name>`, `release-type: simple`, tag `<name>-vX.Y.Z`) and
+  `.release-please-manifest.json` holds each plugin's current version. It keeps a release PR open
+  per plugin with a `feat` or `fix` commit under that plugin's path; the PR writes
+  `plugins/<name>/CHANGELOG.md` and the `version` in `plugin.json`. Never edit either by hand. A
+  commit that touches no plugin path (`scripts/`, `.github/`, root docs) releases nothing. A new
+  plugin gets its config package and manifest entry in the same PR that adds it to
+  `marketplace.json` (`.github/tests/release-config.test.sh` fails otherwise, and when a manifest
+  version differs from `plugin.json`). The release PR is opened with a GitHub App token
+  (`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`), because a PR opened with `GITHUB_TOKEN` runs no CI.
+  It goes through the normal gauntlet, review and merge-guardian like any other PR.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
 
