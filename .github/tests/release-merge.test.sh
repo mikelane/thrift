@@ -417,6 +417,24 @@ test_the_workflow_runs_exactly_one_merge_command() {
   [[ "$got" == 1 ]] || fail "got [$got]"
 }
 
+test_the_workflow_also_runs_when_release_please_completes() {
+  grep -qE '^    workflows: \[CI, Release Please\]' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    || fail 'the workflow_run trigger does not name Release Please'
+}
+
+test_the_workflow_runs_the_sweep_only_for_a_successful_release_please_push_to_main() {
+  local got
+  got=$(tr -d '\n' <"$REPO_ROOT/.github/workflows/release-merge.yml" | tr -s ' ')
+  [[ "$got" == *"github.event.workflow_run.name == 'Release Please' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch"* ]] \
+    || fail 'the job condition does not pin the Release Please trigger to a push to main'
+}
+
+test_the_merge_command_treats_a_lost_race_as_success() {
+  local got
+  got=$(merge_commands)
+  [[ "$got" == *'|| release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" '* ]] || fail "got [$got]"
+}
+
 test_the_merge_command_skips_the_ruleset_review_with_admin() {
   local got
   got=$(merge_commands)

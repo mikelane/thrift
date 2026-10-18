@@ -1,6 +1,17 @@
 name: Release Merge
 
 # Merges a release-please PR once CI has passed on it, so a release needs no one at the keyboard.
+# Two triggers, one gate:
+#   - CI completes on a release-please PR: that PR is the candidate, at the commit CI tested.
+#   - Release Please completes on a push to main: every open release-please PR whose latest CI run
+#     (pull_request event, workflow CI) at its current head succeeded is a candidate, at that head.
+#     A commit that touches no plugin path leaves the release PR untouched, so CI never reruns on
+#     it and the first trigger never fires; this one catches that case. A head with no CI run yet,
+#     or CI still running, is skipped, because its own CI completion fires the first trigger.
+# Both paths run the same gate and the same merge, and a PR the other path already merged, or whose
+# head moved, is logged and skipped. If a PR is stuck anyway, rerun its last CI run by hand:
+# `gh run rerun <CI run id>` (the id is in `gh run list --branch <release branch> --workflow CI`).
+#
 # Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
 # so a successful CI run means the PR met them. The PR needs one code-owner approval and the App
 # opens it, so the App is a bypass actor (pull requests only) on the "main code-owner review"
@@ -23,14 +34,16 @@ name: Release Merge
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, Release Please]
     types: [completed]
 
 permissions: {}
 
 # One merge attempt per release branch at a time. A newer CI run on the same branch waits, then
 # fails the head-commit check if the branch moved. The group names the head repository too, so a
-# fork's branch with the same name cannot take the real branch's place in the queue.
+# fork's branch with the same name cannot take the real branch's place in the queue. The sweep
+# runs in the group of main. It can overlap a CI-path run, which is harmless: the loser finds the
+# PR merged or moved and exits 0 (see release_merge_lost_race).
 concurrency:
   group: release-merge-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
@@ -38,10 +51,17 @@ concurrency:
 jobs:
   merge:
     if: >-
-      github.event.workflow_run.conclusion == 'success'
-      && github.event.workflow_run.event == 'pull_request'
-      && github.event.workflow_run.head_repository.full_name == github.repository
-      && startsWith(github.event.workflow_run.head_branch, 'release-please--')
+      (
+        github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'pull_request'
+        && github.event.workflow_run.head_repository.full_name == github.repository
+        && startsWith(github.event.workflow_run.head_branch, 'release-please--')
+      ) || (
+        github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.name == 'Release Please'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == github.event.repository.default_branch
+      )
     runs-on: ubuntu-latest
     # The App key lives in this environment, which only main may deploy to (see release-please.yml).
     environment: release
@@ -75,39 +95,60 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           BASE: ${{ github.event.repository.default_branch }}
           BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+          TRIGGER: ${{ github.event.workflow_run.name }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           # shellcheck source=.github/tests/release-merge-lib.sh
           source .github/tests/release-merge-lib.sh
+
+          # merge_if_gate_passes <number> <sha>: runs the gate on PR <number> against <sha>, the
+          # commit CI tested, and squash-merges it when the gate finds nothing.
+          merge_if_gate_passes() {
+            local number=$1 TESTED_SHA=$2 pr files problems
+            pr=$(mktemp)
+            files=$(mktemp)
+            # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
+            gh api "repos/$REPO/pulls/$number" >"$pr" || return 1
+            gh api --paginate "repos/$REPO/pulls/$number/files" | release_merge_changed_files >"$files" || return 1
+
+            problems=$(release_merge_problems "$pr" "$files" release-please-config.json \
+              "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA") || return 1
+            rm -f "$pr" "$files"
+            # A refusal returns 0, so the job is green. Each reason also goes out as a warning
+            # annotation, which shows on the run summary without opening the log. Reasons carry
+            # PR-controlled text (branch, author, file paths): each log line starts with "- " so
+            # none is read as a workflow command, and % is escaped as the annotation format requires.
+            if [[ -n "$problems" ]]; then
+              echo "Not merging PR #$number:"
+              while IFS= read -r problem; do
+                echo "- $problem"
+                echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
+              done <<<"$problems"
+              return 0
+            fi
+
+            echo "Merging PR #$number at $TESTED_SHA."
+            gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA" || release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" || return 1
+          }
+
+          if [[ "$TRIGGER" == "Release Please" ]]; then
+            candidates=$(release_merge_sweep "$REPO" "$BASE")
+            if [[ -z "$candidates" ]]; then
+              echo "No open release PR has passed CI at its head. Nothing to merge."
+              exit 0
+            fi
+            failed=0
+            while read -r number sha; do
+              merge_if_gate_passes "$number" "$sha" || failed=1
+            done <<<"$candidates"
+            exit "$failed"
+          fi
 
           number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE")
           if [[ -z "$number" ]]; then
             echo "No open PR from $BRANCH in $REPO. Nothing to merge."
             exit 0
           fi
-
-          pr=$(mktemp)
-          files=$(mktemp)
-          trap 'rm -f "$pr" "$files"' EXIT
-          gh api "repos/$REPO/pulls/$number" >"$pr"
-          gh api --paginate "repos/$REPO/pulls/$number/files" | release_merge_changed_files >"$files"
-
-          problems=$(release_merge_problems "$pr" "$files" release-please-config.json \
-            "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA")
-          # A refusal exits 0, so the job is green. Each reason also goes out as a warning annotation,
-          # which shows on the run summary without opening the log. Reasons carry PR-controlled text
-          # (branch, author, file paths): each log line starts with "- " so none is read as a
-          # workflow command, and % is escaped as the annotation format requires.
-          if [[ -n "$problems" ]]; then
-            echo "Not merging PR #$number:"
-            while IFS= read -r problem; do
-              echo "- $problem"
-              echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
-            done <<<"$problems"
-            exit 0
-          fi
-
-          echo "Merging PR #$number at $TESTED_SHA."
-          gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA"
+          merge_if_gate_passes "$number" "$CI_TESTED_SHA"

@@ -33,7 +33,12 @@ specific to this repo.
   `release-please--*` branch in this repo, authored by the App, at the commit CI tested, and change
   only the manifest and each package's changelog, version file and extra-files
   (`.github/tests/release-merge-lib.sh`, tested by `release-merge.test.sh`). Anything else waits
-  for a person. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release` environment,
+  for a person. The workflow has a second trigger, the Release Please workflow completing on a push
+  to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
+  on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
+  head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
+  still running, is skipped (its own CI completion merges it). If a PR is still stuck, rerun its
+  last CI run with `gh run rerun <CI run id>`. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release` environment,
   limited to `main` (both token-minting jobs set `environment: release`), so a branch workflow
   cannot mint a token. The App must be a bypass actor (pull requests only) on the "main code-owner
   review" ruleset, or the merge is refused for want of a code-owner approval. A user-owned repo
