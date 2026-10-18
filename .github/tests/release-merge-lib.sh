@@ -26,8 +26,8 @@ release_merge_allowlist() {
 # release_merge_open_pr_number <repo> <owner> <branch> <base>: prints the number of the open PR whose
 # head is <branch> in <owner>'s copy of the repository and whose base is <base>, and nothing when
 # there is none. head=<owner>:<branch> matches only a branch in this repository, never a fork's, and
-# base keeps a second PR from the same branch to another base from taking its place. --method GET is required: `gh api`
-# turns -f fields into a POST, which would try to create a pull request.
+# base keeps a second PR from the same branch to another base from taking its place. --method GET
+# is required: `gh api` turns -f fields into a POST, which would try to create a pull request.
 release_merge_open_pr_number() {
   gh api --method GET "repos/$1/pulls" -f head="$2:$3" -f base="$4" -f state=open --jq '.[0].number // empty'
 }
