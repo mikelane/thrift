@@ -167,13 +167,15 @@ judge_press_while_a_subagent_runs() {
     refusal_follows_turn_end "$name" "$id"
   check 'nothing was cleared' "cleared records: $(session_record_count "$id" '.action == "cleared"')" \
     session_lacks_record "$id" '.action == "cleared"'
-  check 'the band offers no hand-off while the subagent runs' "the screen shows the hand-off button again" \
+  check 'the band offers no hand-off while the subagent runs' \
+    "band lines on the screen: $(pane "$name" | grep -E 'Hand off|Compact' | tr '\n' ' ' || true)" \
     band_has_no_handoff "$name"
 }
 
 session_lacks_record() { ! session_has_record "$1" "$2"; }
 band_has_no_handoff() { ! pane_has "$1" 'h: Hand off' && pane_has "$1" 'c: Compact'; }
-refusal_ts() { records_of "$1" "$REFUSED_BUSY" | jq -r '.ts' | head -n 1; }
+# A record's ts, or nothing when it has none: jq's "null" would sort after every ISO timestamp.
+refusal_ts() { records_of "$1" "$REFUSED_BUSY" | jq -r '.ts // empty' | head -n 1; }
 
 # log_ts_after <name> <after-regex> <regex>: the timestamp of the first debug-log line matching the regex
 # after the first line matching the other. The patterns travel in the environment because awk -v would eat
@@ -206,7 +208,7 @@ foreground_agent_during_the_wait() {
 
 PEER_TURN_STARTED='cc_turn_origin=peer'
 SUBAGENT_FINISHED='agent_completion agentId='
-cleared_ts() { records_of "$1" '.action == "cleared"' | jq -r '.ts' | head -n 1; }
+cleared_ts() { records_of "$1" '.action == "cleared"' | jq -r '.ts // empty' | head -n 1; }
 peer_turn_end() { log_ts_after "$1" "$PEER_TURN_STARTED" "$TURN_ENDED"; }
 subagent_finish() { log_ts_after "$1" "$PEER_TURN_STARTED" "$SUBAGENT_FINISHED"; }
 

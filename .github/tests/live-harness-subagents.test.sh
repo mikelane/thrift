@@ -158,6 +158,12 @@ test_press_is_a_fail_when_the_turn_end_comes_before_the_press() {
   assert_out_has 'FAIL  the refusal came after the main turn ended'
 }
 
+test_press_is_a_fail_when_the_refusal_has_no_timestamp() {
+  judge_press '{"session_id":"s1","action":"none","trigger_values":{"point":"button","reason":"background_busy","is_background_busy":true}}'
+  assert_exit_code 1
+  assert_out_has 'FAIL  the refusal came after the main turn ended'
+}
+
 test_press_is_a_fail_when_the_handoff_cleared() {
   judge_press "$(cleared $T3)"
   assert_exit_code 1
@@ -222,6 +228,14 @@ test_foreground_agent_is_a_fail_when_the_handoff_never_clears() {
   assert_exit_code 1
   assert_out_has 'FAIL  the handoff cleared once the main turn ended'
   assert_out_has 'FAIL  the clear landed after the main turn ended'
+}
+
+# jq prints a missing ts as "null", which sorts after every ISO timestamp.
+test_foreground_agent_is_a_fail_when_the_cleared_record_has_no_timestamp() {
+  judge_foreground '{"session_id":"s1","action":"cleared","trigger_values":{"point":"command"}}' "$PEER_LOG" "$AGENT_LOG" "$MAIN_END_LOG"
+  assert_exit_code 1
+  assert_out_has 'FAIL  the clear landed after the main turn ended'
+  assert_out_has 'FAIL  the clear landed after the subagent finished'
 }
 
 test_foreground_agent_is_a_fail_when_the_log_shows_no_subagent() {
