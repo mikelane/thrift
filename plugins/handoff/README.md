@@ -409,12 +409,16 @@ the `cleared` record reads `continued: off`.
 Otherwise it continues only when all of these hold. When one does not, it submits nothing and the
 `cleared` record says which (`continue_skip`).
 
-- **The handoff did not follow a strong signal.** A `weak` signal (a turn ended without the task
-  finishing, and you pressed Hand off on the band) continues: the work was mid-flight. A typed
-  `/handoff` carries no signal (`none`) and also continues: you chose to move on. After a `strong`
-  signal (a finished task, or a prompt that names new work) the fresh session waits for you,
-  because you are at a natural stopping point. A handoff the plugin starts on its own (in `act` mode, or from a scheduled
-  trigger) always follows a strong signal, so it never continues.
+- **The handoff did not follow a strong signal.** A `weak` signal continues: the work was not at a
+  stopping point. It is what the plugin gives when a turn ends without the task finishing, and
+  also when a task finished but background work was still running. Pressing Hand off on a band
+  raised weak continues. A typed `/handoff` carries no signal (`none`) and also continues: you
+  chose to move on. After a `strong` signal (a finished task with nothing running, or a prompt that
+  names new work) the fresh session waits for you, because you are at a natural stopping point. A
+  band raised strong shows weak while background work runs, then goes back to strong once it ends,
+  and a handoff pressed from it is still strong and does not continue. A handoff the plugin starts
+  on its own (in `act` mode, or from a scheduled trigger) always follows a strong signal, so it
+  never continues.
 - **The note was appended.** A note that was `submitted` already started a turn. One left in the
   prompt box or not carried needs you to act first.
 - **No prompt started a turn.** A held or late prompt that was submitted in the fresh session

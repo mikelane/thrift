@@ -82,6 +82,8 @@ export type SessionState = Settings & {
   boxLeftover: string | null
   leftoverStrips: number
   hasBand: boolean
+  // The signal the band on show was raised on; a busy redraw shows weak and the redraw after it restores this.
+  bandRaisedSignal: Offer['signal']
   isTurnRunning: boolean
   isPressRunning: boolean
   deferredPress: ButtonPress | null
@@ -116,6 +118,7 @@ export const createState = (settings: Settings): SessionState => ({
   boxLeftover: null,
   leftoverStrips: 0,
   hasBand: false,
+  bandRaisedSignal: 'weak',
   isTurnRunning: false,
   isPressRunning: false,
   deferredPress: null,

@@ -42,6 +42,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     boxLeftover: null,
     leftoverStrips: 0,
     hasBand: false,
+    bandRaisedSignal: 'weak',
     isTurnRunning: false,
     isPressRunning: false,
     deferredPress: null,

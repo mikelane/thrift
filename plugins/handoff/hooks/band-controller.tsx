@@ -61,8 +61,9 @@ export async function takeDownBandFromBeforeReload($: EngineInterface, state: Se
 }
 
 export async function offerBand($: EngineInterface, state: SessionState, trigger: Trigger, hasHeldPrompt: boolean): Promise<void> {
+  const raisedSignal = trigger.signal === 'strong' ? 'strong' : 'weak'
   const offer: Offer = {
-    signal: trigger.signal === 'strong' ? 'strong' : 'weak',
+    signal: raisedSignal,
     contextTokens: trigger.contextTokens,
     hasHeldPrompt,
     isBusy: trigger.isBusy,
@@ -70,6 +71,7 @@ export async function offerBand($: EngineInterface, state: SessionState, trigger
   try {
     await update($, offerAtom, () => offer)
     state.hasBand = true
+    state.bandRaisedSignal = raisedSignal
     await writeRecord($, state, { ...trigger, action: 'advised' })
   } catch (error) {
     debug($, `could not show the band: ${String(error)}`)
@@ -103,7 +105,7 @@ export async function refreshBandBusyState($: EngineInterface, state: SessionSta
     const offer = await read($, offerAtom)
     if (offer === null || isWriting(offer)) return
     const isBusy = await isBackgroundBusy($, state)
-    if (offer.isBusy !== isBusy) await redrawBand($, state, offerWithBusyState(offer, state.contextTokens, isBusy))
+    if (offer.isBusy !== isBusy) await redrawBand($, state, offerWithBusyState(offer, state.contextTokens, isBusy, state.bandRaisedSignal))
   } catch (error) {
     debug($, `could not read the band: ${String(error)}`)
   }
@@ -111,7 +113,7 @@ export async function refreshBandBusyState($: EngineInterface, state: SessionSta
 
 async function refuseToClear($: EngineInterface, state: SessionState, offer: Offer, trigger: Trigger): Promise<void> {
   $.ui.toast(busyRefusalMessage(false))
-  await redrawIfStillShown($, state, offer, offerWithBusyState(offer, state.contextTokens, true))
+  await redrawIfStillShown($, state, offer, offerWithBusyState(offer, state.contextTokens, true, state.bandRaisedSignal))
   await writeRecord($, state, { ...busyRefusalTrigger(trigger), action: 'none', reason: 'background_busy' })
 }
 
