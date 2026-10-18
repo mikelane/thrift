@@ -108,14 +108,17 @@ jobs:
           set -euo pipefail
           # shellcheck source=.github/tests/release-merge-lib.sh
           source .github/tests/release-merge-lib.sh
+          # Every temp file lives here, so an early return or a failure still cleans up.
+          work_dir=$(mktemp -d)
+          trap 'rm -rf "$work_dir"' EXIT
 
           # merge_if_gate_passes <number> <sha>: runs the gate on PR <number> against <sha>, the
           # commit CI tested, and squash-merges it when the gate finds nothing.
           merge_if_gate_passes() {
             local number=$1 TESTED_SHA=$2 pr files problems
-            pr=$(mktemp)
-            files=$(mktemp)
             # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
+            pr=$(mktemp "$work_dir/pr.XXXXXX") || return 1
+            files=$(mktemp "$work_dir/files.XXXXXX") || return 1
             gh api "repos/$REPO/pulls/$number" >"$pr" || return 1
             gh api --paginate "repos/$REPO/pulls/$number/files" | release_merge_changed_files >"$files" || return 1
 

@@ -167,7 +167,7 @@ test_an_unreadable_config_blocks_the_merge() {
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
   got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
-  [[ "$got" == *'cannot read the allowlist'* ]] || fail "got [$got]"
+  [[ "$got" == "cannot read the allowlist from $dir/missing.json" ]] || fail "got [$got]"
 }
 
 test_an_unreadable_changed_files_list_blocks_the_merge() {
@@ -269,7 +269,7 @@ stub_gh() {
 SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
-# write_open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
+# open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
 open_pr() {
   jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" '{
     number: ($n | tonumber), state: "open", base: {ref: "main"},
@@ -340,6 +340,13 @@ test_a_sweep_skips_a_pr_with_no_ci_run_at_its_head() {
   write_pulls "$(open_pr 111 $SHA_A)"
   got=$(sweep)
   [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_sweep_logs_why_it_skips_a_pr_with_no_ci_run_at_its_head() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  got=$(sweep 2>&1 >/dev/null)
+  [[ "$got" == "Skipping PR #111 at $SHA_A: "* ]] || fail "got [$got]"
 }
 
 test_a_sweep_skips_a_pr_whose_ci_succeeded_only_at_an_older_sha() {
@@ -474,6 +481,19 @@ test_a_sweep_still_selects_a_pr_when_a_later_pr_lookup_fails() {
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
 
+test_a_sweep_fails_when_a_later_pr_lookup_fails_even_after_selecting_one() {
+  write_pulls "$(open_pr 111 $SHA_A)" "$(open_pr 112 $SHA_B)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  : >"$TEST_DIR/runs-$SHA_B.error"
+  sweep_fails || fail 'a failed CI run lookup after a selected PR left the sweep green'
+}
+
+test_a_sweep_fails_when_the_ci_runs_response_is_not_json() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  echo 'not json' >"$TEST_DIR/runs-$SHA_A.json"
+  sweep_fails || fail 'an unreadable CI runs response was read as "no CI run"'
+}
+
 test_a_sweep_reads_every_page_of_the_ci_runs() {
   local got
   write_pulls "$(open_pr 111 $SHA_A)"
@@ -485,7 +505,7 @@ test_a_sweep_reads_every_page_of_the_ci_runs() {
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
 
-# lost_race <pr-json-filter>:release_merge_lost_race's status and output for PR 111 at SHA_A.
+# lost_race <pr-json-filter>: release_merge_lost_race's status and output for PR 111 at SHA.
 lost_race() {
   write_pr "$TEST_DIR/pr-111.json" "$1"
   stub_gh
@@ -493,11 +513,23 @@ lost_race() {
 }
 
 test_a_failed_merge_of_a_pr_that_is_already_merged_is_a_lost_race() {
-  lost_race '.state = "closed"' >/dev/null || fail 'treated a merged PR as a real failure'
+  local got
+  got=$(lost_race '.state = "closed"') || fail 'treated a merged PR as a real failure'
+  [[ "$got" == 'PR #111 is closed: another run merged it first.' ]] || fail "got [$got]"
 }
 
 test_a_failed_merge_of_a_pr_whose_head_moved_is_a_lost_race() {
-  lost_race '.head.sha = "ffffffffffffffffffffffffffffffffffffffff"' >/dev/null || fail 'treated a moved head as a real failure'
+  local got
+  got=$(lost_race '.head.sha = "ffffffffffffffffffffffffffffffffffffffff"') || fail 'treated a moved head as a real failure'
+  [[ "$got" == "PR #111 head moved to ffffffffffffffffffffffffffffffffffffffff since CI tested $SHA." ]] \
+    || fail "got [$got]"
+}
+
+# No pr-111.json: the stub's PR lookup fails, which must not read as "the PR is no longer open".
+test_a_failed_merge_whose_pr_lookup_fails_is_not_a_lost_race() {
+  stub_gh
+  release_merge_lost_race "$REPO" 111 "$SHA" >/dev/null 2>&1 && fail 'read a failed PR lookup as a lost race'
+  return 0
 }
 
 test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
@@ -623,7 +655,7 @@ test_a_sweep_counts_the_newer_of_two_ci_runs_created_in_the_same_second() {
 test_a_draft_pr_blocks_the_merge() {
   local got
   got=$(problems '.draft = true')
-  [[ "$got" == *draft* ]] || fail "got [$got]"
+  [[ "$got" == 'the PR is a draft' ]] || fail "got [$got]"
 }
 
 test_a_pr_that_is_not_a_draft_has_no_draft_problem() {
@@ -673,14 +705,15 @@ test_another_open_pr_from_the_release_branch_blocks_the_merge() {
   local got
   write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.base.ref = "old-feature"')"
   got=$(gate_problems .)
-  [[ "$got" == *'another open PR'* ]] || fail "got [$got]"
+  [[ "$got" == 'another open PR shares the branch release-please--branches--main--components--handoff: #999' ]] \
+    || fail "got [$got]"
 }
 
 test_the_release_pr_alone_at_its_head_branch_has_no_sibling_problem() {
   local got
   write_pulls "$(open_pr 111 "$SHA")"
   got=$(gate_problems .)
-  [[ "$got" != *'another open PR'* ]] || fail "got [$got]"
+  [[ -z "$got" ]] || fail "got [$got]"
 }
 
 test_an_open_pr_from_another_branch_is_not_a_sibling() {
@@ -694,7 +727,15 @@ test_a_failed_open_pr_lookup_blocks_the_merge() {
   local got
   touch "$TEST_DIR/pulls.error"
   got=$(gate_problems . 2>/dev/null)
-  [[ "$got" == *'cannot list the open PRs'* ]] || fail "got [$got]"
+  [[ "$got" == 'cannot list the open PRs from release-please--branches--main--components--handoff' ]] \
+    || fail "got [$got]"
+}
+
+test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {
+  local got
+  write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.head.repo.full_name = "someone/thrift"')"
+  got=$(gate_problems .)
+  [[ -z "$got" ]] || fail "got [$got]"
 }
 
 run_tests "$@"

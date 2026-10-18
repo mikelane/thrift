@@ -46,7 +46,7 @@ release_merge_changed_files() {
 # sibling no CI run can be tied to one PR. A lookup that fails prints a reason too: fail closed.
 release_merge_sibling_problem() {
   local siblings
-  siblings=$(gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
+  siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
     | jq -r --arg repo "$1" --arg ref "$2" --argjson number "$3" '.[]
         | select(.number != $number and .head.ref == $ref and .head.repo.full_name == $repo)
         | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2"; return; }
@@ -111,10 +111,13 @@ release_merge_ci_passed() {
 
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
-# one still running, is left out: its own CI completion triggers the merge. A PR whose CI lookup
-# fails is left out too, but the sweep goes on with the others and exits non-zero at the end, so a
-# 403 or an outage turns the job red instead of reading as "nothing to merge".
-release_merge_sweep() {
+# one still running, is left out with a line on stderr saying why: its own CI completion triggers
+# the merge. A PR whose CI lookup fails is left out too, but the sweep goes on with the others and
+# exits non-zero at the end, so a 403 or an outage turns the job red instead of reading as "nothing
+# to merge". The body is a subshell with pipefail, so a failed PR list fails the sweep whatever
+# options the caller set.
+release_merge_sweep() (
+  set -o pipefail
   local number sha ref
   gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
     | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
@@ -124,22 +127,24 @@ release_merge_sweep() {
         while read -r number sha ref; do
           if release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2"; then
             echo "$number $sha"
-          elif [[ $? != 1 ]]; then
-            echo "Cannot read the CI runs of PR #$number at $sha." >&2
+          elif [[ $? == 1 ]]; then
+            echo "Skipping PR #$number at $sha: no successful CI run for it alone at that head (none yet, still running, failed, or another open PR shares its branch)." >&2
+          else
+            echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
             lookup_failed=1
           fi
         done
         return "$lookup_failed"
       }
-}
+)
 
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when
 # the other trigger got there first: the PR is no longer open, or its head moved off <sha>. Fails
 # for any other cause, so a real merge failure still fails the job.
 release_merge_lost_race() {
-  local state head
-  state=$(gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha] | join(" ")') || return 1
-  read -r state head <<<"$state"
+  local state_and_head state head
+  state_and_head=$(set -o pipefail; gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha] | join(" ")') || return 1
+  read -r state head <<<"$state_and_head"
   if [[ "$state" != open ]]; then
     echo "PR #$2 is $state: another run merged it first."
   elif [[ "$head" != "$3" ]]; then
