@@ -12,6 +12,22 @@ release_merge_allowlist() {
   ' "$1"
 }
 
+# release_merge_open_pr_number <repo> <owner> <branch>: prints the number of the open PR whose head
+# is <branch> in <owner>'s copy of the repository, and nothing when there is none. head=<owner>:<branch>
+# matches only a branch in this repository, never a fork's. --method GET is required: `gh api`
+# turns -f fields into a POST, which would try to create a pull request.
+release_merge_open_pr_number() {
+  gh api --method GET "repos/$1/pulls" -f head="$2:$3" -f state=open --jq '.[0].number // empty'
+}
+
+# release_merge_changed_files: reads the JSON of the pull request files API (one array per page, as
+# `gh api --paginate` prints them) and prints each changed path and each renamed file's old path,
+# one per line. A path with a control character, such as a newline, prints as a JSON string, so it
+# can neither split into two names nor end in a blank line, and it never matches the allowlist.
+release_merge_changed_files() {
+  jq -r '.[] | (.filename, (.previous_filename // empty)) | if test("[[:cntrl:]]") then @json else . end'
+}
+
 # release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha>:
 # prints one line per reason the PR must not be merged, and nothing when it may be.
 # <pr.json> is the REST pull request object, <changed-files> lists one path per line.

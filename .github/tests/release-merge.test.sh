@@ -156,4 +156,78 @@ test_an_unreadable_config_blocks_the_merge() {
   [[ "$got" == *'cannot read the allowlist'* ]] || fail "got [$got]"
 }
 
+# stub_gh <dir>: a `gh` that behaves like the real one when `gh api` gets fields (-f) and no
+# --method: it sends a POST, which would try to create a pull request. A GET answers one PR.
+stub_gh() {
+  mkdir -p "$1"
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'method=GET has_field=' \
+    'for arg in "$@"; do [[ "$arg" == -f || "$arg" == -F ]] && has_field=1; done' \
+    'while (($#)); do case $1 in -X | --method) method=$2 ;; esac; shift; done' \
+    '[[ -n "$has_field" && -z "$method_given" && "$method" == GET && "$*" != *--method* ]] || true' \
+    'echo "[{\"number\": 42}]"' >"$1/gh"
+  chmod +x "$1/gh"
+}
+
+test_the_pr_lookup_sends_a_get_request_so_gh_does_not_create_a_pull_request() {
+  local dir got
+  dir=$(mktemp -d)
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'method= has_field=' \
+    'for arg in "$@"; do [[ "$arg" == -f || "$arg" == -F ]] && has_field=1; done' \
+    'prev=; for arg in "$@"; do [[ "$prev" == -X || "$prev" == --method ]] && method=$arg; prev=$arg; done' \
+    '[[ -z "$method" && -n "$has_field" ]] && method=POST' \
+    '[[ "${method:-GET}" == GET ]] || { echo "gh would send a $method and create a pull request" >&2; exit 1; }' \
+    'echo 42' >"$dir/gh"
+  chmod +x "$dir/gh"
+  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane release-please--branches--main--components--handoff 2>&1)
+  rm -rf "$dir"
+  [[ "$got" == 42 ]] || fail "got [$got]"
+}
+
+# changed_files <json>: the names release_merge_changed_files prints for the files API's JSON.
+changed_files() { printf '%s' "$1" | release_merge_changed_files; }
+
+test_changed_files_lists_each_name_and_the_old_name_of_a_rename() {
+  local got
+  got=$(changed_files '[{"filename":"a.md"},{"filename":"b.md","previous_filename":"c.md"}]')
+  [[ "$got" == $'a.md\nb.md\nc.md' ]] || fail "got [$got]"
+}
+
+test_changed_files_reads_every_page_of_the_files_api() {
+  local got
+  got=$(changed_files '[{"filename":"a.md"}][{"filename":"b.md"}]')
+  [[ "$got" == $'a.md\nb.md' ]] || fail "got [$got]"
+}
+
+# problems_for_names <json>: the gate's output for a PR whose files API returned the JSON.
+problems_for_names() {
+  local dir
+  dir=$(mktemp -d)
+  changed_files "$1" >"$dir/files"
+  write_pr "$dir/pr.json"
+  release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA"
+  rm -rf "$dir"
+}
+
+test_a_file_name_with_a_trailing_newline_blocks_the_merge() {
+  local got
+  got=$(problems_for_names '[{"filename":"plugins/handoff/CHANGELOG.md\n"}]')
+  [[ "$got" == *'is not a file a release PR changes' ]] || fail "got [$got]"
+}
+
+test_a_file_name_with_a_newline_cannot_pose_as_two_allowed_names() {
+  local got
+  got=$(problems_for_names '[{"filename":"plugins/handoff/CHANGELOG.md\n.release-please-manifest.json"}]')
+  [[ "$got" == *'is not a file a release PR changes' ]] || fail "got [$got]"
+}
+
+test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
+  local got
+  got=$(problems_for_names '[{"filename":".release-please-manifest.json"},{"filename":"plugins/handoff/CHANGELOG.md"}]')
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
 run_tests "$@"

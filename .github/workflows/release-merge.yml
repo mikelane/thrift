@@ -24,9 +24,10 @@ on:
 permissions: {}
 
 # One merge attempt per release branch at a time. A newer CI run on the same branch waits, then
-# fails the head-commit check if the branch moved.
+# fails the head-commit check if the branch moved. The group names the head repository too, so a
+# fork's branch with the same name cannot take the real branch's place in the queue.
 concurrency:
-  group: release-merge-${{ github.event.workflow_run.head_branch }}
+  group: release-merge-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +35,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.head_repository.full_name == github.repository
       && startsWith(github.event.workflow_run.head_branch, 'release-please--')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -73,8 +75,7 @@ jobs:
           # shellcheck source=.github/tests/release-merge-lib.sh
           source .github/tests/release-merge-lib.sh
 
-          # head=<owner>:<branch> matches only a branch in this repository, never a fork's.
-          number=$(gh api "repos/$REPO/pulls" -f head="$OWNER:$BRANCH" -f state=open --jq '.[0].number // empty')
+          number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH")
           if [[ -z "$number" ]]; then
             echo "No open PR from $BRANCH in $REPO. Nothing to merge."
             exit 0
@@ -83,8 +84,7 @@ jobs:
           pr=$(mktemp)
           files=$(mktemp)
           gh api "repos/$REPO/pulls/$number" >"$pr"
-          gh api --paginate "repos/$REPO/pulls/$number/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)' >"$files"
+          gh api --paginate "repos/$REPO/pulls/$number/files" | release_merge_changed_files >"$files"
 
           problems=$(release_merge_problems "$pr" "$files" release-please-config.json \
             "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA")
