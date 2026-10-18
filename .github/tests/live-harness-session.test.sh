@@ -143,6 +143,19 @@ test_the_session_command_keeps_the_login_and_the_variables_the_harness_sets() {
   assert_out_has 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
 }
 
+test_the_session_command_adds_the_scenarios_variables_and_nothing_when_it_sets_none() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_SESSION_ENV='CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 CLAUDE_CODE_SCENARIO_FLAG=on' -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1'
+  assert_out_has 'CLAUDE_CODE_SCENARIO_FLAG=on'
+  run_claude_command -- 'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_lacks 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS'
+}
+
 # A tmux server that was already running hands a new session its own environment, so the login and
 # config directory a session keeps must be the harness's, not whatever the server started with:
 # transcripts_dir() reads the harness's CLAUDE_CONFIG_DIR.

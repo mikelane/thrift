@@ -17,6 +17,16 @@ test_start_waiting_handoff_types_the_peer_message_before_it_presses_the_band_and
   assert_file_has "$TEST_DIR/order" 'CALL type b,CALL press a h,CALL press b Enter,CALL wait the handoff to wait'
 }
 
+test_start_waiting_handoff_allows_the_tools_a_scenario_names_instead_of_the_default() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"
+    handoff_start() { echo "CALL start $*"; }; say_apple() { :; }; wait_for() { :; }
+    type_text() { :; }; press() { :; }; session_of() { echo s; }
+    WAITING_HANDOFF_TOOLS="Agent,Bash(sleep *)" start_waiting_handoff a b "do the task" --session-id x'
+  assert_exit_code 0
+  assert_out_has 'CALL start a --allowedTools Agent,Bash(sleep *) --session-id x'
+  assert_out_lacks 'CALL start a --allowedTools Bash(sleep *) '
+}
+
 # run_restore_order <screen> <debug-log-lines>: the scenario with the screen, the debug log and one
 # background_busy abandon record fixed, and every engine-facing helper a no-op. The debug log starts
 # with the three held-prompt lines the scenario waits for, then the given lines.
