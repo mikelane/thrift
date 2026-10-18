@@ -136,12 +136,13 @@ jobs:
           }
 
           if [[ "$TRIGGER" == "Release Please" ]]; then
-            candidates=$(release_merge_sweep "$REPO" "$BASE")
+            # A failed CI lookup for one PR must not stop the others, but it must fail the job.
+            failed=0
+            candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
             if [[ -z "$candidates" ]]; then
               echo "No open release PR has passed CI at its head. Nothing to merge."
-              exit 0
+              exit "$failed"
             fi
-            failed=0
             while read -r number sha; do
               merge_if_gate_passes "$number" "$sha" || failed=1
             done <<<"$candidates"

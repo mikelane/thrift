@@ -241,8 +241,9 @@ stub_gh() {
     '  */actions/runs\?head_sha=*)' \
     '    sha=${path#*head_sha=}; sha=${sha%%&*}' \
     '    [[ "$path" == *event=pull_request* ]] || { echo "no event filter" >&2; exit 1; }' \
+    '    [[ -e "$dir/runs-$sha.error" ]] && { echo "HTTP 403" >&2; exit 1; }' \
     '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
-    '  */pulls\?*) cat "$dir/pulls.json" ;;' \
+    '  */pulls\?*) [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
     '  */pulls/*) cat "$dir/pr-${path##*/}.json" ;;' \
     '  *) echo "unexpected gh call: $*" >&2; exit 1 ;;' \
     'esac' >"$TEST_DIR/gh"
@@ -411,7 +412,41 @@ test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
 
-# lost_race <pr-json-filter>: release_merge_lost_race's status and output for PR 111 at SHA_A.
+# sweep_fails: succeeds when the sweep exits non-zero, as the workflow runs it (pipefail on).
+sweep_fails() { ! (set -o pipefail; sweep) >/dev/null 2>&1; }
+
+test_a_sweep_fails_when_the_ci_run_lookup_fails_so_a_stuck_pr_is_not_hidden() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  : >"$TEST_DIR/runs-$SHA_A.error"
+  sweep_fails || fail 'a failed CI run lookup was read as "no CI run"'
+}
+
+test_a_sweep_fails_when_the_pull_request_list_fails() {
+  : >"$TEST_DIR/pulls.error"
+  sweep_fails || fail 'a failed pull request list was read as "no open release PR"'
+}
+
+test_a_sweep_still_selects_a_pr_when_a_later_pr_lookup_fails() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)" "$(open_pr 112 $SHA_B)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  : >"$TEST_DIR/runs-$SHA_B.error"
+  got=$(sweep 2>/dev/null)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_a_sweep_reads_every_page_of_the_ci_runs() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  jq -c . "$TEST_DIR/runs-$SHA_A.json" >"$TEST_DIR/page1"
+  echo '{"workflow_runs":[]}' >>"$TEST_DIR/page1"
+  mv "$TEST_DIR/page1" "$TEST_DIR/runs-$SHA_A.json"
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+# lost_race <pr-json-filter>:release_merge_lost_race's status and output for PR 111 at SHA_A.
 lost_race() {
   write_pr "$TEST_DIR/pr-111.json" "$1"
   stub_gh

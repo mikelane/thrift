@@ -71,30 +71,42 @@ release_merge_problems() {
 # request event at <sha> has concluded with success. A run counts only when it is the workflow file
 # .github/workflows/ci.yml (not a workflow that merely has the display name CI), ran for a head in
 # <repo> itself (not a fork that pushed the same commit) and on branch <head-ref>. No run, a run
-# still going, a failed run, and a success that is older than a later failure all fail.
+# still going, a failed run, and a success that is older than a later failure return 1. A lookup
+# that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
 release_merge_ci_passed() {
-  local conclusion
-  conclusion=$(gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100" \
-    | jq -rs --arg repo "$1" --arg ref "$3" '
-        [.[].workflow_runs[]
-         | select(.path == ".github/workflows/ci.yml"
-                  and .head_repository.full_name == $repo
-                  and .head_branch == $ref)]
-        | sort_by(.created_at) | last | .conclusion // empty')
+  local runs conclusion
+  runs=$(gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
+  conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" '
+    [.[].workflow_runs[]
+     | select(.path == ".github/workflows/ci.yml"
+              and .head_repository.full_name == $repo
+              and .head_branch == $ref)]
+    | sort_by(.created_at) | last | .conclusion // empty' <<<"$runs") || return 2
   [[ "$conclusion" == success ]]
 }
 
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
-# one still running, is left out: its own CI completion triggers the merge.
+# one still running, is left out: its own CI completion triggers the merge. A PR whose CI lookup
+# fails is left out too, but the sweep goes on with the others and exits non-zero at the end, so a
+# 403 or an outage turns the job red instead of reading as "nothing to merge".
 release_merge_sweep() {
   local number sha ref
   gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
     | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
         and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' \
-    | while read -r number sha ref; do
-        if release_merge_ci_passed "$1" "$sha" "$ref"; then echo "$number $sha"; fi
-      done
+    | {
+        local lookup_failed=0
+        while read -r number sha ref; do
+          if release_merge_ci_passed "$1" "$sha" "$ref"; then
+            echo "$number $sha"
+          elif [[ $? != 1 ]]; then
+            echo "Cannot read the CI runs of PR #$number at $sha." >&2
+            lookup_failed=1
+          fi
+        done
+        return "$lookup_failed"
+      }
 }
 
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when

@@ -37,9 +37,10 @@ specific to this repo.
   to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
   head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
-  still running, is skipped (its own CI completion merges it). If a PR is still stuck, rerun its
-  last CI run with `gh run rerun <CI run id>`. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release` environment,
-  limited to `main` (both token-minting jobs set `environment: release`), so a branch workflow
+  still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
+  red instead of reading as "no run yet". If a PR is still stuck, rerun its last CI run with
+  `gh run rerun <CI run id>`. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
+  environment, limited to `main` (both token-minting jobs set `environment: release`), so a branch workflow
   cannot mint a token. The App must be a bypass actor (pull requests only) on the "main code-owner
   review" ruleset, or the merge is refused for want of a code-owner approval. A user-owned repo
   can't use classic `bypass_pull_request_allowances`, so the bypass has to live in a ruleset. That
