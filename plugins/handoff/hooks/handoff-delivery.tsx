@@ -227,6 +227,8 @@ function readFreshSessionId($: EngineInterface, state: SessionState, settledHand
 }
 
 // The submit runs in a clock tick, since the engine refuses one from a hook the turn may be waiting on.
+// SAFETY: readSessionId and submitEntered catch their own failures, so run never rejects and no test reaches the reject.
+// Keep it: a run that did reject would otherwise leave the handoff waiting forever with its claim held.
 function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     $.clock.after(0, () => {

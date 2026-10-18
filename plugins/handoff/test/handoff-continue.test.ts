@@ -151,6 +151,16 @@ describe('continuing after a handoff', () => {
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { continued: 'skipped', continue_skip: 'submit_failed' } })
   })
 
+  test('It writes no continued field on the record of a handoff that wrote no note', CONTINUING, async ($, on) => {
+    const world = install($, on)
+    world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
+    await startSession($)
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'no_handoff_written' } })
+    expect(lastRecord(world).trigger_values).not.toHaveProperty('continued')
+  })
+
   test('It logs submit_failed when another hook drops the continue prompt', CONTINUING, async ($, on) => {
     const world = install($, on)
     world.submitDropped = true
