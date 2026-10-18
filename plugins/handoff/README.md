@@ -605,7 +605,8 @@ These need a live terminal and have not been watched yet:
   after a busy abandon in `ask` mode only.
 - `continueAfterHandoff` (#102): that the continue prompt starts a turn in the fresh session after
   a band press on a weak signal or a typed `/handoff`, that the id check catches a `/resume` or `/clear` made right after
-  the clear, and that the turn it starts is treated as the plugin's, not yours. It is covered by the
+  the clear, that the turn check catches a prompt you send just before the continue prompt goes (it needs the engine to
+  start that turn before the plugin's next clock tick), and that the turn it starts is treated as the plugin's, not yours. It is covered by the
   test kit only.
 - That a draft typed beside a held prompt survives its delivery (#56).
 - The paths that need a refused submit or fill: a second held group refused, `fill` returning
