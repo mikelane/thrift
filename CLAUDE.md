@@ -33,13 +33,23 @@ specific to this repo.
   `release-please--*` branch in this repo, authored by the App, at the commit CI tested, and change
   only the manifest and each package's changelog, version file and extra-files
   (`.github/tests/release-merge-lib.sh`, tested by `release-merge.test.sh`). Anything else waits
-  for a person. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release` environment,
-  limited to `main` (both token-minting jobs set `environment: release`), so a branch workflow
-  cannot mint a token. The App must be a bypass actor (pull requests only) on the "main code-owner
-  review" ruleset, or the merge is refused for want of a code-owner approval. A user-owned repo
-  can't use classic `bypass_pull_request_allowances`, so the bypass has to live in a ruleset. That
-  ruleset holds only the `pull_request` rule, and the required status checks stay in classic
-  branch protection, because a ruleset bypass actor skips every rule in its ruleset.
+  for a person. The workflow has a second trigger, the Release Please workflow completing on a push
+  to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
+  on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
+  head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
+  still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
+  red instead of reading as "no run yet". The gate refuses a release PR while another open PR has
+  the same head branch, because a run's `pull_requests` lists every open PR at its head, not just
+  the one that triggered it. If a PR is still stuck, rerun its last CI run with
+  `gh run rerun <CI run id>`. The sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job
+  permission `actions: read`), because the App token has no Actions access; the PR list, the gate
+  and the merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
+  environment, limited to `main` (both token-minting jobs set `environment: release`), so a
+  branch workflow cannot mint a token. The App must be a bypass actor (pull requests only) on the
+  "main code-owner review" ruleset, or the merge is refused for want of a code-owner approval. A
+  user-owned repo can't use classic `bypass_pull_request_allowances`, so the bypass has to live in
+  a ruleset. That ruleset holds only the `pull_request` rule, and the required status checks stay
+  in classic branch protection, because a ruleset bypass actor skips every rule in its ruleset.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
 
