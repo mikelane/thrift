@@ -44,20 +44,23 @@ release_merge_changed_files() {
 # prints one line per reason the PR must not be merged, and nothing when it may be.
 # <pr.json> is the REST pull request object, <changed-files> lists one path per line.
 release_merge_problems() {
-  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 allowed value file
-  value=$(jq -r '.state' "$pr")
-  [[ "$value" == open ]] || echo "the PR is $value, not open"
-  value=$(jq -r '.base.ref' "$pr")
-  [[ "$value" == "$base" ]] || echo "the PR targets $value, not $base"
-  value=$(jq -r '.head.repo.full_name // "(deleted)"' "$pr")
-  [[ "$value" == "$repo" ]] || echo "the PR head is in $value, not $repo"
-  value=$(jq -r '.head.ref' "$pr")
-  [[ "$value" == release-please--* ]] || echo "the PR branch $value does not start with release-please--"
-  value=$(jq -r '.user.login' "$pr")
-  [[ "$value" == "$bot" ]] || echo "the PR author is $value, not $bot"
-  value=$(jq -r '.head.sha' "$pr")
-  [[ "$value" == "$tested_sha" ]] || echo "the PR head is $value but CI tested $tested_sha"
+  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 allowed file
+  local pr_state pr_base_ref head_repo head_ref pr_author head_sha
+  pr_state=$(jq -r '.state' "$pr")
+  [[ "$pr_state" == open ]] || echo "the PR is $pr_state, not open"
+  pr_base_ref=$(jq -r '.base.ref' "$pr")
+  [[ "$pr_base_ref" == "$base" ]] || echo "the PR targets $pr_base_ref, not $base"
+  head_repo=$(jq -r '.head.repo.full_name // "(deleted)"' "$pr")
+  [[ "$head_repo" == "$repo" ]] || echo "the PR head is in $head_repo, not $repo"
+  head_ref=$(jq -r '.head.ref' "$pr")
+  [[ "$head_ref" == release-please--* ]] || echo "the PR branch $head_ref does not start with release-please--"
+  pr_author=$(jq -r '.user.login' "$pr")
+  [[ "$pr_author" == "$bot" ]] || echo "the PR author is $pr_author, not $bot"
+  head_sha=$(jq -r '.head.sha' "$pr")
+  [[ "$head_sha" == "$tested_sha" ]] || echo "the PR head is $head_sha but CI tested $tested_sha"
   allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config"; return; }
+  # A failed `<"$files"` skips the loop and prints no problem, which would pass every file.
+  [[ -r "$files" ]] || { echo "cannot read the changed files from $files"; return; }
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     grep -qxF -- "$file" <<<"$allowed" || echo "$file is not a file a release PR changes"

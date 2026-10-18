@@ -34,8 +34,8 @@ Each plugin is released on its own: a release PR bumps the `version` in its `plu
 its `CHANGELOG.md`, and merging that PR tags `<plugin>-vX.Y.Z` and publishes a GitHub release. The
 release PR merges itself once CI passes on it. Until a release lands, an update finds nothing new.
 
-To run the release flow in a fork, create a GitHub App with Contents, Pull requests and Issues set to
-read and write. Set `RELEASE_APP_ID` as a repository variable. Store the private key as
+To run the release flow in a fork, create a GitHub App with Contents, Pull requests and Issues set
+to read and write. Set `RELEASE_APP_ID` as a repository variable. Store the private key as
 `RELEASE_APP_PRIVATE_KEY` in an environment named `release` that deploys only from `main`, so a
 branch workflow cannot read it. Add the App to main's pull-request review bypass list. Do not add it
 as a ruleset bypass actor, which would also skip the required status checks.

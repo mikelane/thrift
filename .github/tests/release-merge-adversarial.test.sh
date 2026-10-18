@@ -13,10 +13,9 @@ BRANCH=release-please--branches--main--components--handoff
 # allowlist_for <config-json>: the allowlist the gate derives from that config.
 allowlist_for() {
   local dir got
-  dir=$(mktemp -d)
+  dir=$TEST_DIR
   printf '%s\n' "$1" >"$dir/config.json"
   got=$(release_merge_allowlist "$dir/config.json")
-  rm -rf "$dir"
   printf '%s' "$got"
 }
 
@@ -68,11 +67,20 @@ stub_pulls_api() {
 # Taking .[0] of an unfiltered list finds #7, the gate refuses it, and the release PR never merges.
 test_the_pr_lookup_finds_the_release_pr_that_targets_main_when_another_pr_shares_its_branch() {
   local dir got
-  dir=$(mktemp -d)
+  dir=$TEST_DIR
   stub_pulls_api "$dir"
   got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane "$BRANCH" main 2>&1)
-  rm -rf "$dir"
   [[ "$got" == 5 ]] || fail "got [$got]"
+}
+
+# With no open PR from the release branch to the base, the lookup prints nothing, so the workflow
+# logs "Nothing to merge" instead of fetching a PR number that is not there.
+test_the_pr_lookup_prints_nothing_when_no_open_pr_targets_the_base() {
+  local dir got
+  dir=$TEST_DIR
+  stub_pulls_api "$dir"
+  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane "$BRANCH" release 2>&1)
+  [[ -z "$got" ]] || fail "got [$got]"
 }
 
 # An extra-files object with no path has nothing to change, so it must not allow "<pkg>/null".

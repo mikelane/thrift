@@ -87,14 +87,22 @@ jobs:
 
           pr=$(mktemp)
           files=$(mktemp)
+          trap 'rm -f "$pr" "$files"' EXIT
           gh api "repos/$REPO/pulls/$number" >"$pr"
           gh api --paginate "repos/$REPO/pulls/$number/files" | release_merge_changed_files >"$files"
 
           problems=$(release_merge_problems "$pr" "$files" release-please-config.json \
             "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA")
+          # A refusal exits 0, so the job is green. Each reason also goes out as a warning annotation,
+          # which shows on the run summary without opening the log. Reasons carry PR-controlled text
+          # (branch, author, file paths): each log line starts with "- " so none is read as a
+          # workflow command, and % is escaped as the annotation format requires.
           if [[ -n "$problems" ]]; then
             echo "Not merging PR #$number:"
-            echo "$problems"
+            while IFS= read -r problem; do
+              echo "- $problem"
+              echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
+            done <<<"$problems"
             exit 0
           fi
 
