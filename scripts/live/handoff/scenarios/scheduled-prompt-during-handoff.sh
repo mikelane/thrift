@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # #95 (C8.3 of #43): a scheduled prompt that fires while a handoff holds prompts is carried with the note
 # and stays unattended. The proof is the first strong turn end after it: a scheduled turn hands off on a
-# strong signal in every mode but `off`, where a person's turn in `ask` only gets a band.
+# strong signal in every mode but `off`, where a person's turn in `ask` only gets a band. In `act` a
+# person's turn hands off too, so the check reads the turn end's `handoff_unattended`, not just `cleared`.
 #
 # The prompt is a real cron job, not a faked origin. A session schedules a one-shot cron job (CronCreate)
 # for a minute a minute or two ahead; the engine logs the exact fire time ("[ScheduledTasks] scheduled
@@ -34,22 +35,33 @@ scenario_run() {
   run_mode act b
 }
 
-# make_push_repo: a work repository with a bare remote, so `git push origin main` succeeds. The commit
-# is made with plumbing (commit-tree), which signs nothing; the repository is a fixture, not anyone's history.
+# make_push_repo: a work repository with a bare remote, so `git push origin main` succeeds, and prints its
+# path with no `.` or `//` in it, so the model types it as the permission rule spells it. The commit is made
+# with plumbing (commit-tree), which signs nothing; the repository is a fixture, not anyone's history. Both
+# repositories take their hooks from an empty directory, so no hook from the owner's global config or
+# init template runs when the session pushes.
 make_push_repo() {
   local dir="$LIVE_RUN/push-fixture" tree commit
+  mkdir -p -- "$dir/no-hooks"
   git init -q --bare "$dir/remote.git"
   git init -q "$dir/work"
+  git -C "$dir/remote.git" config core.hooksPath "$dir/no-hooks"
+  git -C "$dir/work" config core.hooksPath "$dir/no-hooks"
   git -C "$dir/work" remote add origin ../remote.git
   tree=$(git -C "$dir/work" mktree </dev/null)
   commit=$(GIT_AUTHOR_NAME=live GIT_AUTHOR_EMAIL=live@example.invalid GIT_COMMITTER_NAME=live GIT_COMMITTER_EMAIL=live@example.invalid \
     git -C "$dir/work" commit-tree "$tree" -m fixture)
   git -C "$dir/work" update-ref refs/heads/main "$commit"
   git -C "$dir/work" symbolic-ref HEAD refs/heads/main
-  echo "$dir/work"
+  (cd -- "$dir/work" && pwd -P)
 }
 
-epoch_of() { date -j -u -f '%Y-%m-%dT%H:%M:%S' "${1%.*}" +%s 2>/dev/null || date -u -d "${1%.*}Z" +%s; }
+# epoch_of <iso-utc>: the log's fire time, with or without fractional seconds, as epoch seconds (BSD or GNU date).
+epoch_of() {
+  local ts=${1%Z}
+  ts=${ts%.*}
+  date -j -u -f '%Y-%m-%dT%H:%M:%S' "$ts" +%s 2>/dev/null || date -u -d "${ts}Z" +%s
+}
 cron_fields() { date -r "$1" '+%M %H %d %m *' 2>/dev/null || date -d "@$1" '+%M %H %d %m *'; }
 
 # set_mode <mode>: the plugin's mode for the sessions started after this.
@@ -77,12 +89,12 @@ run_mode() {
   section "mode $mode"
   baseline=$(decision_lines)
   set_mode "$mode"
-  handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C *),Bash(seq *)"
+  handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C $PUSH_REPO push *),Bash(seq *)"
   say_apple "$name"
   fire=$(schedule_prompt "$name")
   wait_for "the scheduling turn of '$name' to end" turns_done_above "$name" 1
   (($(date +%s) < fire - HANDOFF_LEAD)) || live_abort "the job fires less than ${HANDOFF_LEAD}s from now: the window is missed; run it again"
-  while (($(date +%s) < fire - HANDOFF_LEAD)); do sleep 0.2; done
+  while (($(date +%s) < fire - HANDOFF_LEAD)); do sleep "$LIVE_POLL"; done
   submit "$name" '/handoff'
   wait_for "the first handoff of '$name' to clear" first_handoff_cleared "$baseline"
   after_handoff=$(decision_lines)
@@ -93,7 +105,7 @@ run_mode() {
   show_pane "$name" "$mode, end of the run"
 
   [[ -n "$(first_cleared "$baseline")" ]] || live_abort 'no cleared record'
-  [[ "$(first_cleared "$baseline" | jq '.trigger_values.held_groups')" -ge 1 ]] \
+  first_cleared "$baseline" | jq -e '.trigger_values.held_groups >= 1' >/dev/null \
     || live_abort "the job did not fire inside the handoff (held_groups 0), so the run proves nothing; run it again"
   [[ "$(turn_end_field "$after_handoff" signal)" == strong ]] \
     || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing"
@@ -124,4 +136,5 @@ carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
     && log_has "$2" "prompt\\.submit \\(handoff\\): \"$SCHEDULED_TOKEN"
 }
-turn_end_handed_off() { turn_end_record "$1" | jq -e 'select(.action == "cleared")' >/dev/null; }
+# In `act` a person's strong turn end hands off too; handoff_unattended is what says the turn was the scheduled one.
+turn_end_handed_off() { turn_end_record "$1" | jq -e 'select(.action == "cleared" and .trigger_values.handoff_unattended == true)' >/dev/null; }
