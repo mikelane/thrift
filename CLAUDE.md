@@ -39,9 +39,11 @@ specific to this repo.
   head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
   still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
   red instead of reading as "no run yet". If a PR is still stuck, rerun its last CI run with
-  `gh run rerun <CI run id>`. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
-  environment, limited to `main` (both token-minting jobs set `environment: release`), so a branch workflow
-  cannot mint a token. The App must be a bypass actor (pull requests only) on the "main code-owner
+  `gh run rerun <CI run id>`. The sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job
+  permission `actions: read`), because the App token has no Actions access; the PR list, the gate
+  and the merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
+  environment, limited to `main` (both token-minting jobs set `environment: release`), so a
+  branch workflow cannot mint a token. The App must be a bypass actor (pull requests only) on the "main code-owner
   review" ruleset, or the merge is refused for want of a code-owner approval. A user-owned repo
   can't use classic `bypass_pull_request_allowances`, so the bypass has to live in a ruleset. That
   ruleset holds only the `pull_request` rule, and the required status checks stay in classic

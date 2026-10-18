@@ -65,6 +65,9 @@ jobs:
         && github.event.workflow_run.head_branch == github.event.repository.default_branch
       )
     runs-on: ubuntu-latest
+    # The sweep reads CI runs with the workflow's own token (RUNS_TOKEN below); that is all it gets.
+    permissions:
+      actions: read
     # The App key lives in this environment, which only main may deploy to (see release-please.yml).
     environment: release
     timeout-minutes: 10
@@ -93,6 +96,7 @@ jobs:
       - name: Squash-merge the release PR if the gate passes
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUNS_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
           BASE: ${{ github.event.repository.default_branch }}

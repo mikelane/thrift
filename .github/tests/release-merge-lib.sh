@@ -73,9 +73,11 @@ release_merge_problems() {
 # <repo> itself (not a fork that pushed the same commit) and on branch <head-ref>. No run, a run
 # still going, a failed run, and a success that is older than a later failure return 1. A lookup
 # that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
+# The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
+# whose permissions do not include Actions.
 release_merge_ci_passed() {
   local runs conclusion
-  runs=$(gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
+  runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
   conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" '
     [.[].workflow_runs[]
      | select(.path == ".github/workflows/ci.yml"

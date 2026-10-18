@@ -241,6 +241,7 @@ stub_gh() {
     '  */actions/runs\?head_sha=*)' \
     '    sha=${path#*head_sha=}; sha=${sha%%&*}' \
     '    [[ "$path" == *event=pull_request* ]] || { echo "no event filter" >&2; exit 1; }' \
+    '    echo "$GH_TOKEN" >"$dir/runs-token"' \
     '    [[ -e "$dir/runs-$sha.error" ]] && { echo "HTTP 403" >&2; exit 1; }' \
     '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
     '  */pulls\?*) [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
@@ -410,6 +411,26 @@ test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
   write_runs $SHA_B 'CI completed failure 2026-10-18T10:00:00Z'
   got=$(sweep)
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_the_ci_run_lookup_uses_the_runs_token_not_the_app_token() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs $SHA_A 'CI completed success 2026-10-18T10:00:00Z'
+  (export GH_TOKEN=app-token RUNS_TOKEN=runs-token; sweep >/dev/null)
+  got=$(<"$TEST_DIR/runs-token")
+  [[ "$got" == runs-token ]] || fail "got [$got]"
+}
+
+test_the_merge_job_grants_its_token_actions_read_and_nothing_else() {
+  local got
+  got=$(awk '/^    permissions:/{f=1;next} f&&/^      /{print;next} f{exit}' "$REPO_ROOT/.github/workflows/release-merge.yml")
+  [[ "$got" == '      actions: read' ]] || fail "got [$got]"
+}
+
+test_the_workflow_hands_the_sweep_the_workflow_token_as_the_runs_token() {
+  grep -qF 'RUNS_TOKEN: ${{ github.token }}' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    || fail 'RUNS_TOKEN is not the workflow token'
 }
 
 # sweep_fails: succeeds when the sweep exits non-zero, as the workflow runs it (pipefail on).
