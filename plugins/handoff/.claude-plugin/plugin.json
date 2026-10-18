@@ -30,7 +30,7 @@
     "continueAfterHandoff": {
       "type": "boolean",
       "title": "Continue on the note after a handoff",
-      "description": "After a handoff that did not follow a strong signal, the fresh session starts on the note without waiting for you.",
+      "description": "After a band press mid-work or a typed /handoff, the fresh session starts on the note without waiting for you. Never after a strong signal, and never while the plugin runs in off.",
       "default": false
     }
   }

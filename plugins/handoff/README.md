@@ -392,7 +392,7 @@ Set these in `/config`.
 | `handoffMode` | `off`, `ask`, `act` | `off` | See [Modes](#modes). |
 | `handoffContextTokens` | number, 80,000 to 2,000,000 | `150000` | The context size at which a signal becomes strong or weak. A fresh session starts near 48,000 tokens. |
 | `compactBeforeClear` | boolean | `false` | Compact the old session before clearing, so resuming it later costs less. It costs one compaction per handoff. **When it is on, `claude --resume <old id>` reopens the compacted transcript, not the full one.** |
-| `continueAfterHandoff` | boolean | `false` | After a handoff that did not follow a strong signal (a band press mid-work, or a typed `/handoff`), submit one prompt in the fresh session so Claude carries on from the note. See [Continuing after a handoff](#continuing-after-a-handoff). |
+| `continueAfterHandoff` | boolean | `false` | After a handoff that did not follow a strong signal (a band press mid-work, or a typed `/handoff`), submit one prompt in the fresh session so Claude carries on from the note. Does nothing while the plugin runs in `off`. See [Continuing after a handoff](#continuing-after-a-handoff). |
 
 ### Continuing after a handoff
 
@@ -400,24 +400,29 @@ Normally the fresh session holds the note and waits for you. With `continueAfter
 plugin submits one short prompt in the fresh session, `Continue from the handoff note.`, so Claude
 picks the work up where the note leaves it. The prompt is the plugin's own (plugin origin), not
 yours, and it is submitted in a later tick, after the note and after any prompts held during the
-handoff. The setting is independent of `handoffMode`.
+handoff.
 
-It continues only when all of these hold. Otherwise it submits nothing and the `cleared` record says
-why (`continue_skip`).
+The setting needs the plugin to run in `ask` or `act`. While it runs in `off` (the `handoffMode`
+setting, or a fallback that holds it there), nothing continues, a typed `/handoff` included, and
+the `cleared` record reads `continued: off`.
+
+Otherwise it continues only when all of these hold. When one does not, it submits nothing and the
+`cleared` record says which (`continue_skip`).
 
 - **The handoff did not follow a strong signal.** A `weak` signal (a turn ended without the task
   finishing, and you pressed Hand off on the band) continues: the work was mid-flight. A typed
   `/handoff` carries no signal (`none`) and also continues: you chose to move on. After a `strong`
-  signal (the task just finished) the fresh session waits for you, because you are at a natural
-  stopping point. Every `act`-mode handoff follows a strong signal, so none of them continues.
+  signal (a finished task, or a prompt that names new work) the fresh session waits for you,
+  because you are at a natural stopping point. A handoff the plugin starts on its own (in `act` mode, or from a scheduled
+  trigger) always follows a strong signal, so it never continues.
 - **The note was appended.** A note that was `submitted` already started a turn. One left in the
   prompt box or not carried needs you to act first.
-- **No prompt started a turn.** A held prompt or late prompt that was submitted in the fresh
-  session already started one, as does a prompt you send before the continue prompt goes.
+- **No prompt started a turn.** A held or late prompt that was submitted in the fresh session
+  already started one. So did a prompt you sent yourself if its turn is running when the plugin
+  checks, straight before it submits.
 - **The session is still the fresh one.** The plugin reads the session id right after the clear and
-  again straight before submitting. If you `/resume` or `/clear` in between, or the id cannot be read, it does
-  not submit there.
-- **The plugin is not in `off`.** That includes a fallback that holds it there.
+  again straight before submitting. If you `/resume` or `/clear` in between, or the id cannot be
+  read, it does not submit there.
 
 A refused submit (a hook beneath the plugin drops it, or the engine throws) is logged as
 `submit_failed`, goes to the debug log, and the handoff finishes as usual.
