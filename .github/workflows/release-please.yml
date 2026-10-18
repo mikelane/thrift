@@ -1,0 +1,44 @@
+name: Release Please
+
+# On every push to main, release-please keeps one release PR open per plugin with releasable
+# commits (feat, fix). Merging that PR tags the commit, creates the GitHub release and lands the
+# CHANGELOG and version bump. Config: release-please-config.json and .release-please-manifest.json.
+#
+# The release PR is opened with a GitHub App token, not GITHUB_TOKEN. A PR opened with GITHUB_TOKEN
+# triggers no workflows, so the release PR would get no CI and could not merge. The App needs
+# repository permissions Contents, Pull requests and Issues set to read and write. It is configured
+# with the repository variable RELEASE_APP_ID and the repository secret RELEASE_APP_PRIVATE_KEY.
+#
+# The workflow's own GITHUB_TOKEN gets no permissions: the App token does all the writing. The job
+# checks out and runs no repository code.
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+# Two pushes in quick succession must not race to update the same release PR. Let the running
+# job finish; a newer pending run replaces any older pending one, and it sees every commit.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint a short-lived App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Open or update the release PRs
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
