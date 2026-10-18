@@ -49,7 +49,12 @@ specific to this repo.
   "main code-owner review" ruleset, or the merge is refused for want of a code-owner approval. A
   user-owned repo can't use classic `bypass_pull_request_allowances`, so the bypass has to live in
   a ruleset. That ruleset holds only the `pull_request` rule, and the required status checks stay
-  in classic branch protection, because a ruleset bypass actor skips every rule in its ruleset.
+  in classic branch protection, because a ruleset bypass actor skips every rule in its ruleset. A
+  second ruleset, "release-please branches", restricts creating, updating, deleting and
+  force-pushing `refs/heads/release-please--*`, with the App as the only bypass actor (always).
+  Only the App can write a release branch, so every commit the merge gate sees came from
+  release-please. A gate check on commit authors would not be enough: GitHub takes a commit's
+  author from its email, which anyone can set.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
 
