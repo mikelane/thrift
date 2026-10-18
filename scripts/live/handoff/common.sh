@@ -107,12 +107,12 @@ start_peer_messenger() {
 # peer's Enter then lands while the note is written and starts a turn. The handoff says it continues
 # when that turn ends. (Pressing the button while a turn is already running defers the press until the
 # turn ends and then refuses it, which is a shorter path.)
-# <name> is started with Bash(sleep *) allowed, for the peer tasks that run `sleep`, and with any
-# further arguments.
+# <name> is started with Bash(sleep *) allowed, for the peer tasks that run `sleep` (WAITING_HANDOFF_TOOLS
+# replaces that list), and with any further arguments.
 start_waiting_handoff() {
   local name=$1 peer=$2 task=$3
   shift 3
-  handoff_start "$name" --allowedTools "Bash(sleep *)" "$@"
+  handoff_start "$name" --allowedTools "${WAITING_HANDOFF_TOOLS:-Bash(sleep *)}" "$@"
   say_apple "$name"
   wait_for 'the band to offer a handoff' pane_has "$name" 'h: Hand off and clear'
   type_text "$peer" "Use the SendMessage tool to send exactly this text to the session named $(session_of "$name"): $task Do nothing else."

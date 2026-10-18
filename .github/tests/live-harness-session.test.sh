@@ -61,24 +61,6 @@ test_start_dialogs_cleared_succeeds_once_the_prompt_box_is_up() {
   assert_exit_code 0
 }
 
-# live_claude_command is what the tmux server runs through sh. These tests run it as tmux would, with
-# a stub claude that prints its own path and the variables the harness sets or drops. Only those: a
-# failing test prints its output, and the rest of the owner's environment can hold keys.
-write_env_dumping_claude() { # write_env_dumping_claude <path>
-  mkdir -p "$(dirname "$1")"
-  printf '#!/bin/sh\necho "BIN=$0"\nenv | grep -E "^(CLAUDE|ANTHROPIC|THRIFT_HOME=|PATH=)" || true\n' > "$1"
-  chmod +x "$1"
-}
-
-run_claude_command() { # run_claude_command <env assignments...> -- <bash-snippet>
-  local assignments=()
-  while [[ "$1" != -- ]]; do assignments+=("$1"); shift; done
-  shift
-  EXIT_CODE=0
-  hermetic_env PATH="$TEST_DIR/bin:$JQ_DIR:/usr/bin:/bin" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" LIVE_DIR="$LIVE_DIR" ${assignments[@]+"${assignments[@]}"} \
-    "$BASH" --noprofile --norc -c 'set -euo pipefail; source "$LIVE_DIR/lib.sh"; '"$1" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
-}
-
 test_the_session_command_drops_the_claude_variables_it_inherited() {
   write_live_stubs
   write_env_dumping_claude "$TEST_DIR/bin/claude"
