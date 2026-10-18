@@ -1,3 +1,4 @@
+import type { ContinueFields, ContinueSkip } from './continue-decision'
 import type { DecisionReason } from './decision-reasons'
 import type { ForkReason } from './fork-outcome'
 import type { NoteDelivery } from './handoff-note'
@@ -32,6 +33,8 @@ export type TriggerValues = {
   cleared_by?: ClearedBy
   compacted_before_clear?: true
   late_turn?: true
+  continued?: ContinueFields['continued']
+  continue_skip?: ContinueSkip
 }
 
 type HeldGroupFields = Required<Pick<TriggerValues, 'held_groups' | 'held_unattended'>>
@@ -73,6 +76,7 @@ export type Evaluation = Trigger & {
   clearedBy?: ClearedBy
   compactedBeforeClear?: boolean
   lateTurn?: boolean
+  continueFields?: ContinueFields
   heldFields?: HeldRecordFields
   sessionId?: string
 }
@@ -136,7 +140,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
@@ -159,6 +163,7 @@ export const recordFromEvaluation = (
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
       ...compactedFields,
       ...lateTurnFields,
+      ...continueFields,
       ...heldFields,
     },
   })

@@ -65,7 +65,7 @@ test('It skips the compaction and leaves compacted_before_clear off when the per
   expect(clearCount(world)).toBe(0)
 })
 
-test('It orders the cleared record keys after a compaction with compacted_before_clear between cleared_by and the held fields', COMPACTING, async ($, on) => {
+test('It orders the cleared record keys after a compaction with compacted_before_clear and continued between cleared_by and the held fields', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await runCommand($, 'handoff')
@@ -81,6 +81,7 @@ test('It orders the cleared record keys after a compaction with compacted_before
     'note',
     'cleared_by',
     'compacted_before_clear',
+    'continued',
     'held_groups',
     'held_unattended',
     'handoff_unattended',
