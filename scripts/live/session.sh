@@ -46,26 +46,43 @@ live_kept_env() {
   done
 }
 
+# live_scenario_env: LIVE_SESSION_ENV, the NAME=value words (split on spaces and newlines) a scenario sets
+# for the sessions it starts next, as `export NAME='value'` lines for a POSIX sh. Empty by default. Fails
+# on any other word, which `env` would run as the command, and does not name the word: it may hold a value.
+live_scenario_env() {
+  local word words=()
+  [[ -z "${LIVE_SESSION_ENV:-}" ]] || read -r -d '' -a words <<<"$LIVE_SESSION_ENV" || true
+  for word in ${words[@]+"${words[@]}"}; do
+    if [[ ! "$word" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      echo 'LIVE_SESSION_ENV holds a word that is not NAME=value' >&2
+      return 1
+    fi
+    printf 'export %s=' "${word%%=*}"
+    live_sh_words "${word#*=}"
+    printf '\n'
+  done
+}
+
 # live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
 # new session, and a server started earlier carries its own. So the session drops every CLAUDE and
 # ANTHROPIC variable it has and then reads this shell's kept ones from a file in the run directory
 # (owner-only), which it deletes at once: the OAuth token and any API key stay out of the command
-# text, which `ps` and tmux show.
+# text, which `ps` and tmux show. A scenario's variables (live_scenario_env) go in the same file, before
+# the kept ones, and the harness's own switches follow on the command line, so neither the login nor a
+# switch can be overridden by a scenario.
 # The binary is the one live_require checked, by absolute path, and PATH is this shell's, for the same
 # reason.
 live_claude_command() {
   local name=$1
   shift
-  local env_file="$LIVE_RUN/session-env-$name"
-  (umask 077 && live_kept_env >"$env_file") || return 1
-  # LIVE_SESSION_ENV: NAME=value words a scenario sets for the sessions it starts next (none by default).
-  local scenario_env=()
-  [[ -z "${LIVE_SESSION_ENV:-}" ]] || read -r -a scenario_env <<<"$LIVE_SESSION_ENV"
+  local env_file="$LIVE_RUN/session-env-$name" scenario_env
+  scenario_env=$(live_scenario_env) || return 1
+  (umask 077 && { printf '%s\n' "$scenario_env" && live_kept_env; } >"$env_file") || return 1
   # shellcheck disable=SC2016 # the script is for the shell tmux starts, not for this one
   local session_launch_script='env_file=$1; shift; for variable in $(env | LC_ALL=C sed -En "s/^((CLAUDE|ANTHROPIC)[A-Za-z0-9_]*)=.*/\1/p"); do unset "$variable"; done; . "$env_file"; rm -f "$env_file"; exec "$@"'
   live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
-    "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 ${scenario_env[@]+"${scenario_env[@]}"} \
+    "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
     --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"
 }

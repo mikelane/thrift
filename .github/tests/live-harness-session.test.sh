@@ -156,6 +156,58 @@ test_the_session_command_adds_the_scenarios_variables_and_nothing_when_it_sets_n
   assert_out_lacks 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS'
 }
 
+# A scenario's variables travel like the login: through the owner-only file, so the command text is the
+# same whether a scenario sets any or not, and no value is left in the run directory.
+test_the_session_command_keeps_the_scenarios_values_out_of_its_text_and_the_run_directory() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_SESSION_ENV='CLAUDE_CODE_SCENARIO_FLAG=scenario-val' -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; plain=$(LIVE_SESSION_ENV= live_claude_command a); command=$(live_claude_command a)
+     [[ "$command" == "$plain" ]] && echo SAME_TEXT; printf "COMMAND=%s\n" "$command"; sh -c "$command" | grep -c FLAG=scenario-val'
+  assert_exit_code 0
+  assert_out_has 'SAME_TEXT'
+  assert_out_has 'COMMAND='
+  assert_out_lacks 'scenario-val'
+  ! grep -rqa scenario-val "$TEST_DIR/tmp" || fail 'a scenario value was left in the run directory'
+}
+
+# The harness's own switches and login win over a scenario's: a scenario cannot write the owner's
+# decision log, load CLAUDE.md files, or swap the config directory.
+test_the_session_command_lets_no_scenario_variable_override_the_harness() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command CLAUDE_CONFIG_DIR=/cfg LIVE_SESSION_ENV='THRIFT_HOME=/owner CLAUDE_CODE_DISABLE_CLAUDE_MDS=0 CLAUDE_CONFIG_DIR=/other' -- \
+    'LIVE_THRIFT_HOME=/thrift-home; LIVE_RUN=$TMPDIR; sh -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'THRIFT_HOME=/thrift-home'
+  assert_out_has 'CLAUDE_CODE_DISABLE_CLAUDE_MDS=1'
+  assert_out_has 'CLAUDE_CONFIG_DIR=/cfg'
+  assert_out_lacks '/owner'
+  assert_out_lacks '/other'
+}
+
+# `env` runs its first word without an `=` as the command, so a value with a space (or any stray word)
+# would start that word in place of claude. The command is refused instead, and no file is left behind.
+test_the_session_command_is_refused_when_a_scenario_word_is_not_an_assignment() {
+  write_live_stubs
+  run_claude_command CLAUDE_CODE_OAUTH_TOKEN=secret-tok LIVE_SESSION_ENV='CLAUDE_CODE_SCENARIO_FLAG=two words' -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; live_claude_command a >/dev/null || echo "REFUSED=$?"'
+  assert_out_has 'REFUSED=1'
+  assert_out_has 'LIVE_SESSION_ENV'
+  assert_out_lacks 'words'
+  ! grep -rqa secret-tok "$TEST_DIR/tmp" || fail 'the token was left in the run directory'
+}
+
+test_the_session_command_takes_scenario_words_on_separate_lines() {
+  write_live_stubs
+  write_env_dumping_claude "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_SESSION_ENV=$'CLAUDE_CODE_FIRST_FLAG=1\nCLAUDE_CODE_SECOND_FLAG=2' -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; command=$(live_claude_command a); env -u LIVE_SESSION_ENV sh -c "$command"'
+  assert_exit_code 0
+  assert_out_has 'CLAUDE_CODE_FIRST_FLAG=1'
+  assert_out_has 'CLAUDE_CODE_SECOND_FLAG=2'
+}
+
 # A tmux server that was already running hands a new session its own environment, so the login and
 # config directory a session keeps must be the harness's, not whatever the server started with:
 # transcripts_dir() reads the harness's CLAUDE_CONFIG_DIR.
