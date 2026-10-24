@@ -15,6 +15,19 @@
           "jsonpath": "$.version"
         }
       ]
+    },
+    "plugins/meter": {
+      "release-type": "simple",
+      "component": "meter",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
