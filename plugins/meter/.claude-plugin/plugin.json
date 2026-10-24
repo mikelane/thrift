@@ -1,0 +1,28 @@
+{
+  "name": "meter",
+  "version": "0.1.0",
+  "description": "A side pane that shows context fill, rate-limit burn pace, cost and the largest context categories, drawn outside the model's context.",
+  "author": {
+    "name": "Mike Lane"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "meterAutoOpen": {
+      "type": "boolean",
+      "title": "Open the meter pane at session start",
+      "description": "The pane is placed at session start only on a terminal 144 columns wide or more. Narrower, run /meter to open it.",
+      "default": false
+    },
+    "meterGlyphs": {
+      "type": "string",
+      "title": "Meter glyph set",
+      "description": "unicode draws in any font. nerd draws Nerd Font icons, which show as boxes without a patched font.",
+      "options": [
+        "unicode",
+        "nerd"
+      ],
+      "default": "unicode"
+    }
+  }
+}

@@ -1,3 +1,4 @@
 {
-  "plugins/handoff": "0.3.0"
+  "plugins/handoff": "0.3.0",
+  "plugins/meter": "0.1.0"
 }

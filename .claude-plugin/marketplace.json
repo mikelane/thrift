@@ -1,12 +1,21 @@
 {
   "name": "thrift",
-  "owner": { "name": "Mike Lane" },
-  "metadata": { "description": "Claude Code plugins that keep your token spend down." },
+  "owner": {
+    "name": "Mike Lane"
+  },
+  "metadata": {
+    "description": "Claude Code plugins that keep your token spend down."
+  },
   "plugins": [
     {
       "name": "handoff",
       "source": "./plugins/handoff",
       "description": "Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff Claude writes."
+    },
+    {
+      "name": "meter",
+      "source": "./plugins/meter",
+      "description": "A side pane with context fill, rate-limit burn pace, cost and the largest context categories, drawn outside the model's context."
     }
   ]
 }
