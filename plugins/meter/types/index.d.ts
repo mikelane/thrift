@@ -25,6 +25,6 @@ export type MeterReading = {
 
 declare module 'claude-code' {
   interface PluginState {
-    meter: { reading: Shaped<MeterReading> }
+    meter: { reading: Shaped<MeterReading>; isInteractive: Shaped<boolean> }
   }
 }

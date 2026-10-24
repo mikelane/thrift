@@ -6,6 +6,7 @@ import { asGlyphSet } from './glyphs'
 import { drawMeter } from './meter-pane'
 import { openMeter, recordMeasure, reloadOpenMeter, restartMeterReading, runMeterCommand } from './meter-actions'
 import { PANE_ID } from './pane-id'
+import { isInteractiveSession, rememberInteractivity } from './session-store'
 
 async function registerAndReload($: EngineInterface): Promise<void> {
   await registerMeterCommand($)
@@ -16,11 +17,9 @@ export const register: Register = (on, options) => {
   const glyphs = asGlyphSet(options.meterGlyphs)
   const isAutoOpen = options.meterAutoOpen === true
 
-  const session = { isInteractive: false }
-
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    session.isInteractive = e.isInteractive
+    await logFailure($, rememberInteractivity($, e.isInteractive))
     if (!e.isInteractive) return started
     await registerMeterCommand($)
     // Opened in a later tick so the usage readings never hold up the start of the session.
@@ -32,7 +31,7 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     if (e.reason === 'clear') {
       await logFailure($, restartMeterReading($))
-      if (session.isInteractive) $.clock.after(0, () => void logFailure($, registerAndReload($)))
+      if (await isInteractiveSession($)) $.clock.after(0, () => void logFailure($, registerAndReload($)))
     }
     return next(e)
   }).catch(($, e, next) => next(e))

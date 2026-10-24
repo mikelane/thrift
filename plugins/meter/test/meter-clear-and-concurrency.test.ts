@@ -16,6 +16,25 @@ describe('non-interactive runs', () => {
   })
 })
 
+describe('interactivity after the plugin starts again', () => {
+  // A restart replays no session.start, so only the store still knows the run is interactive.
+  test('It registers the command after a clear when the store holds an interactive session and no session.start ran', async ($, on) => {
+    const world = install($, on)
+    on('state.get', (_$, e, next) => (e.key === 'isInteractive' ? { value: { value: { shape: 'interactive-1', value: true }, version: 0 } } : next(e)))
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+    await world.clock.settle()
+    expect(world.registered).toEqual(['meter'])
+  })
+
+  test('It registers no command after a clear when the store cannot be read', async ($, on) => {
+    const world = install($, on)
+    on('state.get', (_$, e, next) => (e.key === 'isInteractive' ? { deny: 'store gone' } : next(e)))
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+    await world.clock.settle()
+    expect(world.registered).toEqual([])
+  })
+})
+
 describe('/clear restarts the COST row', () => {
   test('It no longer draws the pre-clear cost after a clear', async ($, on) => {
     const world = install($, on)
