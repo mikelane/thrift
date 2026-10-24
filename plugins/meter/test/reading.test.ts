@@ -21,7 +21,7 @@ test('It starts with nothing read and nothing stale in EMPTY_READING', () => {
 test('It copies tokens, window, rate limits and cost in headlineFrom', () => {
   expect(
     headlineFrom({
-      context: { tokens: 150000, window: 200000, percent: 75 },
+      context: { tokens: 150000, window: 200000 },
       rateLimits: [{ kind: 'five_hour', percentUsed: 48, resetsAt: '2026-10-20T10:00:00Z' }],
       cost: { usd: 4.82 },
     }),
@@ -41,7 +41,8 @@ test('It leaves out tokens and cost in headlineFrom when the usage carries none'
 })
 
 test('It never copies the breakdown in headlineFrom', () => {
-  const copied = headlineFrom({ context: { window: 1, breakdown: {} as never }, rateLimits: [] })
+  const context = { window: 1, breakdown: {} }
+  const copied = headlineFrom({ context, rateLimits: [] })
   expect(Object.keys(copied)).not.toContain('breakdown')
 })
 
