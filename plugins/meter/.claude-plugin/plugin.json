@@ -1,6 +1,6 @@
 {
   "name": "meter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A side pane that shows context fill, rate-limit burn pace, cost and the largest context categories, drawn outside the model's context.",
   "author": {
     "name": "Mike Lane"
