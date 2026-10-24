@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import { registerMeterCommand } from './command-registration'
-import { logFailure } from './engine-log'
+import { debug, logFailure } from './engine-log'
 import { asGlyphSet } from './glyphs'
 import { drawMeter } from './meter-pane'
 import { openMeter, recordMeasure, reloadOpenMeter, restartMeterReading, runMeterCommand } from './meter-actions'
@@ -14,7 +14,7 @@ async function registerAndReload($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = (on, options) => {
-  const glyphs = asGlyphSet(options.meterGlyphs)
+  const glyphSet = asGlyphSet(options.meterGlyphs)
   const isAutoOpen = options.meterAutoOpen === true
 
   on('session.start', async ($, e, next) => {
@@ -41,11 +41,12 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'meter' }, ($, e) => runMeterCommand($, e.args)).catch(() => ({
-    text: 'Could not run /meter.',
-  }))
+  on('command.run', { command: 'meter' }, ($, e) => runMeterCommand($, e.args)).catch(($, _e, next) => {
+    debug($, `could not run /meter: ${next.error.message ?? next.error.kind}`)
+    return { text: 'Could not run /meter.' }
+  })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => drawMeter($, e, glyphs)).catch(($, e, next) =>
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => drawMeter($, e, glyphSet)).catch(($, e, next) =>
     next(e),
   )
 }

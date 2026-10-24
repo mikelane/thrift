@@ -16,17 +16,25 @@ import type { BandColor } from './pace'
 
 const LIMIT_PERCENT = 100
 
-export type WindowView = {
-  state: 'paced' | 'too-early' | 'limit-reached' | 'plain'
+type WindowBase = {
   label: string
   slot?: GlyphSlot
   percentText: string
-  color?: BandColor
-  elapsedPercent?: number
-  paceText?: string
-  projection?: string
-  resetsLabel?: string
 }
+
+// One variant per state, so a paced view always carries its pace and reset, and no other state can claim them.
+export type WindowView =
+  | (WindowBase & {
+      state: 'paced'
+      color: BandColor
+      elapsedPercent: number
+      paceText: string
+      projection?: string
+      resetsLabel: string
+    })
+  | (WindowBase & { state: 'limit-reached'; color: 'error'; resetsLabel?: string })
+  | (WindowBase & { state: 'too-early' })
+  | (WindowBase & { state: 'plain'; color?: 'error' })
 
 const labelFor = (kind: string): string => {
   if (kind === 'five_hour') return '5-HOUR'

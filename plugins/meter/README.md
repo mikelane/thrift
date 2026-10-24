@@ -70,6 +70,9 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
   90%. The plain call's `tokens` is compared, never the breakdown's `totalTokens`. The percent is
   not capped, so a context over the window reads above 100%. Before the first response the row
   reads `waiting for first response` and is uncolored.
+- **Without color**: every band is computed from a figure the row prints (the context percent, the
+  pace), so the thresholds above give the band in a monochrome terminal or to a screen reader. The
+  band name itself is not printed, and the `●` after the pace carries only the band color.
 - **Cache hit**: `cache_read_input_tokens / (input_tokens + cache_read_input_tokens +
   cache_creation_input_tokens)`, as a whole percent. Shown as `cache hit —` when `apiUsage` is
   null, no breakdown has been taken, or the denominator is 0.

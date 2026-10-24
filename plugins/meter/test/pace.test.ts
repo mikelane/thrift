@@ -91,6 +91,14 @@ test('It returns 2.00 from paceOf for 10 percent with 5 percent elapsed', () => 
   expect(formatPace(paceOf(10, 0.05))).toBe('2.00')
 })
 
+test('It returns two decimals from formatPace for a whole pace', () => {
+  expect(formatPace(1)).toBe('1.00')
+})
+
+test('It rounds to two decimals in formatPace', () => {
+  expect(formatPace(0.776)).toBe('0.78')
+})
+
 const bandCases = [
   [0.89, 'success'],
   [0.9, 'warning'],

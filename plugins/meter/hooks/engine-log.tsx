@@ -5,8 +5,7 @@ export function debug($: EngineInterface, line: string): void {
   return $.ui.log(`meter: ${line}`, { to: 'debug' })
 }
 
-// SAFETY: every current caller catches its own engine failures, so no test reaches this catch.
-// Keep it: it is the only guard against an unhandled rejection if a future caller forgets.
+// Catches what background work leaves uncaught: a refused open, pane list or store write. It never rethrows.
 export function logFailure($: EngineInterface, work: Promise<unknown>): Promise<unknown> {
   return work.catch(error => debug($, `background work failed: ${String(error)}`))
 }

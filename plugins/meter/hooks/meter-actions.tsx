@@ -28,16 +28,16 @@ async function trackingBreakdown(count: () => Promise<void>): Promise<void> {
   }
 }
 
-export async function isMeterOpen($: EngineInterface): Promise<boolean> {
+async function isMeterOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
 }
 
-async function recordFailure($: EngineInterface, what: string, error: unknown, generation: number): Promise<void> {
-  debug($, `could not ${what}: ${String(error)}`)
+async function recordFailure($: EngineInterface, failedAction: string, error: unknown, generation: number): Promise<void> {
+  debug($, `could not ${failedAction}: ${String(error)}`)
   if (generation === readingGeneration) await changeReading($, markStale)
 }
 
-export async function loadHeadline($: EngineInterface): Promise<void> {
+async function loadHeadline($: EngineInterface): Promise<void> {
   const generation = readingGeneration
   try {
     const usage = await $.session.usage()
@@ -48,7 +48,7 @@ export async function loadHeadline($: EngineInterface): Promise<void> {
   }
 }
 
-export function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
   return trackingBreakdown(() => takeBreakdown($, detail))
 }
 
@@ -86,7 +86,7 @@ export async function reloadOpenMeter($: EngineInterface): Promise<void> {
   })
 }
 
-export async function closeMeter($: EngineInterface): Promise<void> {
+async function closeMeter($: EngineInterface): Promise<void> {
   await $.ui.close({ id: PANE_ID })
 }
 

@@ -1,6 +1,7 @@
 import type { EngineInterface, RenderInput } from 'claude-code'
 
 import type { HeadlineReading } from '../types'
+import { logFailure } from './engine-log'
 import { ageLabel } from './format'
 import { labelled } from './glyphs'
 import type { GlyphSet } from './glyphs'
@@ -24,13 +25,13 @@ export async function drawMeter($: EngineInterface, e: RenderInput<'Pane'>, set:
   const now = await $.clock.now()
   const utcOffsetMinutes = -new Date(now).getTimezoneOffset()
   const figures = headline ?? NO_READING
-  const context = contextRowText(figures, breakdown?.compactsAt, set)
-  const cost = costRowText(figures, set)
-  const mcpServers = mcpServersRowText(breakdown?.mcpServers ?? [], set)
+  const contextRow = contextRowText(figures, breakdown?.compactsAt, set)
+  const costRow = costRowText(figures, set)
+  const mcpServersRow = mcpServersRowText(breakdown?.mcpServers ?? [], set)
 
   return (
     <Box flexDirection="column">
-      <Text color={context.color}>{context.text}</Text>
+      <Text color={contextRow.color}>{contextRow.text}</Text>
       <Box paddingLeft={2}>
         <Text dimColor>{contextDetailText(breakdown)}</Text>
       </Box>
@@ -43,23 +44,23 @@ export async function drawMeter($: EngineInterface, e: RenderInput<'Pane'>, set:
           ))}
         </Box>
       ))}
-      {cost && (
+      {costRow && (
         <Box marginTop={1}>
-          <Text>{cost}</Text>
+          <Text>{costRow}</Text>
         </Box>
       )}
       <Box marginTop={1} gap={1}>
         <Text>TOP CONTEXT</Text>
-        <Button key="refresh" hotkey="r" label={labelled(set, 'refresh', '[r] refresh')} onPress={() => refreshMeter($)} />
+        <Button key="refresh" hotkey="r" label={labelled(set, 'refresh', '[r] refresh')} onPress={() => void logFailure($, refreshMeter($))} />
         {breakdown && <Text dimColor>{`· ${ageLabel(now - breakdown.takenAt)}`}</Text>}
         {isStale && <Text color="warning">{labelled(set, 'stale', 'stale')}</Text>}
       </Box>
       {topContextRowTexts(breakdown?.topRows ?? []).map(row => (
         <Text>{row}</Text>
       ))}
-      {mcpServers && (
+      {mcpServersRow && (
         <Box paddingLeft={2}>
-          <Text dimColor>{mcpServers}</Text>
+          <Text dimColor>{mcpServersRow}</Text>
         </Box>
       )}
     </Box>

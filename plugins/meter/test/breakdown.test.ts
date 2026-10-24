@@ -63,6 +63,10 @@ test('It orders names by code point, not by locale, in topCategories', () => {
   expect(names(topCategories([category('a', 1), category('B', 1)]))).toEqual(['B', 'a'])
 })
 
+test('It orders a name before a longer name it prefixes in topCategories', () => {
+  expect(names(topCategories([category('Skills', 1), category('Skill', 1)]))).toEqual(['Skill', 'Skills'])
+})
+
 test('It orders an astral character after a higher BMP character by code point in topCategories', () => {
   expect(names(topCategories([category('\u{1F600}', 1), category('Ａ', 1)]))).toEqual(['Ａ', '\u{1F600}'])
 })
@@ -118,7 +122,7 @@ const breakdown = (overrides: Partial<SessionContextBreakdown> = {}): SessionCon
   totalTokens: 95000,
   maxTokens: 200000,
   rawMaxTokens: 200000,
-  autocompactSource: 'model' as SessionContextBreakdown['autocompactSource'],
+  autocompactSource: 'model-default',
   percentage: 48,
   gridRows: [],
   model: 'm',

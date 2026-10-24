@@ -11,7 +11,7 @@ const SEPARATOR = '  ·  '
 const TOKEN_COLUMN_WIDTH = 4
 const STATUS_DOT = '●'
 
-export type RowText = { text: string; color?: BandColor }
+type RowText = { text: string; color?: BandColor }
 
 export const contextRowText = (headline: HeadlineReading, compactsAt: number | undefined, set: GlyphSet): RowText => {
   const label = labelled(set, 'context', 'CONTEXT')
@@ -34,7 +34,9 @@ export const contextDetailText = (breakdown: BreakdownReading | null): string =>
 export const costRowText = (headline: HeadlineReading, set: GlyphSet): string | undefined =>
   headline.costUsd === undefined ? undefined : `${labelled(set, 'cost', 'COST')}   $${headline.costUsd.toFixed(2)} this session`
 
-const pacedRowTexts = (view: WindowView, label: string): RowText[] => {
+type PacedView = Extract<WindowView, { state: 'paced' }>
+
+const pacedRowTexts = (view: PacedView, label: string): RowText[] => {
   const projection = view.projection === undefined ? '' : `hits 100% ${view.projection}, `
   return [
     { text: `${label}   ${view.percentText}%${SEPARATOR}${view.elapsedPercent}% of window elapsed`, color: view.color },
@@ -45,13 +47,19 @@ const pacedRowTexts = (view: WindowView, label: string): RowText[] => {
 export const windowRowTexts = (view: WindowView, set: GlyphSet): RowText[] => {
   const label = view.slot ? labelled(set, view.slot, view.label) : view.label
   const percent = `${label}   ${view.percentText}%`
-  if (view.state === 'paced') return pacedRowTexts(view, label)
-  if (view.state === 'too-early') return [{ text: `${percent}${SEPARATOR}too early` }]
-  if (view.state === 'limit-reached') {
-    const reset = view.resetsLabel === undefined ? '' : `${SEPARATOR}resets ${view.resetsLabel}`
-    return [{ text: `${percent}${SEPARATOR}${labelled(set, 'limitReached', 'limit reached')}${reset}`, color: view.color }]
+  // No default: every case returns, so tsc refuses a new state this switch does not draw.
+  switch (view.state) {
+    case 'paced':
+      return pacedRowTexts(view, label)
+    case 'too-early':
+      return [{ text: `${percent}${SEPARATOR}too early` }]
+    case 'limit-reached': {
+      const reset = view.resetsLabel === undefined ? '' : `${SEPARATOR}resets ${view.resetsLabel}`
+      return [{ text: `${percent}${SEPARATOR}${labelled(set, 'limitReached', 'limit reached')}${reset}`, color: view.color }]
+    }
+    case 'plain':
+      return [view.color ? { text: percent, color: view.color } : { text: percent }]
   }
-  return [view.color ? { text: percent, color: view.color } : { text: percent }]
 }
 
 export const topContextRowTexts = (rows: readonly NamedTokens[]): string[] => {

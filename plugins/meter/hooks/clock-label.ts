@@ -7,16 +7,16 @@ const roundToMinute = (time: number): number => Math.floor((time + MINUTE_MS / 2
 const localDay = (time: number, utcOffsetMinutes: number): number =>
   Math.floor((time + utcOffsetMinutes * MINUTE_MS) / DAY_MS)
 
-const hourAndMinute = (local: Date): string => {
-  const hour = local.getUTCHours() % 12 || 12
-  const minute = String(local.getUTCMinutes()).padStart(2, '0')
-  return `${hour}:${minute}${local.getUTCHours() < 12 ? 'am' : 'pm'}`
+const hourAndMinute = (localDate: Date): string => {
+  const hour = localDate.getUTCHours() % 12 || 12
+  const minute = String(localDate.getUTCMinutes()).padStart(2, '0')
+  return `${hour}:${minute}${localDate.getUTCHours() < 12 ? 'am' : 'pm'}`
 }
 
 export const clockLabel = (target: number, now: number, utcOffsetMinutes: number): string => {
   const rounded = roundToMinute(target)
-  const local = new Date(rounded + utcOffsetMinutes * MINUTE_MS)
-  const time = hourAndMinute(local)
+  const localDate = new Date(rounded + utcOffsetMinutes * MINUTE_MS)
+  const time = hourAndMinute(localDate)
   if (localDay(rounded, utcOffsetMinutes) === localDay(now, utcOffsetMinutes)) return time
-  return `${DAY_NAMES[local.getUTCDay()]} ${time}`
+  return `${DAY_NAMES[localDate.getUTCDay()]} ${time}`
 }

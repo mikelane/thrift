@@ -6,7 +6,7 @@ import { START, breakdownOf, category, install, measure, mountPane, runMeter, st
 
 // Spec behaviour from issue #119 around /clear, non-interactive runs and overlapping breakdown counts.
 
-describe('non-interactive runs', () => {
+describe('rememberInteractivity in non-interactive runs', () => {
   test('It registers no command after a clear in a non-interactive run', async ($, on) => {
     const world = install($, on)
     await startSession($, false)
@@ -16,7 +16,7 @@ describe('non-interactive runs', () => {
   })
 })
 
-describe('interactivity after the plugin starts again', () => {
+describe('isInteractiveSession after the plugin starts again', () => {
   // A restart replays no session.start, so only the store still knows the run is interactive.
   test('It registers the command after a clear when the store holds an interactive session and no session.start ran', async ($, on) => {
     const world = install($, on)
@@ -35,7 +35,7 @@ describe('interactivity after the plugin starts again', () => {
   })
 })
 
-describe('/clear restarts the COST row', () => {
+describe('restartMeterReading clears the COST row', () => {
   test('It no longer draws the pre-clear cost after a clear', async ($, on) => {
     const world = install($, on)
     world.usage = usageOf(142000, [], 4.82)
@@ -58,7 +58,7 @@ describe('/clear restarts the COST row', () => {
   })
 })
 
-describe('a pane left open across a clear', () => {
+describe('reloadOpenMeter with a pane left open across a clear', () => {
   test('It takes a fresh plain and summary reading in the tick after a clear', async ($, on) => {
     const world = install($, on)
     await startSession($)
@@ -272,7 +272,7 @@ describe('the in-flight counter returns to zero', () => {
   })
 })
 
-describe('reload while the pane is closed', () => {
+describe('reloadOpenMeter while the pane is closed', () => {
   test('It takes no reading after a clear once the pane was opened and closed again', async ($, on) => {
     const world = install($, on)
     await startSession($)

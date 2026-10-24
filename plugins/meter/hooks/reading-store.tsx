@@ -11,6 +11,6 @@ export function currentReading($: EngineInterface): Promise<MeterReading> {
   return read($, reading)
 }
 
-export function changeReading($: EngineInterface, change: (value: MeterReading) => MeterReading): Promise<MeterReading> {
+export function changeReading($: EngineInterface, change: (current: MeterReading) => MeterReading): Promise<MeterReading> {
   return update($, reading, change)
 }

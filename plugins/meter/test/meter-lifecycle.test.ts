@@ -158,6 +158,14 @@ describe('runMeterCommand', () => {
     expect(await runMeter($)).toEqual({ text: 'Could not run /meter.' })
   })
 
+  test('It writes to the debug log when /meter cannot run', async ($, on) => {
+    const world = install($, on)
+    world.isOpenFailing = true
+    await startSession($)
+    await runMeter($)
+    expect(world.debugLines.at(-1)).toStartWith('meter: could not run /meter:')
+  })
+
   test('It accepts surrounding spaces around refresh', async ($, on) => {
     const world = install($, on)
     await startSession($)

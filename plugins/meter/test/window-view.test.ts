@@ -1,11 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
 import { windowView } from '../hooks/window-view'
+import type { WindowView } from '../hooks/window-view'
+
+// Every field a view of any state may carry, each optional, so a test reads one without narrowing the state first.
+// Each variant of WindowView is assignable to it, so the annotation widens without a cast.
+type AnyWindowView = Pick<WindowView, 'state'> & Partial<Omit<Extract<WindowView, { state: 'paced' }>, 'state'>>
 
 const MINUTE = 60_000
 const NOW = Date.UTC(2026, 9, 20, 9, 0)
 const after = (minutes: number): string => new Date(NOW + minutes * MINUTE).toISOString()
-const view = (kind: string, percentUsed: number, resetsAt?: string) =>
+const view = (kind: string, percentUsed: number, resetsAt?: string): AnyWindowView =>
   windowView({ kind, percentUsed, resetsAt }, NOW, 0)
 
 test('It returns a green pace of 0.77 from windowView for 48 percent with 1h54m left of five hours', () => {

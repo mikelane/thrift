@@ -53,7 +53,7 @@ export const breakdownOf = (overrides: Partial<SessionContextBreakdown> = {}): S
   totalTokens: 109000,
   maxTokens: 200000,
   rawMaxTokens: 200000,
-  autocompactSource: undefined as unknown as SessionContextBreakdown['autocompactSource'],
+  autocompactSource: 'model-default',
   percentage: 55,
   gridRows: [],
   model: 'm',
