@@ -12,9 +12,8 @@ const codePointsOf = (text: string): number[] => Array.from(text, char => char.c
 const compareByCodePoint = (a: string, b: string): number => {
   const left = codePointsOf(a)
   const right = codePointsOf(b)
-  const firstDifference = left.findIndex((point, index) => index < right.length && point !== right[index])
-  if (firstDifference !== -1) return left[firstDifference] - right[firstDifference]
-  return left.length - right.length
+  const differences = left.map((point, index) => point - (right[index] ?? point)).filter(difference => difference !== 0)
+  return differences[0] ?? left.length - right.length
 }
 
 const byTokensThenName = (a: NamedTokens, b: NamedTokens): number =>
