@@ -16,6 +16,9 @@ import { changeReading, currentReading } from './reading-store'
 // Breakdown counts under way. A count that is already running makes a second one redundant.
 let breakdownsInFlight = 0
 
+// Counts the clears. A reading that began before a clear describes the session that was cleared, so it is dropped.
+let readingGeneration = 0
+
 async function trackingBreakdown(count: () => Promise<void>): Promise<void> {
   breakdownsInFlight += 1
   try {
@@ -29,17 +32,19 @@ export async function isMeterOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
 }
 
-async function recordFailure($: EngineInterface, what: string, error: unknown): Promise<void> {
+async function recordFailure($: EngineInterface, what: string, error: unknown, generation: number): Promise<void> {
   debug($, `could not ${what}: ${String(error)}`)
-  await changeReading($, markStale)
+  if (generation === readingGeneration) await changeReading($, markStale)
 }
 
 export async function loadHeadline($: EngineInterface): Promise<void> {
+  const generation = readingGeneration
   try {
     const usage = await $.session.usage()
+    if (generation !== readingGeneration) return
     await changeReading($, reading => withHeadline(reading, headlineFrom(usage)))
   } catch (error) {
-    await recordFailure($, 'read usage', error)
+    await recordFailure($, 'read usage', error, generation)
   }
 }
 
@@ -48,13 +53,15 @@ export function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail
 }
 
 async function takeBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+  const generation = readingGeneration
   try {
     const { context } = await $.session.usage({ breakdown: detail })
     if (context.breakdown === undefined) throw new Error('the reply held no breakdown')
     const snapshot = snapshotBreakdown(context.breakdown, await $.clock.now())
+    if (generation !== readingGeneration) return
     await changeReading($, reading => withBreakdown(reading, snapshot))
   } catch (error) {
-    await recordFailure($, `take the ${detail} breakdown`, error)
+    await recordFailure($, `take the ${detail} breakdown`, error, generation)
   }
 }
 
@@ -67,6 +74,7 @@ export function openMeter($: EngineInterface, detail: ContextBreakdownDetail): P
 }
 
 export async function restartMeterReading($: EngineInterface): Promise<void> {
+  readingGeneration += 1
   await changeReading($, () => EMPTY_READING)
 }
 
