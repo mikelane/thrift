@@ -47,7 +47,7 @@ problems() {
 test_allowlist_names_the_manifest_and_each_packages_changelog_and_extra_files() {
   local got want
   got=$(release_merge_allowlist "$CONFIG")
-  want=$GOOD_FILES
+  want=$GOOD_FILES$'\nplugins/meter/CHANGELOG.md\nplugins/meter/version.txt\nplugins/meter/.claude-plugin/plugin.json'
   [[ "$got" == "$want" ]] || fail "got [$got]"
 }
 
