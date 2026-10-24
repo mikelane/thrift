@@ -16,13 +16,17 @@ export async function isMeterOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
 }
 
+async function recordFailure($: EngineInterface, what: string, error: unknown): Promise<void> {
+  debug($, `could not ${what}: ${String(error)}`)
+  await changeReading($, markStale)
+}
+
 export async function loadHeadline($: EngineInterface): Promise<void> {
   try {
     const usage = await $.session.usage()
     await changeReading($, reading => withHeadline(reading, headlineFrom(usage)))
   } catch (error) {
-    debug($, `could not read usage: ${String(error)}`)
-    await changeReading($, markStale)
+    await recordFailure($, 'read usage', error)
   }
 }
 
@@ -33,8 +37,7 @@ export async function loadBreakdown($: EngineInterface, detail: ContextBreakdown
     const snapshot = snapshotBreakdown(context.breakdown, await $.clock.now())
     await changeReading($, reading => withBreakdown(reading, snapshot))
   } catch (error) {
-    debug($, `could not take the ${detail} breakdown: ${String(error)}`)
-    await changeReading($, markStale)
+    await recordFailure($, `take the ${detail} breakdown`, error)
   }
 }
 
