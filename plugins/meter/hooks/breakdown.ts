@@ -7,11 +7,18 @@ import { formatTokens } from './format'
 const TOP_ROWS = 5
 const TOP_SERVERS = 2
 
-const byTokensThenName = (a: NamedTokens, b: NamedTokens): number => {
-  if (a.tokens !== b.tokens) return b.tokens - a.tokens
-  if (a.name === b.name) return 0
-  return a.name < b.name ? -1 : 1
+const codePointsOf = (text: string): number[] => Array.from(text, char => char.codePointAt(0) ?? 0)
+
+const compareByCodePoint = (a: string, b: string): number => {
+  const left = codePointsOf(a)
+  const right = codePointsOf(b)
+  const firstDifference = left.findIndex((point, index) => index < right.length && point !== right[index])
+  if (firstDifference !== -1) return left[firstDifference] - right[firstDifference]
+  return left.length - right.length
 }
+
+const byTokensThenName = (a: NamedTokens, b: NamedTokens): number =>
+  a.tokens !== b.tokens ? b.tokens - a.tokens : compareByCodePoint(a.name, b.name)
 
 export const topCategories = (categories: readonly ContextCategory[]): NamedTokens[] =>
   categories

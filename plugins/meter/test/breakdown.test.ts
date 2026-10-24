@@ -63,6 +63,10 @@ test('It orders names by code point, not by locale, in topCategories', () => {
   expect(names(topCategories([category('a', 1), category('B', 1)]))).toEqual(['B', 'a'])
 })
 
+test('It orders an astral character after a higher BMP character by code point in topCategories', () => {
+  expect(names(topCategories([category('\u{1F600}', 1), category('Ａ', 1)]))).toEqual(['Ａ', '\u{1F600}'])
+})
+
 test('It keeps each name unchanged in topCategories', () => {
   expect(topCategories([category('MCP tools', 5)])).toEqual([{ name: 'MCP tools', tokens: 5 }])
 })
