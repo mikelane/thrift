@@ -38,7 +38,7 @@ const pacedRowTexts = (view: WindowView, label: string): RowText[] => {
   const projection = view.projection === undefined ? '' : `hits 100% ${view.projection}, `
   return [
     { text: `${label}   ${view.percentText}%${SEPARATOR}${view.elapsedPercent}% of window elapsed`, color: view.color },
-    { text: `  pace ${view.paceText}×  ${STATUS_DOT}  ${projection}resets ${view.resetsLabel}`, color: view.color },
+    { text: `pace ${view.paceText}×  ${STATUS_DOT}  ${projection}resets ${view.resetsLabel}`, color: view.color },
   ]
 }
 

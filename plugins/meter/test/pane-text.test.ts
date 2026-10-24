@@ -107,7 +107,7 @@ const paced: WindowView = {
 test('It draws the percent, elapsed share, pace and reset in windowRowTexts', () => {
   expect(windowRowTexts(paced, 'unicode')).toEqual([
     { text: '◷ 5-HOUR   48%  ·  62% of window elapsed', color: 'success' },
-    { text: '  pace 0.77×  ●  resets 4:15pm', color: 'success' },
+    { text: 'pace 0.77×  ●  resets 4:15pm', color: 'success' },
   ])
 })
 
@@ -116,7 +116,7 @@ test('It draws the projection before the reset in windowRowTexts', () => {
     { ...paced, label: 'WEEKLY', slot: 'weekly', paceText: '1.66', color: 'error', projection: 'Wed 2:25pm', resetsLabel: 'Sat 9:00am' },
     'unicode',
   )
-  expect(second?.text).toBe('  pace 1.66×  ●  hits 100% Wed 2:25pm, resets Sat 9:00am')
+  expect(second?.text).toBe('pace 1.66×  ●  hits 100% Wed 2:25pm, resets Sat 9:00am')
 })
 
 test('It draws the weekly glyph in windowRowTexts', () => {
