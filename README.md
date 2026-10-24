@@ -16,6 +16,7 @@ one lever on that cost and logs what it decided, so you can measure whether it h
 | Plugin | Status | What it does |
 |---|---|---|
 | [`handoff`](plugins/handoff) | early, partly verified live on 2.1.302 ([details](plugins/handoff/README.md#what-has-been-verified-live)) | Past a context size you set, at a good stopping point, moves the work to a fresh session with a handoff note Claude writes. The old session stays resumable. |
+| [`meter`](plugins/meter) | early, not yet verified live ([details](plugins/meter/README.md#what-has-been-verified-live)) | A side pane with context fill, rate-limit burn pace, cost and the largest context categories, drawn outside the model's context. Makes no decisions, so it logs none. |
 
 ## Install
 
