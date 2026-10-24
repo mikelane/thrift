@@ -43,7 +43,7 @@ export const projectedExhaustion = (
   share: number,
   windowMs: number,
 ): number | undefined => {
-  if (paceOf(percentUsed, share) <= 1) return undefined
+  if (paceOf(percentUsed, share) <= 1 + RATIO_TOLERANCE) return undefined
   const elapsedTime = share * windowMs
   return now + (100 - percentUsed) * (elapsedTime / percentUsed)
 }

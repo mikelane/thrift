@@ -126,3 +126,7 @@ test('It names an unknown window kind in capitals without a glyph slot in window
 test('It returns warning from windowView when pace is exactly 0.9 at 8.1 percent after 27 minutes', () => {
   expect(view('five_hour', 8.1, after(273)).color).toBe('warning')
 })
+
+test('It shows no projection from windowView when pace is exactly 1 at 29 percent after 87 minutes', () => {
+  expect(view('five_hour', 29, after(213)).projection).toBeUndefined()
+})
