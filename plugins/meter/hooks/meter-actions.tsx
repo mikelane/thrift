@@ -4,6 +4,7 @@ import { snapshotBreakdown } from './breakdown'
 import { debug, logFailure } from './engine-log'
 import { PANE_ID, PANE_TITLE } from './pane-id'
 import {
+  EMPTY_READING,
   headlineFrom,
   isBreakdownDue,
   markStale,
@@ -11,6 +12,18 @@ import {
   withHeadline,
 } from './reading'
 import { changeReading, currentReading } from './reading-store'
+
+// Breakdown counts under way. A count that is already running makes a second one redundant.
+let breakdownsInFlight = 0
+
+async function trackingBreakdown(count: () => Promise<void>): Promise<void> {
+  breakdownsInFlight += 1
+  try {
+    await count()
+  } finally {
+    breakdownsInFlight -= 1
+  }
+}
 
 export async function isMeterOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
@@ -30,7 +43,11 @@ export async function loadHeadline($: EngineInterface): Promise<void> {
   }
 }
 
-export async function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+export function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+  return trackingBreakdown(() => takeBreakdown($, detail))
+}
+
+async function takeBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
   try {
     const { context } = await $.session.usage({ breakdown: detail })
     if (context.breakdown === undefined) throw new Error('the reply held no breakdown')
@@ -41,10 +58,24 @@ export async function loadBreakdown($: EngineInterface, detail: ContextBreakdown
   }
 }
 
-export async function openMeter($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
-  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
-  await loadHeadline($)
-  await loadBreakdown($, detail)
+export function openMeter($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+  return trackingBreakdown(async () => {
+    await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+    await loadHeadline($)
+    await loadBreakdown($, detail)
+  })
+}
+
+export async function restartMeterReading($: EngineInterface): Promise<void> {
+  await changeReading($, () => EMPTY_READING)
+}
+
+export async function reloadOpenMeter($: EngineInterface): Promise<void> {
+  if (!(await isMeterOpen($))) return
+  await trackingBreakdown(async () => {
+    await loadHeadline($)
+    await loadBreakdown($, 'summary')
+  })
 }
 
 export async function closeMeter($: EngineInterface): Promise<void> {
@@ -59,7 +90,7 @@ async function redrawFromMeasure($: EngineInterface, e: SessionMeasureInput): Pr
   if (!(await isMeterOpen($))) return
   await changeReading($, reading => withHeadline(reading, headlineFrom(e)))
   const isDue = isBreakdownDue(await currentReading($), await $.clock.now())
-  if (e.changed.includes('context') && isDue) await loadBreakdown($, 'summary')
+  if (e.changed.includes('context') && isDue && breakdownsInFlight === 0) await loadBreakdown($, 'summary')
 }
 
 export function recordMeasure($: EngineInterface, e: SessionMeasureInput): Promise<unknown> {
