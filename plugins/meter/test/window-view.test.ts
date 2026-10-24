@@ -122,3 +122,7 @@ for (const [used, name, colorFields] of spendCases) {
 test('It names an unknown window kind in capitals without a glyph slot in windowView', () => {
   expect(view('monthly_cap', 5)).toEqual({ state: 'plain', label: 'MONTHLY CAP', percentText: '5' })
 })
+
+test('It returns warning from windowView when pace is exactly 0.9 at 8.1 percent after 27 minutes', () => {
+  expect(view('five_hour', 8.1, after(273)).color).toBe('warning')
+})

@@ -4,6 +4,7 @@ export const TOO_EARLY_SHARE = 0.05
 
 const GREEN_BELOW = 0.9
 const YELLOW_THROUGH = 1.1
+const RATIO_TOLERANCE = 1e-9
 
 export type BandColor = 'success' | 'warning' | 'error'
 
@@ -32,8 +33,8 @@ export const paceOf = (percentUsed: number, share: number): number => percentUse
 export const formatPace = (pace: number): string => pace.toFixed(2)
 
 export const paceBand = (pace: number): BandColor => {
-  if (pace < GREEN_BELOW) return 'success'
-  return pace <= YELLOW_THROUGH ? 'warning' : 'error'
+  if (pace < GREEN_BELOW - RATIO_TOLERANCE) return 'success'
+  return pace <= YELLOW_THROUGH + RATIO_TOLERANCE ? 'warning' : 'error'
 }
 
 export const projectedExhaustion = (
