@@ -452,7 +452,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `ts` | ISO 8601 UTC |
 | `session_id` | The session the decision is about. A `cleared` record, and any record a handoff writes after the wait (an abandon, a failed or vetoed compaction), carries the id of the session the handoff started in, even if the session changed meanwhile. |
 | `component` | Always `handoff` |
-| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press on a band shown before a `/config` change can arrive while the plugin runs in `off`, before the `session.start` that follows: the record still says `active`, and `trigger_values.effective_mode` says `off`. A press right after `/reload-plugins` logged `active` with `effective_mode` `ask` on 2.1.299, because the plugin kept its mode. |
+| `mode` | `shadow` only when `action` is `none` and the plugin ran in `off` when the decision was made, otherwise `active`. The plugin runs in `off` when the setting is `off` and also when a fallback holds it there: a development or unrecognized Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. `trigger_values.setting` still shows what you configured, and `trigger_values.effective_mode` shows the mode the plugin ran in when the decision was made. A record for `/handoff` or for a band button press is always `active`, because you asked for it. A press on a band shown before a `/config` change can arrive while the plugin runs in `off`, before the `session.start` that follows: the record still says `active`, and `trigger_values.effective_mode` says `off`. A press right after `/reload-plugins` logged `active` with `effective_mode` `ask` on 2.1.299, because the plugin kept its mode. |
 | `action` | `none`, `advised` (a band was shown), `cleared`, `compacted`, or `untested_engine` |
 | `engine_version` | The Claude Code release (`base`), or the full version when there is no `base`. A change in behavior shows up as a split between versions. |
 | `trigger_values.point` | `turn-end`, `prompt`, `command`, `button`, or `session-start` |
@@ -461,7 +461,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.threshold` | `handoffContextTokens` |
 | `trigger_values.is_background_busy` | Whether background work was running |
 | `trigger_values.setting` | The configured `handoffMode`. The plugin may run as `off` anyway (see Compatibility); `effective_mode` shows the mode it ran in |
-| `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: an untested Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
+| `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: a development or unrecognized Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when Claude had not finished a reply in the session to fork (a new session before its first turn ends, right after a `/clear`, or a resume that starts the conversation afresh). Absent for every other reason the fork wrote no note |
@@ -495,11 +495,12 @@ plugin without any error. Four layers guard against that:
    `test/engine-assumptions.test.ts`, one test per assumption, with the build it was last confirmed
    on. The engine mocks live in `test/mocks.ts` and `test/helpers.ts` installs them, so a broken
    assumption is fixed in one place.
-3. **A runtime fallback.** `TESTED_THROUGH` in `hooks/engine-version.ts` names the newest release
-   the plugin was tested through. At session start, if `$.session.version()` reports a `base` that
-   is newer, ends in `-dev`, is missing, or is malformed, the plugin acts as `off` for the session,
-   shows one notice as a toast and in the transcript (when `handoffMode` is not `off`), and logs `untested_engine` once. The gate
-   fails closed: the plugin acts as `off` until `session.start` has confirmed a tested engine and
+3. **A runtime fallback.** Every release build is trusted, at any version, including builds newer
+   than the one CI pinned. At session start, if `$.session.version()` reports a `base` that is not
+   exactly `MAJOR.MINOR.PATCH` (a development build such as `2.1.295-dev`, a malformed version) or
+   is missing, the plugin acts as `off` for the session and logs `untested_engine` once. It says
+   nothing in the session: no toast, no transcript line. The gate
+   fails closed: the plugin acts as `off` until `session.start` has confirmed a release build and
    an interactive run, so after a restart of the plugin it stays `off` until `session.start` has run.
    The engine's declarations say `session.start` fires once per fresh load of a plugin (never for a
    `/clear`). On 2.1.299 a setting changed in `/config` fired it and started the plugin's state over
@@ -507,14 +508,16 @@ plugin without any error. Four layers guard against that:
    plugin kept its state and mode. Editing a file under `--plugin-dir` does not reload the plugin; the
    change waits for `/reload-plugins`.
    In an interactive session `/handoff` still works, because you asked for it at a moment you
-   chose, and the toast says so. A session with no prompt (`-p`, the SDK) never registers
-   `/handoff`, so there the toast does not mention it.
+   chose. A session with no prompt (`-p`, the SDK) never registers `/handoff`.
 4. **`engine_version` on every log record.**
 
 | Release | Tested through Claude Code |
 |---|---|
 | 0.1.0 | 2.1.302 |
 | 0.2.0 | 2.1.302 |
+
+The plugin no longer checks this at runtime. The table records which build CI pinned for each
+release.
 
 ## What has been verified live
 
@@ -570,8 +573,7 @@ by hand on 2.1.299:
   `background_busy` and `compacted_before_clear: true`, no `cleared` record, the held prompt back in
   the box, and `claude --resume <old id>` (run with `-p`) reopens the old session compacted.
 - Background `Bash` survives a clear and reports in the fresh session (2.1.299).
-- The decision-log writer exits 0 on macOS, and the untested-engine notice reads as documented in
-  an interactive session. Under `-p` no notice reaches stdout or the transcript.
+- The decision-log writer exits 0 on macOS.
 
 ## What has not been verified
 
@@ -668,7 +670,7 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/tool-call-tracking.ts` | What a tool call tells the state: background tasks that start or stop, and a finished task (`noteToolCall`) |
 | `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), its quoting step (`readQuotingStep`), and `finishesTask` |
 | `hooks/work-refs.ts` | Work-reference parsing: branch and URL ticket prefixes (`branchTicketPrefixes`, `ticketUrlPrefixes`), ticket-shaped tokens (`hasTicketShapedToken`), ticket and pull request references (`workRefs`), and new-work detection (`namesNewWork`) |
-| `hooks/engine-version.ts` | `TESTED_THROUGH` and the untested-build check |
+| `hooks/engine-version.ts` | The release-format check for the engine version |
 | `hooks/decision-record.ts` | The log record and the log location |
 | `hooks/handoff-note.ts` | `HANDOFF_PROMPT`, the handoff message, `NoteDelivery` (`appended`, `submitted`, `in_box`, `not_carried`) and `Carried` (the same without `appended`), the message the person sees for each delivery, and the grouping of held prompts |
 | `hooks/held-delivery.ts` | `GroupDelivery` and `worstDelivery`: the worst outcome among the held groups sent or put back, as one value |

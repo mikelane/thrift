@@ -262,7 +262,7 @@ test('It can hand off again after a handoff finished', async ($, on) => {
 
 test('It runs /handoff on an untested engine', async ($, on) => {
   const world = install($, on)
-  world.version = { version: '9.9.9', base: '9.9.9' }
+  world.version = { version: '2.1.302-dev.1', base: '2.1.302-dev' }
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()

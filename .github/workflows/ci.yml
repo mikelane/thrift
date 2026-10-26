@@ -1,8 +1,8 @@
 name: CI
 
 # Every plugin runs `claude plugin validate`, `tsc -p`, and `claude plugin test` against two Claude
-# Code builds. The pinned build is the last one the plugins were tested through (each plugin's
-# TESTED_THROUGH names it). The latest build tells us early that an update broke a plugin.
+# Code builds. The pinned build is the last one the plugins were tested through (the matrix below
+# names it). The latest build tells us early that an update broke a plugin.
 #
 # Branch protection requires only "check (pinned)". "check (latest)" never blocks a change.
 # None of the three commands needs an API key, so fork pull requests run the full matrix.
@@ -81,15 +81,6 @@ jobs:
         run: |
           claude --version
           node_modules/.bin/tsc --version
-
-      - name: Check the pinned build is the one every plugin was tested through
-        if: matrix.channel == 'pinned'
-        env:
-          PINNED_VERSION: ${{ matrix.version }}
-        run: |
-          for file in plugins/*/hooks/engine-version.ts; do
-            grep -q "TESTED_THROUGH = '${PINNED_VERSION}'" "$file" || { echo "$file does not name ${PINNED_VERSION}"; exit 1; }
-          done
 
       - name: Check every plugin with scripts/check.sh
         env:
@@ -274,7 +265,7 @@ jobs:
               echo "The canary ran ${plugin}'s checks against Claude Code ${version} and they failed."
               echo "Full log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
               echo
-              echo 'The fix moves the pinned build in this workflow and TESTED_THROUGH in the plugin forward.'
+              echo 'The fix moves the pinned build in this workflow forward.'
               echo
               if [ "$longest" -ge "$MAX_FENCE" ]; then
                 echo "The log is withheld because it contains an unusually long backtick run. Read it in the full log linked above."

@@ -4,10 +4,7 @@
 # handoff_prepare <options-json>: copies the plugin into the run directory, so the repo is never
 # touched, and writes the settings file that sets the plugin's options for the run.
 #
-# The copy gets two changes:
-# - TESTED_THROUGH is raised to the running Claude Code release. Past TESTED_THROUGH the plugin
-#   holds every session at `off` and shows a notice, which would hide the band and the modes. The
-#   same change is made by hand for live runs on a newer release.
+# The copy gets one change:
 # - The context-size minimum is lowered, in plugin.json and in MIN_THRESHOLD, so a band can be
 #   offered at the 20,000 tokens a tiny session reaches. The real minimum is 80,000, which a
 #   session of one-word prompts never gets near.
@@ -18,8 +15,6 @@ handoff_prepare() {
   cp -R -- "$LIVE_PLUGIN_SOURCE/hooks" "$copy/hooks"
   jq '.userConfig.handoffContextTokens.min = 1000' "$LIVE_PLUGIN_SOURCE/.claude-plugin/plugin.json" \
     >"$copy/.claude-plugin/plugin.json"
-  [[ "$LIVE_ENGINE_VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]] || live_abort "unexpected claude version '$LIVE_ENGINE_VERSION'"
-  replace_constant "$copy/hooks/engine-version.ts" 'export const TESTED_THROUGH = ' "'$LIVE_ENGINE_VERSION'"
   replace_constant "$copy/hooks/signals.ts" 'const MIN_THRESHOLD = ' '1_000'
   jq -n --argjson options "$options" \
     '{pluginConfigs: {"handoff@inline": {options: ({handoffMode: "ask"} + $options)}}}' \

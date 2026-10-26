@@ -150,7 +150,7 @@ test('It does not hold a prompt when no session.start was seen', ACT, async ($, 
 
 test('It keeps the gate closed after session.start on an untested engine', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '9.9.9', base: '9.9.9' }
+  world.version = { version: '2.1.302-dev.1', base: '2.1.302-dev' }
   await startSession($)
   await growTo200k($, world)
   await bash($, world, 'git commit -m x')
@@ -171,7 +171,7 @@ test('It keeps the gate closed after session.start when the run is not interacti
 
 test('It keeps the gate closed after a clear on an untested engine', ACT, async ($, on) => {
   const world = install($, on)
-  world.version = { version: '9.9.9', base: '9.9.9' }
+  world.version = { version: '2.1.302-dev.1', base: '2.1.302-dev' }
   await startSession($)
   await runCommand($, 'clear')
   await growTo200k($, world)
