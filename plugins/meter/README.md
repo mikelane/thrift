@@ -47,7 +47,8 @@ elapsed: a fill that stops short of it is under pace.
 - Any other argument answers with a usage line and changes nothing.
 - The setting `meterAutoOpen` (default `false`) opens the pane at session start. An unasked pane is
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
-  dir and not closed by hand since. Closing it with a second `/meter` does not count as closing by
+  dir and not closed by hand since (the 110 floor was seen in fullscreen; the main screen was not
+  run). Closing it with a second `/meter` does not count as closing by
   hand. Narrower, it waits undrawn but is still listed, so a `/meter` closes it (seen live;
   that a further `/meter` then opens it as asked was not run). Placed unasked, it docks in fullscreen and sits inline on the
   main screen.

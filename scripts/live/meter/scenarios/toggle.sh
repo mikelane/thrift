@@ -25,7 +25,7 @@ toggle_in_layout() {
   wait_for 'the pane to close' meter_pane_is_closed "$name"
   show_pane "$name" "after the second /meter ($label)" 30
   check "the CONTEXT row is gone after the second /meter ($label)" 'the CONTEXT row is still on screen' meter_pane_is_closed "$name"
-  check "the frame is gone after the second /meter ($label)" 'a frame is still on screen' eval "! meter_frame_is_drawn $name"
+  check "the frame is gone after the second /meter ($label)" 'a frame is still on screen' meter_frame_is_gone "$name"
 }
 
 scenario_run() {

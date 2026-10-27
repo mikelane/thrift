@@ -31,15 +31,29 @@ METER_CONTEXT_FIGURES='[0-9]+(\.[0-9])?[kM]? / [0-9]+(\.[0-9])?[kM]?'
 
 # The CONTEXT row is the pane's first row, drawn in both layouts. The transcript never prints it, so it
 # tells the pane from the `/meter` that opened it.
-meter_pane_is_open() { pane_has "$1" "CONTEXT +(waiting for first response|$METER_CONTEXT_FIGURES)"; }
+METER_CONTEXT_ROW="CONTEXT +(waiting for first response|$METER_CONTEXT_FIGURES)"
+meter_pane_is_open() { pane_has "$1" "$METER_CONTEXT_ROW"; }
 # The TOP CONTEXT header is the pane's twelfth row. The main-screen layout clips the pane above it.
 meter_top_context_is_drawn() { pane_has "$1" 'TOP CONTEXT'; }
 # The frame's close button. Inline the pane is boxed, with the button in the top border; docked it sits
 # in the right-hand columns, on the divider's row. 2.1.311 draws no title in either frame.
-meter_inline_frame_is_drawn() { pane_has "$1" '^╭─+✕─╮'; }
-meter_docked_frame_is_drawn() { pane_has "$1" '│ +✕ *$'; }
+METER_INLINE_FRAME='^╭─+✕─╮'
+METER_DOCKED_FRAME='│ +✕ *$'
+meter_inline_frame_is_drawn() { pane_has "$1" "$METER_INLINE_FRAME"; }
+meter_docked_frame_is_drawn() { pane_has "$1" "$METER_DOCKED_FRAME"; }
 meter_frame_is_drawn() { meter_inline_frame_is_drawn "$1" || meter_docked_frame_is_drawn "$1"; }
-meter_pane_is_closed() { ! meter_pane_is_open "$1"; }
+# The negative judgments read the screen once and fail when it cannot be read, as pane_has does: a
+# session that died must not read as a closed pane or a gone frame.
+meter_pane_is_closed() {
+  local screen
+  screen=$(pane "$1") || return 1
+  ! text_matches "$METER_CONTEXT_ROW" "$screen"
+}
+meter_frame_is_gone() {
+  local screen
+  screen=$(pane "$1") || return 1
+  ! text_matches "$METER_INLINE_FRAME" "$screen" && ! text_matches "$METER_DOCKED_FRAME" "$screen"
+}
 
 # The age label of the breakdown, drawn after the TOP CONTEXT header.
 meter_age_seconds() { pane "$1" | sed -En 's/.*TOP CONTEXT.*· ([0-9]+)s ago.*/\1/p' | head -n 1; }
@@ -121,9 +135,11 @@ meter_close_by_hand() {
 
 # meter_screen_is_still <name> <polls>: succeeds once the screen has not changed for that many calls in
 # a row. The effort indicator blinks, so its line is left out. A pane that never appears has nothing to wait for, so this is how "not placed" is judged.
+# A screen that cannot be read fails, so a session that died is not judged still.
 meter_screen_is_still() {
-  local name=$1 polls=$2 state="$LIVE_RUN/still-$1" current previous='' count=0
-  current=$(pane "$name" | { grep -v '/effort' || true; } | cksum | tr ' ' '-')
+  local name=$1 polls=$2 state="$LIVE_RUN/still-$1" screen current previous='' count=0
+  screen=$(pane "$name") || return 1
+  current=$({ grep -v '/effort' <<<"$screen" || true; } | cksum | tr ' ' '-')
   if [[ -f "$state" ]]; then
     read -r previous count <"$state" || true
     count=${count:-0}
