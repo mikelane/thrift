@@ -128,6 +128,22 @@ describe('readTool: a Read the plugin lets through', () => {
     expect([world.readsThatRan.length, reasonOf(world)]).toEqual([1, ['pass', 'unreadable']])
   })
 
+  test('It passes a Read of a directory and records unreadable', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/dir', SEVEN_LINES)
+    world.directories.add('/work/dir')
+    await read($, '/work/dir')
+    expect([world.readsThatRan.length, reasonOf(world)]).toEqual([1, ['pass', 'unreadable']])
+  })
+
+  test('It passes a Read whose path the engine cannot resolve and records unreadable', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    world.unresolvable.add('/work/a.ts')
+    await read($, '/work/a.ts')
+    expect([world.readsThatRan.length, reasonOf(world)]).toEqual([1, ['pass', 'unreadable']])
+  })
+
   test('It passes a repeat when the file cannot be read to hash it', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)

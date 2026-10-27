@@ -197,6 +197,16 @@ describe('noteToolRan after a file-editing tool', () => {
     expect(isStub(after)).toBe(false)
   })
 
+  test('It drops the path the tool was given when the engine resolves no real path', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    await read($, '/work/a.ts')
+    world.unresolvable.add('/work/a.ts')
+    await runTool($, 'Edit', { file_path: '/work/a.ts' })
+    world.unresolvable.clear()
+    expect(isStub(await read($, '/work/a.ts'))).toBe(false)
+  })
+
   test('It writes no record when the edit touched a path nobody read', ACT, async ($, on) => {
     const world = install($, on)
     await runTool($, 'Edit', { file_path: '/work/new.ts' })

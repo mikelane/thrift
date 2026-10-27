@@ -37,9 +37,9 @@ type FileStat = { size: number; mtimeMs: number; realPath: string }
 
 type Subject = { info: EngineInfo; isSubagent: boolean; context: string; agentId: string | undefined }
 
-type Verdict =
-  | { kind: 'dedupe'; found: Found }
-  | { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found?: Found }
+type PassVerdict = { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found: Found }
+
+type Verdict = { kind: 'dedupe'; found: Found } | PassVerdict
 
 const ENGINE = 'engine'
 
@@ -198,10 +198,10 @@ async function shadowDedupe($: EngineInterface, state: SessionState, subject: Su
   return ran
 }
 
-async function passAndTrack($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, before: FileStat, proceed: Proceed, verdict: Extract<Verdict, { kind: 'pass' }> | undefined) {
+async function passAndTrack($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, before: FileStat, proceed: Proceed, verdict: PassVerdict | undefined) {
   const firstOrOther = hasPath(state.reads, subject.context, request.realPath) ? 'different_range' : 'first_read'
   const { ran, untracked } = await runAndTrack($, state, subject, call, request, before, proceed)
-  if (verdict?.decision === 'override') verdict.found?.tracked.stubbedKeys.delete(request.key)
+  if (verdict?.decision === 'override') verdict.found.tracked.stubbedKeys.delete(request.key)
   await note($, subject, {
     decision: verdict?.decision ?? 'pass',
     reason: untracked ?? verdict?.reason ?? firstOrOther,

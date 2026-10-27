@@ -35,6 +35,8 @@ async function noteDropped($: EngineInterface, state: SessionState, dropped: num
 }
 
 // Runs after the tool, and never throws: the tool has already run, and a failure here must not run it again.
+// SAFETY: every call inside the try catches its own engine failures, so no test reaches this catch. Keep it: the hook's own
+// .catch would run the tool a second time, and a second Bash or Edit is not harmless.
 export async function noteToolRan($: EngineInterface, state: SessionState, call: ToolCall): Promise<void> {
   try {
     if (call.tool === 'Bash') return await noteDropped($, state, dropAll(state.reads), 'bash', call.agentId)
@@ -46,6 +48,7 @@ export async function noteToolRan($: EngineInterface, state: SessionState, call:
   }
 }
 
+// SAFETY: as for noteToolRan, no test reaches the catch; it is the guard against an unhandled rejection if a call inside changes.
 // A compaction that stands replaces the loop's context with a summary; one that was vetoed leaves it as it is.
 export async function noteCompaction($: EngineInterface, state: SessionState, agentId: string | undefined, wasVetoed: boolean): Promise<void> {
   try {
@@ -56,6 +59,7 @@ export async function noteCompaction($: EngineInterface, state: SessionState, ag
   }
 }
 
+// SAFETY: as for noteToolRan, no test reaches the catch.
 export async function noteSessionEnd($: EngineInterface, state: SessionState, sessionId: string): Promise<void> {
   try {
     await noteDropped($, state, endSession(state), 'clear', undefined, sessionId)

@@ -40,6 +40,9 @@ export type World = {
   // Runs inside the next Read that reaches the bottom, so a test can change the file while the tool runs.
   duringRead: (() => void) | undefined
   statThrowsFor: Set<string>
+  // Paths whose stat answers a directory, and paths whose stat answers no real path.
+  directories: Set<string>
+  unresolvable: Set<string>
   readThrowsFor: Set<string>
   logWrite: 'ok' | 'exit' | 'throw'
   compactSkips: boolean
@@ -120,7 +123,9 @@ const installFsMocks = (on: On, world: World) => {
     const real = world.links.get(e.path) ?? e.path
     const file = world.files.get(real)
     if (file === undefined) throw new Error('ENOENT')
-    return ok({ kind: 'file' as const, size: file.text.length, mtimeMs: file.mtimeMs, isLink: real !== e.path, realPath: real })
+    const kind = world.directories.has(e.path) ? ('dir' as const) : ('file' as const)
+    const resolved = world.unresolvable.has(e.path) ? {} : { realPath: real }
+    return ok({ kind, size: file.text.length, mtimeMs: file.mtimeMs, isLink: real !== e.path, ...resolved })
   })
   on('fs.read', (_$, e) => {
     const file = world.files.get(world.links.get(e.path) ?? e.path)
@@ -197,6 +202,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     otherToolsThatRan: [],
     duringRead: undefined,
     statThrowsFor: new Set(),
+    directories: new Set(),
+    unresolvable: new Set(),
     readThrowsFor: new Set(),
     logWrite: 'ok',
     compactSkips: false,
