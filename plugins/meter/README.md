@@ -43,6 +43,11 @@ elapsed: a fill that stops short of it is under pace.
   `Meter opened.`. A pane opened from `/meter` counts as asked, so the engine places it
   at 109 columns as well as 110 (the narrowest widths tried): docked beside a fullscreen transcript
   from 110 terminal columns, otherwise inline above the prompt.
+  Where no surface places panes (a `-p` run, or only surfaces that place nothing) even an asked
+  open answers unplaced. A pane that was not listed stays open and the reply says why nothing shows
+  it (`Meter opened, but nothing here can show it yet (<reason>).`), so it shows once a surface
+  attaches. A pane that was already listed is closed instead and the reply is `Meter closed.`, so
+  `/meter` still toggles. This is covered by tests; not run live.
 - `/meter refresh` takes a full count (see Refresh policy). It works without focus. While the pane
   is closed or unplaced it opens the pane and takes the full count in place of the open-time
   summary.
