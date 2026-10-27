@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/mikelane/thrift/compare/meter-v0.3.0...meter-v0.3.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **meter:** verify the pane live and correct placement docs ([#136](https://github.com/mikelane/thrift/issues/136)) ([9cbfba5](https://github.com/mikelane/thrift/commit/9cbfba5b2714ba334971ee1ec8788a7584ddfdad))
+
 ## [0.3.0](https://github.com/mikelane/thrift/compare/meter-v0.2.0...meter-v0.3.0) (2026-10-27)
 
 
