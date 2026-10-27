@@ -87,6 +87,43 @@ describe('runMeterCommand with a listed but unplaced pane', () => {
   })
 })
 
+describe('runMeterCommand after meterAutoOpen left the pane unplaced', () => {
+  // #135: the unasked open at session start waits undrawn on a narrow terminal; the person's /meter is asked, so it places.
+  const autoOpenedUnplaced = async ($: Parameters<typeof install>[0], on: Parameters<typeof install>[1]) => {
+    const world = install($, on)
+    world.isPlacedOnOpen = false
+    await startSession($)
+    await world.clock.settle()
+    world.isPlacedOnOpen = true
+    return world
+  }
+
+  test('It replies Meter opened. on the first /meter', { options: { meterAutoOpen: true } }, async ($, on) => {
+    await autoOpenedUnplaced($, on)
+    expect(await runMeter($)).toEqual({ text: 'Meter opened.' })
+  })
+
+  test('It opens the pane again and closes nothing on the first /meter', { options: { meterAutoOpen: true } }, async ($, on) => {
+    const world = await autoOpenedUnplaced($, on)
+    await runMeter($)
+    expect(world.opens).toEqual([{ id: 'meter' }, { id: 'meter' }])
+    expect(world.closes).toEqual([])
+  })
+
+  test('It takes a summary reading after the auto-open reading on the first /meter', { options: { meterAutoOpen: true } }, async ($, on) => {
+    const world = await autoOpenedUnplaced($, on)
+    await runMeter($)
+    expect(world.usageCalls).toEqual(['plain', 'summary', 'plain', 'summary'])
+  })
+
+  test('It closes the pane on the second /meter', { options: { meterAutoOpen: true } }, async ($, on) => {
+    const world = await autoOpenedUnplaced($, on)
+    await runMeter($)
+    expect(await runMeter($)).toEqual({ text: 'Meter closed.' })
+    expect(world.closes).toEqual(['meter'])
+  })
+})
+
 describe('runMeterCommand when the asked open still answers isPlaced false', () => {
   // UiOpenResult: an asked open is still unplaced where no surface places panes, or none is attached
   // (reason `no-surface`). /meter must stay a toggle there, as it was before #135.
