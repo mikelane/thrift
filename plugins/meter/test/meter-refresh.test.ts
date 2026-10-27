@@ -38,8 +38,7 @@ describe('openMeter', () => {
     const texts = (await textsOf(await mountPane($))).join('\n')
     expect(texts).toContain('TOP CONTEXT')
     expect(texts).toContain('Messages')
-    expect(texts).toContain('cache hit 96%')
-    expect(texts).toContain('compacts at 167k')
+    expect(texts).toContain('compacts 167k · cache 96%')
   })
 
   test('It takes the full count in place of the summary when /meter refresh opens a closed pane', async ($, on) => {
@@ -96,7 +95,7 @@ describe('recordMeasure', () => {
     await opened($, on)
     const pane = await mountPane($)
     await measure($, usageOf(142000, [], 4.82), ['cost'])
-    expect((await textsOf(pane)).join('\n')).toContain('COST   $4.82')
+    expect((await textsOf(pane)).join('\n')).toContain('$4.82 at API rates')
   })
 
   test('It takes no breakdown for a rateLimits change however old the last breakdown is', async ($, on) => {

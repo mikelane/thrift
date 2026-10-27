@@ -1,10 +1,17 @@
 const SECOND_MS = 1000
 const MINUTE_MS = 60 * SECOND_MS
 const HOUR_MS = 60 * MINUTE_MS
-const BAR_WIDTH_BLOCKS = 6
-const HALVES_PER_BLOCK = 2
+const THOUSAND = 1000
+const MILLION = 1_000_000
+const THIN_BAR_WIDTH = 10
 
-export const formatTokens = (tokens: number): string => (tokens < 1000 ? String(tokens) : `${Math.round(tokens / 1000)}k`)
+const formatMillions = (tokens: number): string => `${Math.round((tokens / MILLION) * 10) / 10}M`
+
+export const formatTokens = (tokens: number): string => {
+  if (tokens < THOUSAND) return String(tokens)
+  const thousands = Math.round(tokens / THOUSAND)
+  return thousands < THOUSAND ? `${thousands}k` : formatMillions(tokens)
+}
 
 export const formatPercent = (percent: number): string => String(Math.round(percent * 10) / 10)
 
@@ -15,8 +22,5 @@ export const ageLabel = (elapsedMs: number): string => {
   return `${Math.floor(elapsed / HOUR_MS)}h ago`
 }
 
-export const barFor = (tokens: number, largest: number): string => {
-  if (tokens <= 0 || largest <= 0) return ''
-  const halves = Math.max(1, Math.round((tokens / largest) * BAR_WIDTH_BLOCKS * HALVES_PER_BLOCK))
-  return '█'.repeat(Math.floor(halves / HALVES_PER_BLOCK)) + (halves % HALVES_PER_BLOCK === 1 ? '▌' : '')
-}
+export const barFor = (tokens: number, largest: number): string =>
+  tokens <= 0 || largest <= 0 ? '' : '━'.repeat(Math.max(1, Math.round((tokens / largest) * THIN_BAR_WIDTH)))

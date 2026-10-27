@@ -9,26 +9,32 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 
 ```
 ┌ meter ─────────────────────────────────────────┐
-│ ◔ CONTEXT   142k / 200k   85% of 167k           │  yellow
-│   compacts at 167k  ·  cache hit 96%            │
+│ ◔ CONTEXT            149k / 1M                  │  green
+│ ████░░░░░░░░░░░░░░░░░░░░░  15%                  │
+│ compacts 967k · cache 100%                      │
 │                                                 │
-│ ◷ 5-HOUR   48%  ·  62% of window elapsed        │  green
-│   pace 0.77×  ●  resets 4:15pm                  │
+│ ◷ 5-HOUR            7% · 0.39×                  │  green
+│ ██░░░│░░░░░░░░░░░░░░░░░░░                       │
+│ resets Tue 2:10am                               │
 │                                                 │
-│ ⧖ WEEKLY   71%  ·  43% of window elapsed        │  red
-│   pace 1.66×  ●  hits 100% Wed 2:25pm, resets Sat 9:00am
+│ ⧖ WEEKLY           13% · 0.59×                  │  green
+│ ███▌░░│░░░░░░░░░░░░░░░░░░                       │
+│ resets Sun 9:00am                               │
 │                                                 │
-│ ¢ COST   $4.82 this session                     │
+│ ¢ COST     $79.90 at API rates                  │
 │                                                 │
-│ TOP CONTEXT  ↻ [r] refresh  · 3m ago            │
-│   Messages      88k  ██████                     │
-│   MCP tools     21k  █▌                         │
-│   Custom agents 14k  █                          │
-│   Skills         8k  ▌                          │
-│   Memory files   6k  ▌                          │
+│ TOP CONTEXT  ↻ refresh (r)  · 3m ago            │
+│ Messages       66k ━━━━━━━━━━                   │
+│ System tools   30k ━━━━━                        │
+│ Memory files   24k ━━━━                         │
+│ Custom agents  13k ━━                           │
+│ Skills         10k ━━                           │
 │   ⬡ mcp servers: github 9k, ha 6k               │
 └─────────────────────────────────────────────────┘
 ```
+
+Each gauge is 25 cells wide. The `│` in a window gauge marks the share of the window that has
+elapsed: a fill that stops short of it is under pace.
 
 ## Opening and closing
 
@@ -62,7 +68,8 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 - **Limit reached**: a `five_hour` or `seven_day` window at `percentUsed` 100 or more is red and
   reads `limit reached` with its reset time. No pace and no projection are shown. This wins over a
   missing or past `resetsAt`: the row is still red and reads `limit reached`, with no reset time.
-- **A window with no usable reset time** shows its percent only: no pace, color or projection.
+- **A window with no usable reset time** shows its percent and a gauge with no pace marker: no
+  pace, color or projection.
 - **`spend_limit`** and any other window kind have no known length, so no pace or projection. Red
   when `percentUsed` is 100 or more, otherwise uncolored.
 - **Context color**: fill is `tokens / threshold` when an auto-compact threshold is cached from a
@@ -72,13 +79,15 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
   reads `waiting for first response` and is uncolored.
 - **Without color**: every band is computed from a figure the row prints (the context percent, the
   pace), so the thresholds above give the band in a monochrome terminal or to a screen reader. The
-  band name itself is not printed, and the `●` after the pace carries only the band color.
+  band name itself is not printed. A gauge's fill is drawn in the band color, and the percent
+  and pace in the row above print the same figures. The `│` pace marker is a glyph, not a color.
 - **Cache hit**: `cache_read_input_tokens / (input_tokens + cache_read_input_tokens +
-  cache_creation_input_tokens)`, as a whole percent. Shown as `cache hit —` when `apiUsage` is
+  cache_creation_input_tokens)`, as a whole percent. Shown as `cache —` when `apiUsage` is
   null, no breakdown has been taken, or the denominator is 0.
 - **TOP CONTEXT rows**: categories with `kind === "used"` (never matched by name), largest first,
   ties by name in code-point order, at most 5. Each row shows the category's name unchanged, as
-  `/context` prints it. A bar is drawn per row, scaled to the largest row, in half blocks.
+  `/context` prints it. A bar of `━` cells is drawn per row, scaled so the largest row gets
+  10 cells and any row above 0 tokens gets at least 1.
 - **MCP servers line**: its own line under the rows. It sums `mcpTools[].tokens` per server,
   counting only tools with `isLoaded: true`, and lists the 2 largest, ties by server name. It is
   drawn whether or not the MCP category is used, deferred or absent, and omitted when no loaded
@@ -98,7 +107,7 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 - **Throttled summary**: when the event's `changed` includes `context` and the last breakdown is
   60 s old or older, a `breakdown: "summary"` call refreshes the cached figures. The threshold, the
   cache hit and TOP CONTEXT come only from a breakdown.
-- **Explicit refresh**: the `[r] refresh` button and `/meter refresh` call `breakdown: "full"`.
+- **Explicit refresh**: the `refresh (r)` button and `/meter refresh` call `breakdown: "full"`.
   A full count sends one token-count API request per tool and per memory file, as `/context`
   does. The `r` hotkey fires only while the pane has focus (ctrl+x tab, a click, or opening with
   focus); typing `r` in the composer does nothing.
@@ -118,8 +127,8 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 Each slot is preceded by its glyph and one space. A plugin cannot detect the terminal's font and
 Nerd Font glyphs draw as boxes without a patched font, so `unicode` is the default and `nerd` is
 opt-in. Glyphs sit only at the start of a slot's text, never between a value and the bar or figure
-after it; the TOP CONTEXT category rows get none. The bars and the status dot are the same in both
-sets. Every glyph is a single code point.
+after it; the TOP CONTEXT category rows get none. The gauges and bars are the same in both sets.
+Every glyph is a single code point.
 
 | Slot | `unicode` | `nerd` (Nerd Fonts class, codepoint) |
 |---|---|---|
@@ -133,8 +142,8 @@ sets. Every glyph is a single code point.
 | `limit reached` | `✕` U+2715 | `nf-fa-ban` U+F05E |
 
 All `nf-fa-*` codepoints are unchanged between Nerd Fonts v2 and v3. The Nerd Font codepoints and
-the shared `█ ▌ ●` are East Asian Width ambiguous, so they may take two cells in a CJK locale; the
-plugin does not correct for that.
+the shared `█ ▌ ░ │ ━` are East Asian Width ambiguous, so they may take two cells in a CJK locale;
+the plugin does not correct for that.
 
 ## What it does not do
 

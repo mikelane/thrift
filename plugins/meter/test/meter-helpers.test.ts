@@ -66,7 +66,7 @@ describe('currentReading', () => {
     install($, on)
     const stored = { headline: { contextWindow: 200000, rateLimits: [], costUsd: 4.82 }, breakdown: null, isStale: false }
     on('state.get', (_$, e, next) => (e.key === 'reading' ? { value: { value: { shape: 'reading-1', value: stored }, version: 0 } } : next(e)))
-    expect((await textsOf(await mountPane($))).join('\n')).toContain('$4.82 this session')
+    expect((await textsOf(await mountPane($))).join('\n')).toContain('$4.82 at API rates')
   })
 })
 
