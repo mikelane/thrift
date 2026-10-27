@@ -7,6 +7,7 @@ import type {
   SessionContextBreakdown,
   SessionRateLimit,
   SessionUsage,
+  UiOpenResult,
   UiPane,
 } from 'claude-code'
 
@@ -119,7 +120,8 @@ export const install = ($: Engine, on: On): World => {
     world.panes = [
       { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: world.isPlacedOnOpen },
     ]
-    return { value: world.isPlacedOnOpen ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'no-surface' } }
+    const opened: UiOpenResult = world.isPlacedOnOpen ? { isPlaced: true } : { isPlaced: false, reason: 'no-surface' }
+    return { value: opened }
   })
   on('ui.close', (_$, e) => {
     world.closes.push(e.id)

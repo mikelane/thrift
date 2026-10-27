@@ -76,6 +76,8 @@ describe('runMeterCommand with a listed but unplaced pane', () => {
   test('It takes the full count and replies Meter opened. on /meter refresh', async ($, on) => {
     const world = await listUnplaced($, on)
     expect(await runMeter($, 'refresh')).toEqual({ text: 'Meter opened.' })
+    expect(world.opens).toEqual([{ id: 'meter' }])
+    expect(world.closes).toEqual([])
     expect(world.usageCalls).toEqual(['plain', 'full'])
   })
 
@@ -172,6 +174,7 @@ describe('runMeterCommand when the asked open still answers isPlaced false', () 
     await runMeter($)
     world.usageCalls.length = 0
     expect(await runMeter($, 'refresh')).toEqual({ text: 'Meter closed.' })
+    expect(world.closes).toEqual(['meter'])
     expect(world.usageCalls).toEqual([])
   })
 })
