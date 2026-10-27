@@ -18,3 +18,6 @@ export const savingsOf = (grossBytes: number, result: ReturnType<typeof stubResu
   grossBytes,
   stubBytes: utf8Bytes(JSON.stringify(result)) + utf8Bytes(contextLine),
 })
+
+// A stub is only worth sending when it is smaller than the text the model would otherwise read.
+export const stubIsSmaller = ({ grossBytes, stubBytes }: Savings): boolean => stubBytes < grossBytes

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { lineByteLengths, savingsOf, stubContextLine, stubResult, utf8Bytes } from '../hooks/stub'
+import { lineByteLengths, savingsOf, stubContextLine, stubIsSmaller, stubResult, utf8Bytes } from '../hooks/stub'
 
 describe('utf8Bytes', () => {
   test('It counts one byte for an ASCII character', () => {
@@ -49,5 +49,19 @@ describe('savingsOf', () => {
     const result = stubResult('/work/a.ts')
     const line = stubContextLine('/work/a.ts', 1, 3)
     expect(savingsOf(900, result, line)).toEqual({ grossBytes: 900, stubBytes: utf8Bytes(JSON.stringify(result)) + utf8Bytes(line) })
+  })
+})
+
+describe('stubIsSmaller', () => {
+  test('It is false when the stub is exactly as big as the text it replaces', () => {
+    expect(stubIsSmaller({ grossBytes: 300, stubBytes: 300 })).toBe(false)
+  })
+
+  test('It is true when the stub is one byte smaller than the text it replaces', () => {
+    expect(stubIsSmaller({ grossBytes: 300, stubBytes: 299 })).toBe(true)
+  })
+
+  test('It is false when the stub is bigger than the text it replaces', () => {
+    expect(stubIsSmaller({ grossBytes: 58, stubBytes: 300 })).toBe(false)
   })
 })
