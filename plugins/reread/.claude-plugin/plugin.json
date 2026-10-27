@@ -1,6 +1,6 @@
 {
   "name": "reread",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Answers a repeat Read of an unchanged file with a short stub instead of its contents a second time.",
   "author": {
     "name": "Mike Lane"
