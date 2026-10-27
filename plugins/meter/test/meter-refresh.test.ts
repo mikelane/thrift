@@ -104,10 +104,46 @@ describe('runMeterCommand when the asked open still answers isPlaced false', () 
     expect(world.closes).toEqual(['meter'])
   })
 
-  test('It does not reply Meter opened. to every /meter while the pane stays unplaced', async ($, on) => {
+  test('It replies Meter closed. on a second /meter while the pane stays unplaced', async ($, on) => {
     await stayUnplaced($, on)
     await runMeter($)
-    expect(await runMeter($)).not.toEqual({ text: 'Meter opened.' })
+    expect(await runMeter($)).toEqual({ text: 'Meter closed.' })
+  })
+
+  test('It loads no reading for a pane it is about to close', async ($, on) => {
+    const world = await stayUnplaced($, on)
+    await runMeter($)
+    world.usageCalls.length = 0
+    await runMeter($)
+    expect(world.usageCalls).toEqual([])
+  })
+
+  test('It keeps a never-listed pane open and says why nothing shows it', async ($, on) => {
+    const world = await stayUnplaced($, on)
+    expect(await runMeter($)).toEqual({ text: 'Meter opened, but nothing here can show it yet (narrow).' })
+    expect(world.closes).toEqual([])
+  })
+
+  test('It loads the reading for a never-listed pane that stays unplaced', async ($, on) => {
+    const world = await stayUnplaced($, on)
+    await runMeter($)
+    expect(world.usageCalls).toEqual(['plain', 'summary'])
+  })
+
+  test('It closes a listed unplaced pane on /meter refresh when the open leaves it unplaced', async ($, on) => {
+    const world = await stayUnplaced($, on)
+    await runMeter($)
+    world.usageCalls.length = 0
+    expect(await runMeter($, 'refresh')).toEqual({ text: 'Meter closed.' })
+    expect(world.usageCalls).toEqual([])
+  })
+})
+
+describe('runMeterCommand with a listed and placed pane', () => {
+  test('It refreshes the pane and replies Meter refreshed. on /meter refresh', async ($, on) => {
+    const world = await opened($, on)
+    expect(await runMeter($, 'refresh')).toEqual({ text: 'Meter refreshed.' })
+    expect(world.usageCalls).toEqual(['full'])
   })
 })
 

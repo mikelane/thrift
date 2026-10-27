@@ -1,4 +1,4 @@
-import type { ContextBreakdownDetail, EngineInterface, SessionMeasureInput } from 'claude-code'
+import type { ContextBreakdownDetail, EngineInterface, SessionMeasureInput, UiOpenResult } from 'claude-code'
 
 import { snapshotBreakdown } from './breakdown'
 import { debug, logFailure } from './engine-log'
@@ -30,10 +30,6 @@ async function trackingBreakdown(count: () => Promise<void>): Promise<void> {
 
 async function isMeterOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
-}
-
-async function isMeterPlaced($: EngineInterface): Promise<boolean> {
-  return (await $.ui.panes()).some(pane => pane.id === PANE_ID && pane.isPlaced)
 }
 
 async function recordFailure($: EngineInterface, failedAction: string, error: unknown, generation: number): Promise<void> {
@@ -69,12 +65,20 @@ async function takeBreakdown($: EngineInterface, detail: ContextBreakdownDetail)
   }
 }
 
-export function openMeter($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+function loadReading($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
   return trackingBreakdown(async () => {
-    await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
     await loadHeadline($)
     await loadBreakdown($, detail)
   })
+}
+
+function openPane($: EngineInterface): Promise<UiOpenResult> {
+  return $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+}
+
+export async function openMeter($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
+  await openPane($)
+  await loadReading($, detail)
 }
 
 export async function restartMeterReading($: EngineInterface): Promise<void> {
@@ -114,15 +118,22 @@ const USAGE = 'Usage: /meter to open or close the pane, /meter refresh to take a
 export async function runMeterCommand($: EngineInterface, args: string): Promise<{ text: string }> {
   const argument = args.trim()
   if (argument !== '' && argument !== 'refresh') return { text: USAGE }
-  const isPlaced = await isMeterPlaced($)
-  if (!isPlaced) {
-    await openMeter($, argument === 'refresh' ? 'full' : 'summary')
-    return { text: 'Meter opened.' }
-  }
-  if (argument === 'refresh') {
-    await refreshMeter($)
-    return { text: 'Meter refreshed.' }
-  }
+  const pane = (await $.ui.panes()).find(listed => listed.id === PANE_ID)
+  if (pane?.isPlaced) return argument === 'refresh' ? refreshAndReply($) : closeAndReply($)
+  const opened = await openPane($)
+  // An asked open that still places nothing (no surface) would otherwise leave /meter unable to close the pane.
+  if (!opened.isPlaced && pane !== undefined) return closeAndReply($)
+  await loadReading($, argument === 'refresh' ? 'full' : 'summary')
+  if (opened.isPlaced) return { text: 'Meter opened.' }
+  return { text: `Meter opened, but nothing here can show it yet (${opened.reason}).` }
+}
+
+async function refreshAndReply($: EngineInterface): Promise<{ text: string }> {
+  await refreshMeter($)
+  return { text: 'Meter refreshed.' }
+}
+
+async function closeAndReply($: EngineInterface): Promise<{ text: string }> {
   await closeMeter($)
   return { text: 'Meter closed.' }
 }
