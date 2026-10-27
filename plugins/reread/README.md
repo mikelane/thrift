@@ -44,7 +44,7 @@ claude --plugin-dir ~/dev/thrift/plugins/reread
 
 The plugin watches the `Read` calls the model makes, in the main conversation and in each subagent
 or teammate separately. For each one that reads text, it remembers the file's real path (symbolic
-links followed), the range read, the file's size and modified time, a SHA-256 of its text, and the
+links followed), the range read, the file's size and modified time, a SHA-256 of its bytes, and the
 id of the tool call whose result is in the context.
 
 When the same range is read again, or a range that sits inside an earlier read of the whole file,
@@ -77,7 +77,10 @@ it goes down this list and stops at the first answer:
    saving it would have made.
 
 The file is statted before the tool runs and again after it. If the two differ, the file changed
-while it was being read and the read is not tracked.
+while it was being read and the read is not tracked. Nor is it tracked when the file, read by the
+plugin after the tool ran, does not hold at the result's lines the exact content the tool returned:
+a stat cannot see a rewrite that keeps the size within one modified-time tick, or a link that
+pointed elsewhere while the tool ran.
 
 ### What the model sees
 

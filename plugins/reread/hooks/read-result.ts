@@ -1,8 +1,9 @@
 import type { ResultLines } from './read-tracking'
 
-// What core's Read left, narrowed to what the plugin acts on. `text` is the result as the model read it.
+// What core's Read left, narrowed to what the plugin acts on. `modelText` is the result as the model read it, `content` the file's
+// lines the tool returned.
 type ReadOutcome =
-  | { kind: 'text'; lines: ResultLines; modelText: string }
+  | { kind: 'text'; lines: ResultLines; modelText: string; content: string }
   | { kind: 'file_unchanged' }
   | { kind: 'not_text' }
   | { kind: 'error' }
@@ -29,6 +30,8 @@ export const classifyReadResult = ({ deny, isError, result, text }: ReadAnswer):
   if (deny !== undefined || isError === true) return { kind: 'error' }
   const type = fieldOf(result, 'type')
   if (type === 'file_unchanged') return { kind: 'file_unchanged' }
-  const lines = type === 'text' ? textLines(fieldOf(result, 'file')) : undefined
-  return lines === undefined ? { kind: 'not_text' } : { kind: 'text', lines, modelText: text ?? '' }
+  const file = type === 'text' ? fieldOf(result, 'file') : undefined
+  const lines = textLines(file)
+  const content = fieldOf(file, 'content')
+  return lines === undefined || typeof content !== 'string' ? { kind: 'not_text' } : { kind: 'text', lines, modelText: text ?? '', content }
 }

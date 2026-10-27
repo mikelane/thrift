@@ -7,7 +7,7 @@ const textFile = { filePath: '/work/a.ts', content: 'one\ntwo', numLines: 2, sta
 describe('classifyReadResult', () => {
   test('It classifies a text result with its file and the text the model read', () => {
     const classified = classifyReadResult({ result: { type: 'text', file: textFile }, text: '1\tone\n2\ttwo' })
-    expect(classified).toEqual({ kind: 'text', lines: { startLine: 1, numLines: 2, totalLines: 2 }, modelText: '1\tone\n2\ttwo' })
+    expect(classified).toEqual({ kind: 'text', lines: { startLine: 1, numLines: 2, totalLines: 2 }, modelText: '1\tone\n2\ttwo', content: 'one\ntwo' })
   })
 
   test('It carries the token cap flag of a text result', () => {
@@ -15,7 +15,12 @@ describe('classifyReadResult', () => {
       result: { type: 'text', file: { ...textFile, truncatedByTokenCap: true } },
       text: 'x',
     })
-    expect(classified).toEqual({ kind: 'text', lines: { startLine: 1, numLines: 2, totalLines: 2, truncatedByTokenCap: true }, modelText: 'x' })
+    expect(classified).toEqual({
+      kind: 'text',
+      lines: { startLine: 1, numLines: 2, totalLines: 2, truncatedByTokenCap: true },
+      modelText: 'x',
+      content: 'one\ntwo',
+    })
   })
 
   test('It reads the model text as empty when the result has none', () => {
@@ -51,6 +56,10 @@ describe('classifyReadResult', () => {
 
   test('It classifies a text result whose line counts are not numbers as not text', () => {
     expect(classifyReadResult({ result: { type: 'text', file: { ...textFile, numLines: '2' } } })).toEqual({ kind: 'not_text' })
+  })
+
+  test('It classifies a text result whose content is not a string as not text', () => {
+    expect(classifyReadResult({ result: { type: 'text', file: { ...textFile, content: undefined } } })).toEqual({ kind: 'not_text' })
   })
 
   test('It classifies a missing result as not text', () => {

@@ -19,6 +19,7 @@ import {
 } from './read-tracking'
 import { writeRecord } from './record-writer'
 import type { SessionState } from './session-state'
+import { showsLines } from './shown-lines'
 import { lineByteLengths, savingsOf, stubContextLine, stubIsSmaller, stubResult, utf8Bytes } from './stub'
 
 export type ReadCall = {
@@ -128,11 +129,14 @@ async function trackResult($: EngineInterface, state: SessionState, attempt: Att
   if (outcome.kind === 'error') return 'error_result'
   if (outcome.kind === 'not_text') return 'not_text'
   if (outcome.kind === 'file_unchanged') return 'core_dedup'
-  // Stat before the Read (`before`), read the bytes, then stat again: track only when both stats match.
+  // Stat before the Read (`before`), read the bytes, then stat again: track only when both stats match and the bytes hold, at the
+  // result's lines, the content the tool returned.
   const bytes = await readBytes($, request.realPath)
   if (bytes === undefined) return 'unreadable'
   const after = await statFile($, request.realPath)
   if (after === undefined || !isUnchanged(before, after)) return 'changed'
+  const fileText = new TextDecoder().decode(bytes)
+  if (!showsLines(fileText, outcome.lines, outcome.content)) return 'changed'
   const { startLine, numLines, totalLines } = outcome.lines
   const isFull = isFullResult(outcome.lines)
   trackRead(state.reads, subject.context, request.key, {
@@ -149,7 +153,7 @@ async function trackResult($: EngineInterface, state: SessionState, attempt: Att
     modelTextSha256: await sha256Hex(outcome.modelText),
     modelTextLength: outcome.modelText.length,
     isFull,
-    lineBytes: isFull ? lineByteLengths(new TextDecoder().decode(bytes)) : [],
+    lineBytes: isFull ? lineByteLengths(fileText) : [],
     stubbedKeys: new Set(),
   })
   return outcome.lines.truncatedByTokenCap === true ? 'token_cap_truncated' : undefined
