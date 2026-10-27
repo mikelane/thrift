@@ -36,6 +36,9 @@ type Proceed = { origin: Origin; run: () => Promise<ToolCallResult<string>> }
 
 type FileStat = { size: number; mtimeMs: number; realPath: string }
 
+// What one Read call settles on before it is judged: fixed for the rest of the call.
+type Attempt = { subject: Subject; call: ReadCall; request: ReadRequest; before: FileStat }
+
 type Subject = { engine: EngineInfo; isSubagent: boolean; context: string }
 
 type PassVerdict = { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found: Found; savings?: Savings }
@@ -91,7 +94,8 @@ const isUnchanged = (before: FileStat, tracked: { size: number; mtimeMs: number 
   before.size === tracked.size && before.mtimeMs === tracked.mtimeMs
 
 // The steps after the lookup, in order. Anything short of all of them passes: absence always means pass.
-async function judge($: EngineInterface, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, before: FileStat): Promise<Verdict> {
+async function judge($: EngineInterface, attempt: Attempt, found: Found): Promise<Verdict> {
+  const { call, request, before } = attempt
   const { tracked } = found
   if (tracked.stubbedKeys.has(request.key)) return { kind: 'pass', decision: 'override', reason: 'override_after_stub', found }
   if (!isUnchanged(before, tracked)) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
@@ -107,33 +111,18 @@ async function judge($: EngineInterface, subject: Subject, call: ReadCall, reque
 
 // Runs the tool, then tracks what it returned. Returns why nothing (or not everything) was tracked, if so. Never throws once the
 // tool has run: a failure here must not run the tool a second time.
-async function runAndTrack(
-  $: EngineInterface,
-  state: SessionState,
-  subject: Subject,
-  call: ReadCall,
-  request: ReadRequest,
-  before: FileStat,
-  proceed: Proceed,
-): Promise<{ ran: ToolCallResult<string>; untracked: DecisionReason | undefined }> {
+async function runAndTrack($: EngineInterface, state: SessionState, attempt: Attempt, proceed: Proceed): Promise<{ ran: ToolCallResult<string>; untracked: DecisionReason | undefined }> {
   const ran = await proceed.run()
   try {
-    return { ran, untracked: await trackResult($, state, subject, call, request, before, ran) }
+    return { ran, untracked: await trackResult($, state, attempt, ran) }
   } catch (error) {
     debug($, `could not track a read: ${String(error)}`)
     return { ran, untracked: 'unreadable' }
   }
 }
 
-async function trackResult(
-  $: EngineInterface,
-  state: SessionState,
-  subject: Subject,
-  call: ReadCall,
-  request: ReadRequest,
-  before: FileStat,
-  ran: ToolCallResult<string>,
-): Promise<DecisionReason | undefined> {
+async function trackResult($: EngineInterface, state: SessionState, attempt: Attempt, ran: ToolCallResult<string>): Promise<DecisionReason | undefined> {
+  const { subject, call, request, before } = attempt
   const outcome = classifyReadResult(ran)
   if (outcome.kind === 'error') return 'error_result'
   if (outcome.kind === 'not_text') return 'not_text'
@@ -187,7 +176,8 @@ async function dedupeEvaluation($: EngineInterface, call: ReadCall, request: Rea
   }
 }
 
-async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, { line, evaluation }: DedupeEvaluation) {
+async function answerWithStub($: EngineInterface, state: SessionState, attempt: Attempt, found: Found, { line, evaluation }: DedupeEvaluation) {
+  const { subject, call, request } = attempt
   found.tracked.stubbedKeys.add(request.key)
   if (subject.engine.effectiveMode === 'ask') {
     $.ui.log(`reread: ${call.file_path} is unchanged, so the repeat Read got a stub instead of its contents (${evaluation.savings.grossBytes - evaluation.savings.stubBytes} bytes saved)`)
@@ -197,8 +187,9 @@ async function answerWithStub($: EngineInterface, state: SessionState, subject: 
 }
 
 // In off the tool runs and the evaluation is logged as the saving a stub would have made.
-async function shadowDedupe($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, { evaluation }: DedupeEvaluation, before: FileStat, proceed: Proceed) {
-  const { ran, untracked } = await runAndTrack($, state, subject, call, request, before, proceed)
+async function shadowDedupe($: EngineInterface, state: SessionState, attempt: Attempt, { evaluation }: DedupeEvaluation, proceed: Proceed) {
+  const { subject, request } = attempt
+  const { ran, untracked } = await runAndTrack($, state, attempt, proceed)
   const pathDetail = { pathHash: await pathHash(state.salt, request.realPath) }
   if (untracked !== undefined) {
     await note($, subject, { decision: 'pass', reason: untracked, ...pathDetail })
@@ -208,9 +199,10 @@ async function shadowDedupe($: EngineInterface, state: SessionState, subject: Su
   return ran
 }
 
-async function passAndTrack($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, before: FileStat, proceed: Proceed, verdict: PassVerdict | undefined) {
+async function passAndTrack($: EngineInterface, state: SessionState, attempt: Attempt, proceed: Proceed, verdict: PassVerdict | undefined) {
+  const { subject, request } = attempt
   const firstOrOther = hasPath(state.reads, subject.context, request.realPath) ? 'different_range' : 'first_read'
-  const { ran, untracked } = await runAndTrack($, state, subject, call, request, before, proceed)
+  const { ran, untracked } = await runAndTrack($, state, attempt, proceed)
   if (verdict?.decision === 'override') verdict.found.tracked.stubbedKeys.delete(request.key)
   await note($, subject, {
     decision: verdict?.decision ?? 'pass',
@@ -230,8 +222,9 @@ export async function readTool($: EngineInterface, state: SessionState, call: Re
   if (before === undefined) return passUntracked($, subject, proceed, 'unreadable')
   const request = requestOf(before.realPath, call)
   const found = findTracked(state.reads, subject.context, request)
-  const verdict = found === undefined ? undefined : await judge($, subject, call, request, found, before)
-  if (verdict?.kind !== 'dedupe') return passAndTrack($, state, subject, call, request, before, proceed, verdict)
-  if (engine.effectiveMode === 'off') return shadowDedupe($, state, subject, call, request, verdict.dedupe, before, proceed)
-  return answerWithStub($, state, subject, call, request, verdict.found, verdict.dedupe)
+  const attempt: Attempt = { subject, call, request, before }
+  const verdict = found === undefined ? undefined : await judge($, attempt, found)
+  if (verdict?.kind !== 'dedupe') return passAndTrack($, state, attempt, proceed, verdict)
+  if (engine.effectiveMode === 'off') return shadowDedupe($, state, attempt, verdict.dedupe, proceed)
+  return answerWithStub($, state, attempt, verdict.found, verdict.dedupe)
 }
