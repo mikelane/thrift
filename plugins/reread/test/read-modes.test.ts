@@ -45,7 +45,7 @@ describe('readTool in off', () => {
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
     const { bytes_would_save, gross_bytes, stub_bytes } = triggerValues(world)
-    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_would_save]).toEqual([58, true])
+    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_would_save]).toEqual([1465, true])
   })
 
   test('It leaves bytes_saved out of the record', OFF, async ($, on) => {

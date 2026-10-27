@@ -121,7 +121,7 @@ describe('readTool: the record of a Read evaluation', () => {
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
     const { bytes_saved, gross_bytes, stub_bytes } = triggerValues(world)
-    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_saved]).toEqual([58, true])
+    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_saved]).toEqual([1465, true])
   })
 
   test('It records the turns since the read', ACT, async ($, on) => {

@@ -11,6 +11,7 @@ export const DECISION_REASONS = [
   'not_in_context',
   'plugin_call',
   'override_after_stub',
+  'stub_not_smaller',
   'core_dedup',
   'unreadable',
   'untested_engine',

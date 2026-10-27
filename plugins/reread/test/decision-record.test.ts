@@ -105,6 +105,12 @@ describe('decisionRecord', () => {
     expect(decisionRecord(context(), tiny).trigger_values.bytes_saved).toBe(-240)
   })
 
+  test('It records the compared bytes of a stub_not_smaller pass without a net in either mode', () => {
+    const pass: Evaluation = { decision: 'pass', reason: 'stub_not_smaller', isSubagent: false, savings: { grossBytes: 60, stubBytes: 300 } }
+    const keys = [context(), context({ setting: 'off', effectiveMode: 'off' })].map(each => Object.keys(decisionRecord(each, pass).trigger_values).filter(key => key.includes('bytes')))
+    expect(keys).toEqual([['gross_bytes', 'stub_bytes'], ['gross_bytes', 'stub_bytes']])
+  })
+
   test('It leaves the byte fields out of a pass', () => {
     const pass: Evaluation = { decision: 'pass', reason: 'changed', isSubagent: false }
     const keys = Object.keys(decisionRecord(context(), pass).trigger_values)

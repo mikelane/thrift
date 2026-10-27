@@ -1,7 +1,7 @@
 import type { EngineInterface, Origin, ToolCallResult } from 'claude-code'
 
 import { coveredLines, grossBytesOf, rangeKindOf } from './coverage'
-import type { DecisionReason, Evaluation } from './decision-record'
+import type { DecisionReason, Evaluation, Savings } from './decision-record'
 import { engineInfo, type EngineInfo } from './engine-info'
 import { debug } from './engine-log'
 import { pathHash, sha256Hex } from './hashing'
@@ -18,7 +18,7 @@ import {
 } from './read-tracking'
 import { writeRecord } from './record-writer'
 import type { SessionState } from './session-state'
-import { lineByteLengths, savingsOf, stubContextLine, stubResult, utf8Bytes } from './stub'
+import { lineByteLengths, savingsOf, stubContextLine, stubIsSmaller, stubResult, utf8Bytes } from './stub'
 
 export type ReadCall = {
   tool_use_id: string
@@ -37,9 +37,11 @@ type FileStat = { size: number; mtimeMs: number; realPath: string }
 
 type Subject = { info: EngineInfo; isSubagent: boolean; context: string; agentId: string | undefined }
 
-type PassVerdict = { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found: Found }
+type PassVerdict = { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found: Found; savings?: Savings }
 
-type Verdict = { kind: 'dedupe'; found: Found } | PassVerdict
+type DedupeEvaluation = Awaited<ReturnType<typeof dedupeEvaluation>>
+
+type Verdict = { kind: 'dedupe'; found: Found; dedupe: DedupeEvaluation } | PassVerdict
 
 const ENGINE = 'engine'
 
@@ -88,7 +90,10 @@ async function judge($: EngineInterface, subject: Subject, call: ReadCall, reque
   if (text === undefined) return { kind: 'pass', decision: 'pass', reason: 'unreadable', found }
   if ((await sha256Hex(text)) !== tracked.sha256) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
   if (!(await isInContext($, call.agentId, tracked.toolUseId))) return { kind: 'pass', decision: 'pass', reason: 'not_in_context', found }
-  return { kind: 'dedupe', found }
+  // Last, so a stub is only costed once a dedupe is possible: a stub that is not smaller than the read it replaces saves nothing.
+  const dedupe = await dedupeEvaluation($, call, request, found)
+  if (!stubIsSmaller(dedupe.evaluation.savings)) return { kind: 'pass', decision: 'pass', reason: 'stub_not_smaller', found, savings: dedupe.evaluation.savings }
+  return { kind: 'dedupe', found, dedupe }
 }
 
 // Runs the tool, then tracks what it returned. Returns why nothing (or not everything) was tracked, if so. Never throws once the
@@ -170,8 +175,7 @@ async function dedupeEvaluation($: EngineInterface, call: ReadCall, request: Rea
   }
 }
 
-async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found) {
-  const { line, evaluation } = await dedupeEvaluation($, call, request, found)
+async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, { line, evaluation }: DedupeEvaluation) {
   found.tracked.stubbedKeys.add(request.key)
   if (subject.info.effectiveMode === 'ask') {
     $.ui.log(`reread: ${call.file_path} is unchanged, so its Read was answered with a stub (${evaluation.savings.grossBytes} bytes held back, stub ${evaluation.savings.stubBytes})`)
@@ -181,14 +185,13 @@ async function answerWithStub($: EngineInterface, state: SessionState, subject: 
 }
 
 // In off the tool runs and the evaluation is logged as the saving a stub would have made.
-async function shadowDedupe($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, before: FileStat, proceed: Proceed) {
+async function shadowDedupe($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, { evaluation }: DedupeEvaluation, before: FileStat, proceed: Proceed) {
   const { ran, untracked } = await runAndTrack($, state, subject, call, request, before, proceed)
   const pathDetail = { pathHash: await pathHash(state.salt, request.realPath) }
   if (untracked !== undefined) {
     await note($, subject, { decision: 'pass', reason: untracked, ...pathDetail })
     return ran
   }
-  const { evaluation } = await dedupeEvaluation($, call, request, found)
   await note($, subject, { ...evaluation, ...pathDetail })
   return ran
 }
@@ -200,6 +203,7 @@ async function passAndTrack($: EngineInterface, state: SessionState, subject: Su
   await note($, subject, {
     decision: verdict?.decision ?? 'pass',
     reason: untracked ?? verdict?.reason ?? firstOrOther,
+    ...(untracked === undefined && verdict?.savings !== undefined ? { savings: verdict.savings } : {}),
     pathHash: await pathHash(state.salt, request.realPath),
   })
   return ran
@@ -216,6 +220,6 @@ export async function readTool($: EngineInterface, state: SessionState, call: Re
   const found = findTracked(state.reads, subject.context, request)
   const verdict = found === undefined ? undefined : await judge($, subject, call, request, found, before)
   if (verdict?.kind !== 'dedupe') return passAndTrack($, state, subject, call, request, before, proceed, verdict)
-  if (info.effectiveMode === 'off') return shadowDedupe($, state, subject, call, request, verdict.found, before, proceed)
-  return answerWithStub($, state, subject, call, request, verdict.found)
+  if (info.effectiveMode === 'off') return shadowDedupe($, state, subject, call, request, verdict.dedupe, before, proceed)
+  return answerWithStub($, state, subject, call, request, verdict.found, verdict.dedupe)
 }

@@ -265,4 +265,11 @@ export const triggerValues = (world: World) => lastRecord(world).trigger_values
 export const isStub = (answer: ToolCallResult): boolean =>
   typeof answer.result === 'object' && answer.result !== null && Reflect.get(answer.result, 'type') === 'file_unchanged'
 
-export const SEVEN_LINES = 'one\ntwo\nthree\nfour\nfive\nsix\nseven'
+// Seven lines, each far longer than the stub context line, so that a repeat of any one or two of them is still worth a stub.
+export const SEVEN_LINES = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'].map(name => `${name} ${'x'.repeat(200)}`).join('\n')
+
+// Small enough that a stub would cost more than the contents.
+export const TINY_FILE = 'one\ntwo\nthree\nfour\nfive\nsix\nseven'
+
+// Far larger than the stub that would answer a repeat of it, in short lines: two of them are smaller than the stub.
+export const LARGE_FILE = Array.from({ length: 40 }, (_, index) => `line ${index + 1} of a file that is long enough to be worth a stub`).join('\n')

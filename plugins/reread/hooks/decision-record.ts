@@ -43,11 +43,17 @@ const actionOf = (decision: Decision, effectiveMode: ReadMode): Decision | 'none
 
 export type ByteFields = { bytes_saved?: number; bytes_would_save?: number; gross_bytes?: number; stub_bytes?: number }
 
-const byteFields = (savings: Savings | undefined, effectiveMode: ReadMode): ByteFields => {
-  if (savings === undefined) return {}
+// Only a dedupe saved (or would save) anything. A pass that compared the bytes reports the two figures and no net.
+const netFields = (savings: Savings, effectiveMode: ReadMode): ByteFields => {
   const net = savings.grossBytes - savings.stubBytes
+  return effectiveMode === 'off' ? { bytes_would_save: net } : { bytes_saved: net }
+}
+
+const byteFields = (evaluation: Evaluation, effectiveMode: ReadMode): ByteFields => {
+  const { savings } = evaluation
+  if (savings === undefined) return {}
   return {
-    ...(effectiveMode === 'off' ? { bytes_would_save: net } : { bytes_saved: net }),
+    ...(evaluation.decision === 'dedupe' ? netFields(savings, effectiveMode) : {}),
     gross_bytes: savings.grossBytes,
     stub_bytes: savings.stubBytes,
   }
@@ -65,7 +71,7 @@ export const decisionRecord = ({ now, sessionId, engineVersion, setting, effecti
     trigger_values: {
       decision: evaluation.decision,
       reason: evaluation.reason,
-      ...byteFields(evaluation.savings, effectiveMode),
+      ...byteFields(evaluation, effectiveMode),
       ...(evaluation.lines === undefined ? {} : { lines: evaluation.lines }),
       ...(evaluation.rangeKind === undefined ? {} : { range_kind: evaluation.rangeKind }),
       ...(evaluation.turnsSinceRead === undefined ? {} : { turns_since_read: evaluation.turnsSinceRead }),
