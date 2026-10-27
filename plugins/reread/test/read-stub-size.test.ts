@@ -29,7 +29,7 @@ describe('readTool: a repeat Read whose stub would not be smaller', () => {
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
     const { gross_bytes, stub_bytes } = triggerValues(world)
-    expect([gross_bytes, (stub_bytes as number) > 58]).toEqual([58, true])
+    expect([gross_bytes, stub_bytes]).toEqual([58, 232])
   })
 
   test('It reports no saving, positive or negative, for the pass', ACT, async ($, on) => {

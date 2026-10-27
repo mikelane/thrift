@@ -40,15 +40,17 @@ describe('stubContextLine', () => {
   })
 
   test('It says one line in the singular', () => {
-    expect(stubContextLine('/work/a.ts', 1, 1)).toContain('(same content, 1 line)')
+    expect(stubContextLine('/work/a.ts', 1, 1)).toBe(
+      'reread: /work/a.ts is unchanged since you read it at turn 1 (same content, 1 line). Its contents are earlier in this conversation. Read it again only if you need it in full.',
+    )
   })
 })
 
 describe('savingsOf', () => {
   test('It takes the gross bytes the caller gives and the bytes of the stub result and context line', () => {
-    const result = stubResult('/work/a.ts')
+    const stub = stubResult('/work/a.ts')
     const line = stubContextLine('/work/a.ts', 1, 3)
-    expect(savingsOf(900, result, line)).toEqual({ grossBytes: 900, stubBytes: utf8Bytes(JSON.stringify(result)) + utf8Bytes(line) })
+    expect(savingsOf(900, stub, line)).toEqual({ grossBytes: 900, stubBytes: utf8Bytes(JSON.stringify(stub)) + utf8Bytes(line) })
   })
 })
 

@@ -15,12 +15,12 @@ describe('readTool in off', () => {
     expect([isStub(second), world.readsThatRan.length]).toEqual([false, 2])
   })
 
-  test('It is the mode when the setting is left alone', async ($, on) => {
+  test('It runs as off when the setting is left alone', async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
-    expect(world.readsThatRan.length).toBe(2)
+    expect([world.readsThatRan.length, triggerValues(world).setting, lastRecord(world).mode]).toEqual([2, 'off', 'shadow'])
   })
 
   test('It logs a repeat as no action in shadow mode', OFF, async ($, on) => {
@@ -45,7 +45,8 @@ describe('readTool in off', () => {
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
     const { bytes_would_save, gross_bytes, stub_bytes } = triggerValues(world)
-    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_would_save]).toEqual([1465, true])
+    // SEVEN_LINES costs 1465 bytes as read; the stub and its context line cost 232.
+    expect([gross_bytes, stub_bytes, bytes_would_save]).toEqual([1465, 232, 1233])
   })
 
   test('It leaves bytes_saved out of the record', OFF, async ($, on) => {

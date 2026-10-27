@@ -69,7 +69,7 @@ describe('noteCompaction on session.compact', () => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    world.compactSkips = true
+    world.isCompactVetoed = true
     await compact($, 'manual')
     const after = await read($, '/work/a.ts')
     expect(isStub(after)).toBe(true)
@@ -195,6 +195,13 @@ describe('noteToolRan after a file-editing tool', () => {
     world.statThrowsFor.clear()
     const after = await read($, '/work/a.ts')
     expect(isStub(after)).toBe(false)
+  })
+
+  test('It says why in the debug log when an edited path cannot be resolved', ACT, async ($, on) => {
+    const world = install($, on)
+    world.statThrowsFor.add('/work/new.ts')
+    await runTool($, 'Write', { file_path: '/work/new.ts' })
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not resolve an edited path: /)])
   })
 
   test('It drops the path the tool was given when the engine resolves no real path', ACT, async ($, on) => {

@@ -254,7 +254,7 @@ describe('dropPaths', () => {
     trackRead(reads, 'main', '/work/a.ts|full', tracked())
     trackRead(reads, 'main', '/work/b.ts|full', tracked({ realPath: '/work/b.ts' }))
     dropPaths(reads, ['/work/a.ts'])
-    expect(findTracked(reads, 'main', requestOf('/work/b.ts', {}))).toBeDefined()
+    expect(findTracked(reads, 'main', requestOf('/work/b.ts', {}))?.tracked.realPath).toBe('/work/b.ts')
   })
 
   test('It drops the ranges of the path too', () => {
@@ -307,7 +307,7 @@ describe('dropContext', () => {
     trackRead(reads, 'main', '/work/a.ts|full', tracked())
     trackRead(reads, 'agent-1', '/work/a.ts|full', tracked())
     dropContext(reads, 'main')
-    expect(findTracked(reads, 'agent-1', requestOf('/work/a.ts', {}))).toBeDefined()
+    expect(findTracked(reads, 'agent-1', requestOf('/work/a.ts', {}))?.key).toBe('/work/a.ts|full')
   })
 
   test('It counts zero for a loop that read nothing', () => {

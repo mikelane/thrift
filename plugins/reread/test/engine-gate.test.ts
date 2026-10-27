@@ -46,7 +46,8 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
-    expect('bytes_would_save' in triggerValues(world)).toBe(true)
+    // SEVEN_LINES costs 1465 bytes as read; the stub and its context line cost 232.
+    expect([lastRecord(world).action, triggerValues(world).bytes_would_save, 'bytes_saved' in triggerValues(world)]).toEqual(['none', 1233, false])
   })
 
   test('It logs no untested_engine record on the tested engine', ACT, async ($, on) => {
@@ -84,16 +85,22 @@ describe('engineInfo: the engine version', () => {
 
   test('It runs as off and says why when the version cannot be read', ACT, async ($, on) => {
     const world = install($, on)
-    world.versionThrows = true
+    world.isVersionFailing = true
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     const second = await read($, '/work/a.ts')
-    expect([isStub(second), world.debugLines.some(line => line.startsWith('reread: could not read the engine version'))]).toEqual([false, true])
+    expect([isStub(second), world.debugLines]).toEqual([
+      false,
+      [
+        expect.stringMatching(/^reread: could not read the engine version: /),
+        'reread: engine unknown is not a release at or before the one reread was tested through, so it runs as off',
+      ],
+    ])
   })
 
   test('It records unknown as the engine version when it cannot be read', ACT, async ($, on) => {
     const world = install($, on)
-    world.versionThrows = true
+    world.isVersionFailing = true
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect(lastRecord(world).engine_version).toBe('unknown')

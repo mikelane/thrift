@@ -11,7 +11,7 @@ describe('writeRecord', () => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(lastRecord(world).component).toBe('reread')
+    expect(world.records.map(record => [record.component, record.trigger_values.reason])).toEqual([['reread', 'first_read']])
   })
 
   test('It writes through the owner-only appender', ACT, async ($, on) => {
@@ -39,14 +39,25 @@ describe('writeRecord', () => {
     const world = install($, on, { thriftHome: 'relative/dir' })
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toContain('reread: THRIFT_HOME is not an absolute path, so the default log location is used')
+    expect([world.debugLines, world.logArgv[0]?.slice(4)]).toEqual([
+      ['reread: THRIFT_HOME is not an absolute path, so the default log location is used'],
+      ['/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl'],
+    ])
   })
 
-  test('It says HOME is needed when THRIFT_HOME is not absolute and HOME is unset', ACT, async ($, on) => {
+  // The THRIFT_HOME line already says why there is no log, so the no-location line is left out.
+  test('It says only that HOME is needed when THRIFT_HOME is not absolute and HOME is unset', ACT, async ($, on) => {
     const world = install($, on, { home: null, thriftHome: 'relative/dir' })
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toContain('reread: THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set')
+    expect(world.debugLines).toEqual(['reread: THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'])
+  })
+
+  test('It treats an empty THRIFT_HOME as unset and writes under HOME without a debug line', ACT, async ($, on) => {
+    const world = install($, on, { thriftHome: '' })
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    await read($, '/work/a.ts')
+    expect([world.debugLines, world.logArgv[0]?.slice(4)]).toEqual([[], ['/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl']])
   })
 
   test('It writes no record when neither THRIFT_HOME nor HOME is set', ACT, async ($, on) => {
@@ -60,7 +71,7 @@ describe('writeRecord', () => {
     const world = install($, on, { home: null })
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toContain(NO_LOCATION)
+    expect(world.debugLines).toEqual([NO_LOCATION])
   })
 
   test('It says why when the log write exits non-zero', ACT, async ($, on) => {
@@ -68,7 +79,7 @@ describe('writeRecord', () => {
     world.logWrite = 'exit'
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toContain('reread: log write failed: disk full')
+    expect(world.debugLines).toEqual(['reread: log write to /home/u/.claude/thrift/decisions.jsonl failed (exit 1): disk full'])
   })
 
   test('It says why when the log write throws', ACT, async ($, on) => {
@@ -76,7 +87,7 @@ describe('writeRecord', () => {
     world.logWrite = 'throw'
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines.some(line => line.startsWith('reread: log write failed'))).toBe(true)
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not write a decision record: /)])
   })
 
   test('It still returns the stub when the log write fails', ACT, async ($, on) => {
@@ -95,13 +106,25 @@ describe('writeRecord', () => {
     expect([isStub(first), world.readsThatRan.length]).toEqual([false, 1])
   })
 
-  test('It writes scalars only, one record per line', ACT, async ($, on) => {
+  test('It writes a dedupe record whose trigger values are all scalars', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
-    const values = Object.values(lastRecord(world).trigger_values)
-    expect(values.every(value => ['string', 'number', 'boolean'].includes(typeof value))).toBe(true)
+    expect(lastRecord(world).trigger_values).toEqual({
+      decision: 'dedupe',
+      reason: 'exact_repeat',
+      bytes_saved: 1233,
+      gross_bytes: 1465,
+      stub_bytes: 232,
+      lines: 7,
+      range_kind: 'full',
+      turns_since_read: 0,
+      is_subagent: false,
+      path_hash: expect.stringMatching(/^[0-9a-f]{16}$/),
+      effective_mode: 'act',
+      setting: 'act',
+    })
   })
 })
 
@@ -110,6 +133,6 @@ describe('debug', () => {
     const world = install($, on, { home: null })
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect([world.debugLines.every(line => line.startsWith('reread: ')), world.transcriptLines]).toEqual([true, []])
+    expect([world.debugLines, world.transcriptLines]).toEqual([[NO_LOCATION], []])
   })
 })

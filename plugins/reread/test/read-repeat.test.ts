@@ -62,7 +62,9 @@ describe('readTool: a repeat Read of an unchanged file in act', () => {
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     const inside = await read($, '/work/a.ts', { offset: 2, limit: 3 })
-    expect(inside.context?.[0]).toContain('(same content, 3 lines)')
+    expect(inside.context).toEqual([
+      'reread: /work/a.ts is unchanged since you read it at turn 1 (same content, 3 lines). Its contents are earlier in this conversation. Read it again only if you need it in full.',
+    ])
   })
 
   test('It tracks the real path, so a symlink and its target are one file', ACT, async ($, on) => {
@@ -121,7 +123,8 @@ describe('readTool: the record of a Read evaluation', () => {
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
     const { bytes_saved, gross_bytes, stub_bytes } = triggerValues(world)
-    expect([gross_bytes, (gross_bytes as number) - (stub_bytes as number) === bytes_saved]).toEqual([1465, true])
+    // SEVEN_LINES costs 1465 bytes as read; the stub and its context line cost 232.
+    expect([gross_bytes, stub_bytes, bytes_saved]).toEqual([1465, 232, 1233])
   })
 
   test('It records the turns since the read', ACT, async ($, on) => {

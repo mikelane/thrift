@@ -22,7 +22,7 @@ describe('classifyReadResult', () => {
     expect(classifyReadResult({ result: { type: 'text', file: textFile } })).toMatchObject({ kind: 'text', modelText: '' })
   })
 
-  test('It classifies core file_unchanged result as core_dedup', () => {
+  test('It classifies a core file_unchanged result as file_unchanged', () => {
     expect(classifyReadResult({ result: { type: 'file_unchanged', file: { filePath: '/work/a.ts' } } })).toEqual({ kind: 'file_unchanged' })
   })
 

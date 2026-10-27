@@ -41,6 +41,10 @@ describe('pathHash', () => {
     expect(await pathHash('salt', '/work/a.ts')).toMatch(/^[0-9a-f]{16}$/)
   })
 
+  test('It returns the first 16 hex characters of the SHA-256 of the salt, a pipe and the path', async () => {
+    expect(await pathHash('salt', '/work/a.ts')).toBe('1b4f8ccf1f5f0841')
+  })
+
   test('It returns the same hash for the same salt and path', async () => {
     expect(await pathHash('salt', '/work/a.ts')).toBe(await pathHash('salt', '/work/a.ts'))
   })

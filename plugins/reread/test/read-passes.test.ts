@@ -9,6 +9,7 @@ import {
   rewriteBytesKeepingStat,
   rewriteKeepingStat,
   SEVEN_LINES,
+  TINY_FILE,
   triggerValues,
   type World,
 } from './world'
@@ -224,7 +225,7 @@ describe('readTool: a Read the plugin lets through', () => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    world.messagesThrows = true
+    world.isMessagesFailing = true
     const second = await read($, '/work/a.ts')
     expect([isStub(second), reasonOf(world)]).toEqual([false, ['pass', 'not_in_context']])
   })
@@ -233,7 +234,7 @@ describe('readTool: a Read the plugin lets through', () => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    world.turnsThrows = true
+    world.isTurnsFailing = true
     const second = await read($, '/work/a.ts')
     expect([isStub(second), world.readsThatRan.length]).toEqual([false, 2])
   })
@@ -241,7 +242,7 @@ describe('readTool: a Read the plugin lets through', () => {
   test('It records the read as passing when tracking fails after the tool ran', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
-    world.turnsThrows = true
+    world.isTurnsFailing = true
     const first = await read($, '/work/a.ts')
     expect([isStub(first), world.readsThatRan.length, reasonOf(world)]).toEqual([false, 1, ['pass', 'unreadable']])
   })
@@ -294,5 +295,50 @@ describe('readTool: override after a stub', () => {
     await read($, '/work/a.ts', { offset: 2, limit: 2 })
     const other = await read($, '/work/a.ts', { offset: 5, limit: 2 })
     expect(isStub(other)).toBe(true)
+  })
+})
+
+describe('passAndTrack: a pass whose repeat did not track', () => {
+  // The verdict compared the bytes (stub_not_smaller), but the tool then failed, so the record names the failure, not the comparison.
+  test('It records the untracked reason and leaves the compared bytes out', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', TINY_FILE)
+    await read($, '/work/a.ts')
+    world.readBehavior = 'error'
+    await read($, '/work/a.ts')
+    expect([reasonOf(world), 'gross_bytes' in triggerValues(world), 'stub_bytes' in triggerValues(world)]).toEqual([['pass', 'error_result'], false, false])
+  })
+})
+
+describe('readTool: the debug line for an engine call that failed', () => {
+  test('It says why when the file cannot be stat-ed', ACT, async ($, on) => {
+    const world = install($, on)
+    await read($, '/work/missing.ts')
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not stat a file: /)])
+  })
+
+  test('It says why when the file cannot be read to hash it', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    world.readThrowsFor.add('/work/a.ts')
+    await read($, '/work/a.ts')
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not read a file: /)])
+  })
+
+  test('It says why when the conversation cannot be read', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    await read($, '/work/a.ts')
+    world.isMessagesFailing = true
+    await read($, '/work/a.ts')
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not read the conversation: /)])
+  })
+
+  test('It says why when a read that ran cannot be tracked', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    world.isTurnsFailing = true
+    await read($, '/work/a.ts')
+    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not track a read: /)])
   })
 })
