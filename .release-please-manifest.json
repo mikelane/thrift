@@ -1,5 +1,5 @@
 {
   "plugins/handoff": "0.3.1",
-  "plugins/meter": "0.2.0",
+  "plugins/meter": "0.3.0",
   "plugins/reread": "1.0.0"
 }
