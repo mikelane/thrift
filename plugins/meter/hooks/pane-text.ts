@@ -42,9 +42,9 @@ export const contextGaugeText = (headline: HeadlineReading, compactsAt: number |
 }
 
 export const contextDetailText = (breakdown: BreakdownReading | null): string => {
-  const cache = `cache ${breakdown?.cacheHitPercent == null ? '—' : `${breakdown.cacheHitPercent}%`}`
+  const cacheHit = `cache ${breakdown?.cacheHitPercent == null ? '—' : `${breakdown.cacheHitPercent}%`}`
   const compactsAt = breakdown?.compactsAt
-  return compactsAt === undefined ? cache : [`compacts ${formatTokens(compactsAt)}`, cache].join(SEPARATOR)
+  return compactsAt === undefined ? cacheHit : [`compacts ${formatTokens(compactsAt)}`, cacheHit].join(SEPARATOR)
 }
 
 export const costRowText = (headline: HeadlineReading, set: GlyphSet): string | undefined =>

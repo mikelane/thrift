@@ -55,7 +55,8 @@ test('It returns too early from windowView under 5 percent elapsed', () => {
     state: 'too-early',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '10', percentUsed: 10,
+    percentText: '10',
+    percentUsed: 10,
   })
 })
 
@@ -64,7 +65,8 @@ test('It returns a plain row from windowView when resetsAt is one minute ago', (
     state: 'plain',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '30', percentUsed: 30,
+    percentText: '30',
+    percentUsed: 30,
   })
 })
 
@@ -81,7 +83,8 @@ test('It returns limit reached in red with its reset time from windowView at 100
     state: 'limit-reached',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '100', percentUsed: 100,
+    percentText: '100',
+    percentUsed: 100,
     color: 'error',
     resetsLabel: '9:40am',
   })
@@ -96,7 +99,8 @@ test('It returns limit reached with no reset time from windowView when resetsAt 
     state: 'limit-reached',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '100', percentUsed: 100,
+    percentText: '100',
+    percentUsed: 100,
     color: 'error',
   })
 })

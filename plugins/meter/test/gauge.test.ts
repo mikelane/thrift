@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { GAUGE_WIDTH, fillHalfCells, gaugeFor, markerIndex } from '../hooks/gauge'
 
-const track = (filled: string, markerAt?: number): string => {
+const expectedGauge = (filled: string, markerAt?: number): string => {
   const cells = [...filled.padEnd(GAUGE_WIDTH, '░')]
   if (markerAt !== undefined) cells[markerAt] = '│'
   return cells.join('')
@@ -48,23 +48,23 @@ for (const [share, expected] of markerCases) {
 }
 
 test('It draws only track in gaugeFor at share 0', () => {
-  expect(gaugeFor(0)).toBe(track(''))
+  expect(gaugeFor(0)).toBe(expectedGauge(''))
 })
 
 test('It draws whole cells in gaugeFor at an even half-cell count', () => {
-  expect(gaugeFor(0.07)).toBe(track('██'))
+  expect(gaugeFor(0.07)).toBe(expectedGauge('██'))
 })
 
 test('It draws a half cell in gaugeFor at an odd half-cell count', () => {
-  expect(gaugeFor(0.14)).toBe(track('███▌'))
+  expect(gaugeFor(0.14)).toBe(expectedGauge('███▌'))
 })
 
 test('It keeps one half cell in gaugeFor under the minimum', () => {
-  expect(gaugeFor(0.001, { minimumHalfCells: 1 })).toBe(track('▌'))
+  expect(gaugeFor(0.001, { minimumHalfCells: 1 })).toBe(expectedGauge('▌'))
 })
 
 test('It draws no fill in gaugeFor under one half cell without a minimum', () => {
-  expect(gaugeFor(0.001)).toBe(track(''))
+  expect(gaugeFor(0.001)).toBe(expectedGauge(''))
 })
 
 test('It fills every cell in gaugeFor past 100 percent', () => {
@@ -72,7 +72,7 @@ test('It fills every cell in gaugeFor past 100 percent', () => {
 })
 
 test('It draws the marker in the track in gaugeFor', () => {
-  expect(gaugeFor(0.07, { markerShare: 0.18 })).toBe(track('██', 5))
+  expect(gaugeFor(0.07, { markerShare: 0.18 })).toBe(expectedGauge('██', 5))
 })
 
 test('It draws the marker over the fill in gaugeFor when usage reaches it', () => {
@@ -80,11 +80,11 @@ test('It draws the marker over the fill in gaugeFor when usage reaches it', () =
 })
 
 test('It clamps the marker to the first cell in gaugeFor at elapsed share 0', () => {
-  expect(gaugeFor(0, { markerShare: 0 })).toBe(track('', 0))
+  expect(gaugeFor(0, { markerShare: 0 })).toBe(expectedGauge('', 0))
 })
 
 test('It clamps the marker to the last cell in gaugeFor at elapsed share 1', () => {
-  expect(gaugeFor(0, { markerShare: 1 })).toBe(track('', GAUGE_WIDTH - 1))
+  expect(gaugeFor(0, { markerShare: 1 })).toBe(expectedGauge('', GAUGE_WIDTH - 1))
 })
 
 test('It draws exactly one marker in gaugeFor', () => {

@@ -38,6 +38,10 @@ test('It right-aligns the second part to 30 columns in headerLine', () => {
   expect(headerLine('◔ CONTEXT', '149k / 1M')).toBe('◔ CONTEXT            149k / 1M')
 })
 
+test('It pads to exactly 30 columns in headerLine when the parts leave a two-space gap', () => {
+  expect(headerLine('A', 'b'.repeat(27))).toBe(`A  ${'b'.repeat(27)}`)
+})
+
 test('It keeps two spaces between the parts in headerLine when they overflow', () => {
   expect(headerLine('◔ CONTEXT', 'waiting for first response')).toBe('◔ CONTEXT  waiting for first response')
 })
@@ -74,7 +78,7 @@ test('It waits uncolored in contextRowText when the context has no tokens', () =
 })
 
 test('It waits in contextRowText when the tokens are 0', () => {
-  expect(contextRowText(headline(0), 167000, 'unicode').text).toContain('waiting for first response')
+  expect(contextRowText(headline(0), 167000, 'unicode')).toEqual({ text: '◔ CONTEXT  waiting for first response' })
 })
 
 test('It draws the nerd glyph in contextRowText', () => {
@@ -102,6 +106,10 @@ test('It fills the whole gauge in contextGaugeText over the window', () => {
 
 test('It returns undefined from contextGaugeText when the context has no tokens', () => {
   expect(contextGaugeText(headline(undefined), undefined)).toBeUndefined()
+})
+
+test('It returns undefined from contextGaugeText when the tokens are 0', () => {
+  expect(contextGaugeText(headline(0), 167000)).toBeUndefined()
 })
 
 test('It joins compacts and cache in contextDetailText', () => {
@@ -162,8 +170,8 @@ test('It adds the projection after the reset in windowRowTexts', () => {
 })
 
 test('It draws the marker over the fill in windowRowTexts when usage passes the elapsed share', () => {
-  const [, row] = windowRowTexts({ ...paced, percentText: '50', percentUsed: 50 }, 'unicode')
-  expect(row?.text).toBe('█████│' + '██████' + '▌' + '░'.repeat(12))
+  const [, gaugeRow] = windowRowTexts({ ...paced, percentText: '50', percentUsed: 50 }, 'unicode')
+  expect(gaugeRow?.text).toBe('█████│' + '██████' + '▌' + '░'.repeat(12))
 })
 
 test('It draws the weekly glyph in windowRowTexts', () => {
@@ -184,12 +192,12 @@ test('It draws a plain window with only header and gauge in windowRowTexts', () 
 })
 
 test('It draws a spend limit without a glyph and in red in windowRowTexts at its limit', () => {
-  const [header, bar] = windowRowTexts(
+  const [header, gaugeRow] = windowRowTexts(
     { state: 'plain', label: 'SPEND LIMIT', percentText: '104.5', percentUsed: 104.5, color: 'error' },
     'unicode',
   )
   expect(header).toEqual({ text: headerLine('SPEND LIMIT', '104.5%'), color: 'error' })
-  expect(bar).toEqual({ text: '█'.repeat(25), color: 'error' })
+  expect(gaugeRow).toEqual({ text: '█'.repeat(25), color: 'error' })
 })
 
 test('It draws limit reached as a full red gauge with its reset time in windowRowTexts', () => {

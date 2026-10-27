@@ -77,9 +77,11 @@ describe('drawMeter', () => {
     world.usage = usageOf(undefined)
     await startSession($)
     await runMeter($)
-    const row = await (await mountPane($)).find({ type: 'Text', text: /CONTEXT/ })
-    expect(row?.text).toContain('waiting for first response')
+    const pane = await mountPane($)
+    const row = await pane.find({ type: 'Text', text: /CONTEXT/ })
+    expect(row?.text).toBe('◔ CONTEXT  waiting for first response')
     expect(row?.props.color).toBeUndefined()
+    expect(pairs(await textsOf(pane), /[█▌░]/)).toEqual([])
   })
 
   test('It leaves out the 5-HOUR and WEEKLY rows and keeps CONTEXT and COST when rateLimits is empty', async ($, on) => {
@@ -112,6 +114,17 @@ describe('drawMeter', () => {
     expect(pairs(texts, /48% · 0.77×/)).toHaveLength(1)
     expect(pairs(texts, /^[█▌░│]{25}$/)).toEqual(['█'.repeat(12) + '░'.repeat(4) + '│' + '░'.repeat(8)])
     expect(pairs(texts, /^resets /)).toHaveLength(1)
+  })
+
+  test('It dims the reset line and leaves the 5-HOUR header and gauge undimmed for a paced window', async ($, on) => {
+    const world = install($, on)
+    world.usage = usageOf(1000, [{ kind: 'five_hour', percentUsed: 48, resetsAt: resetsIn(114) }])
+    await startSession($)
+    await runMeter($)
+    const pane = await mountPane($)
+    expect((await pane.find({ type: 'Text', text: /^resets / }))?.props.dimColor).toBe(true)
+    expect((await pane.find({ type: 'Text', text: /5-HOUR/ }))?.props.dimColor).toBeUndefined()
+    expect((await pane.find({ type: 'Text', text: /^[█▌░│]{25}$/ }))?.props.dimColor).toBeUndefined()
   })
 
   test('It draws a green 5-HOUR row with its pace and no projection', async ($, on) => {
@@ -161,6 +174,9 @@ describe('drawMeter', () => {
     expect(row?.text).toContain('100%')
     expect(pairs(await textsOf(pane), /^█{25}$/)).toHaveLength(1)
     expect(pairs(await textsOf(pane), /limit reached/)).toHaveLength(1)
+    const detail = await pane.find({ type: 'Text', text: /limit reached/ })
+    expect(detail?.props.color).toBe('error')
+    expect(detail?.props.dimColor).toBeUndefined()
     expect(pairs(await textsOf(pane), /pace|hits/)).toEqual([])
   })
 

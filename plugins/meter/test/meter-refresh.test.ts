@@ -39,7 +39,6 @@ describe('openMeter', () => {
     expect(texts).toContain('TOP CONTEXT')
     expect(texts).toContain('Messages')
     expect(texts).toContain('compacts 167k · cache 96%')
-    expect(texts).toContain('compacts 167k')
   })
 
   test('It takes the full count in place of the summary when /meter refresh opens a closed pane', async ($, on) => {

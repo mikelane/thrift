@@ -6,7 +6,7 @@ const HALF_CELL = '▌'
 const TRACK_CELL = '░'
 const MARKER_CELL = '│'
 
-export type GaugeOptions = {
+type GaugeOptions = {
   // Where the pace marker sits, as a share of the window that has elapsed.
   markerShare?: number
   // Least half-cells to fill; the context gauge asks for 1 so any usage shows.
