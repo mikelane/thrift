@@ -58,14 +58,45 @@ describe('openMeter', () => {
   })
 })
 
-describe('closeMeter', () => {
-  test('It closes the pane on a second /meter even when it is unplaced', async ($, on) => {
+describe('runMeterCommand with a listed but unplaced pane', () => {
+  const listUnplaced = async ($: Parameters<typeof install>[0], on: Parameters<typeof install>[1]) => {
     const world = install($, on)
-    world.isPlacedOnOpen = false
     await startSession($)
+    world.panes = [{ id: 'meter', title: 'meter', isShown: true, isFocused: false, isPlaced: false }]
+    return world
+  }
+
+  test('It opens the pane and replies Meter opened. on /meter', async ($, on) => {
+    const world = await listUnplaced($, on)
+    expect(await runMeter($)).toEqual({ text: 'Meter opened.' })
+    expect(world.opens).toEqual([{ id: 'meter' }])
+    expect(world.closes).toEqual([])
+  })
+
+  test('It takes the full count and replies Meter opened. on /meter refresh', async ($, on) => {
+    const world = await listUnplaced($, on)
+    expect(await runMeter($, 'refresh')).toEqual({ text: 'Meter opened.' })
+    expect(world.usageCalls).toEqual(['plain', 'full'])
+  })
+
+  test('It closes the pane on the next /meter once the open placed it', async ($, on) => {
+    const world = await listUnplaced($, on)
     await runMeter($)
+    expect(await runMeter($)).toEqual({ text: 'Meter closed.' })
+    expect(world.closes).toEqual(['meter'])
+  })
+})
+
+describe('closeMeter', () => {
+  test('It closes a listed and placed pane on /meter', async ($, on) => {
+    const world = await opened($, on)
     await runMeter($)
     expect(world.closes).toEqual(['meter'])
+  })
+
+  test('It replies Meter closed. for a listed and placed pane', async ($, on) => {
+    await opened($, on)
+    expect(await runMeter($)).toEqual({ text: 'Meter closed.' })
   })
 
   test('It takes no reading on a second /meter', async ($, on) => {
