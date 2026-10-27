@@ -17,6 +17,8 @@ const entry: Tracked = {
   textBytes: 1,
   isFull: true,
   lineBytes: [1],
+  modelTextSha256: '',
+  modelTextLength: 0,
   stubbedKeys: new Set(),
 }
 

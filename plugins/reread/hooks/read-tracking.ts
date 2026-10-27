@@ -12,6 +12,10 @@ export type Tracked = {
   totalLines: number
   // UTF-8 bytes of the text the model read, line numbers included.
   textBytes: number
+  // The text the model read, as a SHA-256 and a length in UTF-16 code units: the conversation's copy of the result must still
+  // begin with it, or the contents are no longer there to point at.
+  modelTextSha256: string
+  modelTextLength: number
   isFull: boolean
   // UTF-8 bytes of each line of the file, kept for a full read only: a range inside it sums its lines from here.
   lineBytes: readonly number[]

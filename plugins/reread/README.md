@@ -62,8 +62,10 @@ it goes down this list and stops at the first answer:
 4. **The file changed.** A different size or modified time passes. If both match, the file is read and
    hashed, and a different hash passes too. A file that cannot be read passes.
 5. **The original result is gone.** The plugin looks for the tool call's result in the conversation
-   (`$.session.messages()`, or `{ agentId }` for a subagent). If it is not there, or the conversation
-   cannot be read, the read passes. Absence always means pass.
+   (`$.session.messages()`, or `{ agentId }` for a subagent). If it is not there, is there as an
+   error (a plugin above withheld or refused it), no longer begins with the text the model read (a
+   plugin above answered in its place), or the conversation cannot be read, the read passes. Absence
+   always means pass.
 6. **The stub would not be smaller.** The stub's cost is its result as JSON plus the context line, in
    UTF-8 bytes. The text it replaces is what the model read the first time (for a range inside a full
    read, the lower-bound sum of those lines). If the stub is not strictly smaller, as for a very short
@@ -133,7 +135,7 @@ a build it was not tested through.
 | `action` | `dedupe` (answered with a stub), `pass` (let through), `override` (let through because the model asked again after a stub), `invalidate` (dropped tracked reads), `untested_engine`, or `none` (in `off`, whatever the logic decided) |
 | `engine_version` | The Claude Code release (`base`), or the full version when there is no `base`, or `unknown` when it could not be read. |
 | `trigger_values.decision` | What the logic decided: `dedupe`, `pass`, `override`, `invalidate`, or `untested_engine`. In `off` this is what `action` would have been. |
-| `trigger_values.reason` | Why the decision came out as it did: `first_read`, `exact_repeat` (the same request again), `inside_full_read` (a range inside an earlier read of the whole file), `changed` (size, modified time or hash differ, or the file changed during the read), `different_range` (the file was read, but no earlier read covers this range), `not_text` (an image, PDF, notebook, page images or other non-text result), `pdf_pages` (a `pages` read), `error_result` (the tool refused or failed), `token_cap_truncated` (Claude Code cut the read short at its token cap, so it is tracked as partial), `not_in_context` (the original result is not in the conversation, or the conversation could not be read), `plugin_call` (another plugin raised the read), `override_after_stub` (the model asked again after a stub), `stub_not_smaller` (a stub would not have been smaller, in UTF-8 bytes, than the text it replaces, so the read passed), `core_dedup` (Claude Code answered with its own `file_unchanged`), `unreadable` (the file could not be statted, read or hashed, or tracking it failed), `untested_engine` (the build is newer than the plugin was tested through, or is not a release), `compaction`, `clear` (the session ended), `edit` (a file-editing tool ran), or `bash` (a Bash command ran) |
+| `trigger_values.reason` | Why the decision came out as it did: `first_read`, `exact_repeat` (the same request again), `inside_full_read` (a range inside an earlier read of the whole file), `changed` (size, modified time or hash differ, or the file changed during the read), `different_range` (the file was read, but no earlier read covers this range), `not_text` (an image, PDF, notebook, page images or other non-text result), `pdf_pages` (a `pages` read), `error_result` (the tool refused or failed), `token_cap_truncated` (Claude Code cut the read short at its token cap, so it is tracked as partial), `not_in_context` (the original result is not in the conversation, is there as an error, no longer begins with the text the model read, or the conversation could not be read), `plugin_call` (another plugin raised the read), `override_after_stub` (the model asked again after a stub), `stub_not_smaller` (a stub would not have been smaller, in UTF-8 bytes, than the text it replaces, so the read passed), `core_dedup` (Claude Code answered with its own `file_unchanged`), `unreadable` (the file could not be statted, read or hashed, or tracking it failed), `untested_engine` (the build is newer than the plugin was tested through, or is not a release), `compaction`, `clear` (the session ended), `edit` (a file-editing tool ran), or `bash` (a Bash command ran) |
 | `trigger_values.bytes_saved` | `act` and `ask` only, on a `dedupe`: the net bytes the stub kept out of the context, `gross_bytes - stub_bytes`. Always positive: a stub that would not be smaller is not sent. |
 | `trigger_values.bytes_would_save` | `off` only, on a `dedupe`: the same net figure, for the saving a stub would have made |
 | `trigger_values.gross_bytes` | On a `dedupe` or a `stub_not_smaller` pass: the UTF-8 bytes of the text the model read the first time, line numbers included. For a range inside a full read, the bytes of those lines in the file's own text, which leaves out the line-number prefixes, so it is a lower bound. |
@@ -208,6 +210,8 @@ invalidation and the log. These still need a check in a real Desktop session:
 - Read, read again (stub), then `Edit` the file: the edit is accepted.
 - What Claude Code's rendered `file_unchanged` text says, so the context line can be reworded.
 - Whether `$.session.messages()` still holds the original result after a rewind.
+- That a result's `text` in `$.session.messages()` begins with the `text` `tool.call` returned for it.
+  If it does not, every repeat passes as `not_in_context`: no stubs, never a wrong one.
 - Whether Claude Code's own dedup ever fires first (`core_dedup` in the log).
 
 ## Development

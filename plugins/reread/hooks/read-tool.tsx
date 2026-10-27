@@ -15,6 +15,7 @@ import {
   trackRead,
   type Found,
   type ReadRequest,
+  type Tracked,
 } from './read-tracking'
 import { writeRecord } from './record-writer'
 import type { SessionState } from './session-state'
@@ -64,10 +65,16 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
   }
 }
 
-async function isInContext($: EngineInterface, agentId: string | undefined, toolUseId: string): Promise<boolean> {
+// The original result must still be there as the text the model read: a plugin above may have withheld it (an error result) or
+// answered in its place, and either way the contents are not in the context to point at.
+async function isInContext($: EngineInterface, agentId: string | undefined, tracked: Tracked): Promise<boolean> {
   try {
     const messages = agentId === undefined ? await $.session.messages() : await $.session.messages({ agentId })
-    return Array.isArray(messages) && messages.some(message => message.toolResults?.some(result => result.tool_use_id === toolUseId) === true)
+    const original = Array.isArray(messages)
+      ? messages.flatMap(message => message.toolResults ?? []).find(result => result.tool_use_id === tracked.toolUseId)
+      : undefined
+    if (original === undefined || original.isError) return false
+    return (await sha256Hex(original.text.slice(0, tracked.modelTextLength))) === tracked.modelTextSha256
   } catch (error) {
     debug($, `could not read the conversation: ${String(error)}`)
     return false
@@ -89,7 +96,7 @@ async function judge($: EngineInterface, subject: Subject, call: ReadCall, reque
   const text = await readText($, request.realPath)
   if (text === undefined) return { kind: 'pass', decision: 'pass', reason: 'unreadable', found }
   if ((await sha256Hex(text)) !== tracked.sha256) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
-  if (!(await isInContext($, call.agentId, tracked.toolUseId))) return { kind: 'pass', decision: 'pass', reason: 'not_in_context', found }
+  if (!(await isInContext($, call.agentId, tracked))) return { kind: 'pass', decision: 'pass', reason: 'not_in_context', found }
   // Last, so a stub is only costed once a dedupe is possible: a stub that is not smaller than the read it replaces saves nothing.
   const dedupe = await dedupeEvaluation($, call, request, found)
   if (!stubIsSmaller(dedupe.evaluation.savings)) return { kind: 'pass', decision: 'pass', reason: 'stub_not_smaller', found, savings: dedupe.evaluation.savings }
@@ -146,6 +153,8 @@ async function trackResult(
     numLines,
     totalLines,
     textBytes: utf8Bytes(outcome.modelText),
+    modelTextSha256: await sha256Hex(outcome.modelText),
+    modelTextLength: outcome.modelText.length,
     isFull,
     lineBytes: isFull ? lineByteLengths(text) : [],
     stubbedKeys: new Set(),

@@ -27,6 +27,8 @@ const tracked = (overrides: Partial<Tracked> = {}): Tracked => ({
   textBytes: 500,
   isFull: true,
   lineBytes: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
+  modelTextSha256: '',
+  modelTextLength: 0,
   stubbedKeys: new Set(),
   ...overrides,
 })
