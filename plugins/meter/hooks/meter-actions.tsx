@@ -88,10 +88,7 @@ export async function restartMeterReading($: EngineInterface): Promise<void> {
 
 export async function reloadOpenMeter($: EngineInterface): Promise<void> {
   if (!(await isMeterOpen($))) return
-  await trackingBreakdown(async () => {
-    await loadHeadline($)
-    await loadBreakdown($, 'summary')
-  })
+  await loadReading($, 'summary')
 }
 
 async function closeMeter($: EngineInterface): Promise<void> {
@@ -118,11 +115,11 @@ const USAGE = 'Usage: /meter to open or close the pane, /meter refresh to take a
 export async function runMeterCommand($: EngineInterface, args: string): Promise<{ text: string }> {
   const argument = args.trim()
   if (argument !== '' && argument !== 'refresh') return { text: USAGE }
-  const pane = (await $.ui.panes()).find(listed => listed.id === PANE_ID)
-  if (pane?.isPlaced) return argument === 'refresh' ? refreshAndReply($) : closeAndReply($)
+  const listedPane = (await $.ui.panes()).find(pane => pane.id === PANE_ID)
+  if (listedPane?.isPlaced) return argument === 'refresh' ? refreshAndReply($) : closeAndReply($)
   const opened = await openPane($)
   // An asked open that still places nothing (no surface) would otherwise leave /meter unable to close the pane.
-  if (!opened.isPlaced && pane !== undefined) return closeAndReply($)
+  if (!opened.isPlaced && listedPane !== undefined) return closeAndReply($)
   await loadReading($, argument === 'refresh' ? 'full' : 'summary')
   if (opened.isPlaced) return { text: 'Meter opened.' }
   return { text: `Meter opened, but nothing here can show it yet (${opened.reason}).` }
