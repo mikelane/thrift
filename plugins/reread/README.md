@@ -10,8 +10,9 @@ Success means fewer bytes of repeat file contents entering the context, measured
 `bytes_saved` summed per session in `decisions.jsonl` against the `bytes_would_save` baseline that
 `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.311. Nothing has been verified in a
-> live session yet; see [What has been verified live](#what-has-been-verified-live).
+> **Status:** early. The tests pass against Claude Code 2.1.311. One live session has been checked,
+> in `ask` mode on Claude Code 2.1.308 in the Desktop app; see
+> [What has been verified live](#what-has-been-verified-live).
 
 ## Install
 
@@ -88,8 +89,8 @@ one line of context, for example:
 > contents are earlier in this conversation. Read it again only if you need it in full.
 
 The turn is the number of prompts you had sent when the file was read. The line count is the lines
-the repeat asked for. Wording is expected to change once the rendered `file_unchanged` text has been
-seen live.
+the repeat asked for. Claude Code renders the `file_unchanged` result as its own text, quoted under
+[What has been verified live](#what-has-been-verified-live).
 
 ### What drops the tracked reads
 
@@ -179,8 +180,8 @@ means fewer stubs until the files are read once more.
   drops a loop's reads on every trigger, `precompute` included, which over-invalidates and costs a
   few stubs, never a wrong one.
 - **Claude Code's own dedup.** Core has a `file_unchanged` path of its own. It did not fire in a live
-  session on 2.1.311 (three reads of one file returned the full contents each time), so it is gated
-  or conditional. When it does fire, the plugin logs `core_dedup`, counts no saving, and tracks
+  session on 2.1.311 (three reads of one file returned the full contents each time), nor in the
+  2.1.308 Desktop check, so it is gated or conditional. When it does fire, the plugin logs `core_dedup`, counts no saving, and tracks
   nothing.
 - **Subrange bytes are a lower bound.** A range inside an earlier whole-file read is costed from the
   file's own lines, without the line-number prefixes the model saw.
@@ -190,7 +191,8 @@ means fewer stubs until the files are read once more.
   prefixes, so a borderline subrange may pass when a stub would just have won.
 - **Read before Edit after a stub.** Claude Code refuses an `Edit` of a file the model has not read.
   Whether a stub counts as having read it is Claude Code's own check, which does not run under
-  `claude plugin test`. It is verified live, not by the tests.
+  `claude plugin test`, so the tests cannot cover it. In the 2.1.308 Desktop check an `Edit` right
+  after a stub was accepted, and so was one after a stub and an override.
 - **Files that change without a tool the plugin watches.** `Write`, `Edit`, `MultiEdit`,
   `NotebookEdit` and `Bash` drop the tracked reads. A file changed by anything else (an MCP tool, an
   editor, another process) is caught only by the size and modified-time check and the hash, which
@@ -201,18 +203,50 @@ means fewer stubs until the files are read once more.
 
 ## What has been verified live
 
-Nothing yet. The testing-kit tests cover every decision, every reason, both loops, every
-invalidation and the log. These still need a check in a real Desktop session:
+The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
+log. One live check has been run on top of them: on 2026-10-27, in the Code tab of the Claude
+Desktop app, on Claude Code 2.1.308. The plugin was loaded from branch head `cba0844` with
+`CLAUDE_CODE_PLUGIN_DIRS`, with `readMode` set to `ask`. The probe file had 80 lines and 1111 bytes
+(`Read` showed 81 lines, the last one empty). Every step ran in one user turn.
 
-- Read a file, read it again: the second read is a stub, and `decisions.jsonl` has a `dedupe`
-  record.
-- Edit the file, then read it: the full contents come back.
-- Read, read again (stub), then `Edit` the file: the edit is accepted.
-- What Claude Code's rendered `file_unchanged` text says, so the context line can be reworded.
-- Whether `$.session.messages()` still holds the original result after a rewind.
-- That a result's `text` in `$.session.messages()` begins with the `text` `tool.call` returned for it.
-  If it does not, every repeat passes as `not_in_context`: no stubs, never a wrong one.
-- Whether Claude Code's own dedup ever fires first (`core_dedup` in the log).
+| Step | Outcome |
+|---|---|
+| Read the whole file | Full contents, logged as `first_read` |
+| Read it again | Stub: `dedupe`, `exact_repeat`, `gross_bytes` 1345, `stub_bytes` 363, `bytes_saved` 982 |
+| Read it a third time | Full contents: `override`, `override_after_stub` |
+| Read `offset` 10, `limit` 20, a range inside the full read | Full contents: `pass`, `stub_not_smaller` (280 bytes of lines against a 363-byte stub), as the size rule says it should |
+| `Edit` the file after the stub and the override | Accepted, with no "file not read" error. `invalidate`, `edit`, 2 reads dropped |
+| Read the whole file | Full contents, logged as `first_read` |
+| Read the whole file, then `Edit` it right after the stub | Stub, then the edit "updated successfully" |
+| A subagent reads the file twice | Full contents, then a stub. The records carry `is_subagent: true` and the parent session id |
+| Run `Bash` (`true`), then read the file | `invalidate`, `bash`, 1 read dropped, then full contents |
+| Read with `limit` 0 | Stub, `range_kind: full`. `limit` 0 reads to the end, so it is an exact repeat of the full read |
+
+What the model read for a stub, verbatim. Claude Code rendered the `file_unchanged` result as:
+
+> Wasted call — file unchanged since your last Read. Refer to that earlier tool_result instead.
+
+and the plugin's context line beside it was:
+
+> reread: &lt;path&gt; is unchanged since you read it at turn 1 (same content, 81 lines). Its contents
+> are earlier in this conversation. Read it again only if you need it in full.
+
+The same run also showed:
+
+- The `$.session.messages()` check works live. Stubs were sent, so a result's text in the
+  transcript does begin with the text `tool.call` returned for it.
+- `core_dedup` never fired. Claude Code's own dedup answered none of these reads on 2.1.308.
+- "turn 1" in the context line is the user turn. Every step ran in that one turn, so
+  `turns_since_read` was 0 throughout.
+
+### Not verified live
+
+- The `ask`-mode transcript line (the model cannot see it, and no person looked).
+- Compaction, `/clear` and resume invalidation.
+- Rewind, and whether `$.session.messages()` reflects it.
+- `precompute` install.
+- `off` and `act` modes in a live session (only `ask` ran).
+- The terminal CLI (only Desktop ran).
 
 ## Development
 
