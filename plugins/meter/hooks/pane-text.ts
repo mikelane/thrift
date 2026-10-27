@@ -10,7 +10,9 @@ import type { WindowView } from './window-view'
 
 const SEPARATOR = ' · '
 const TOKEN_COLUMN_WIDTH = 4
-const HEADER_WIDTH = GAUGE_WIDTH + 5
+const GAUGE_PERCENT_GAP = '  '
+const TWO_DIGIT_PERCENT_WIDTH = '15%'.length
+const HEADER_WIDTH = GAUGE_WIDTH + GAUGE_PERCENT_GAP.length + TWO_DIGIT_PERCENT_WIDTH
 const MIN_HEADER_GAP = 2
 const PERCENT_SHARE = 100
 
@@ -34,7 +36,7 @@ export const contextGaugeText = (headline: HeadlineReading, compactsAt: number |
   if (!contextTokens) return undefined
   const fill = contextFill(contextTokens, contextWindow, compactsAt)
   return {
-    text: `${gaugeFor(fill, { minimumHalfCells: 1 })}  ${fillPercent(fill)}%`,
+    text: `${gaugeFor(fill, { minimumHalfCells: 1 })}${GAUGE_PERCENT_GAP}${fillPercent(fill)}%`,
     color: contextBand(fill),
   }
 }
