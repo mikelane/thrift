@@ -169,11 +169,18 @@ test('It aligns names, tokens and bars in topContextRowTexts', () => {
       { name: 'Memory files', tokens: 6000 },
     ]),
   ).toEqual([
-    '  Messages       88k  \u2588\u2588\u2588\u2588\u2588\u2588',
-    '  MCP tools      21k  \u2588\u258C',
-    '  Custom agents  14k  \u2588',
-    '  Skills          8k  \u258C',
-    '  Memory files    6k  \u258C',
+    'Messages       88k ━━━━━━━━━━',
+    'MCP tools      21k ━━',
+    'Custom agents  14k ━━',
+    'Skills          8k ━',
+    'Memory files    6k ━',
+  ])
+})
+
+test('It draws no bar in topContextRowTexts for a row with 0 tokens', () => {
+  expect(topContextRowTexts([{ name: 'Messages', tokens: 5000 }, { name: 'Skills', tokens: 0 }])).toEqual([
+    'Messages   5k ━━━━━━━━━━',
+    'Skills      0',
   ])
 })
 

@@ -182,7 +182,7 @@ describe('drawMeter', () => {
     })
     await startSession($)
     await runMeter($)
-    const rows = (await textsOf(await mountPane($))).filter(text => /^ {2}\S.* \d+k {2}/.test(text))
+    const rows = (await textsOf(await mountPane($))).filter(text => /^[A-Z][A-Za-z ]* +\d+k ━/.test(text))
     expect(rows.map(row => row.trim().replace(/ +\d+k.*$/, ''))).toEqual([
       'Messages',
       'MCP tools',

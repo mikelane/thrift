@@ -67,7 +67,7 @@ export const topContextRowTexts = (rows: readonly NamedTokens[]): string[] => {
   const largest = Math.max(0, ...rows.map(row => row.tokens))
   return rows.map(({ name, tokens }) => {
     const figure = formatTokens(tokens).padStart(TOKEN_COLUMN_WIDTH)
-    return `  ${name.padEnd(nameWidth)} ${figure}  ${barFor(tokens, largest)}`
+    return `${name.padEnd(nameWidth)} ${figure} ${barFor(tokens, largest)}`.trimEnd()
   })
 }
 

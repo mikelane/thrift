@@ -10,6 +10,15 @@ const tokenCases = [
   [1500, '2k'],
   [999, '999'],
   [0, '0'],
+  [967000, '967k'],
+  [999499, '999k'],
+  [999500, '1M'],
+  [999600, '1M'],
+  [1000000, '1M'],
+  [1049999, '1M'],
+  [1050000, '1.1M'],
+  [1500000, '1.5M'],
+  [2000000, '2M'],
 ] as const
 
 for (const [tokens, expected] of tokenCases) {
@@ -40,18 +49,18 @@ test('It returns 0s ago from ageLabel when the clock reads before the breakdown'
 })
 
 const barCases = [
-  [88000, 88000, '██████'],
-  [21000, 88000, '█▌'],
-  [14000, 88000, '█'],
-  [8000, 88000, '▌'],
-  [6000, 88000, '▌'],
-  [1, 88000, '▌'],
+  [88000, 88000, '━━━━━━━━━━'],
+  [44000, 88000, '━━━━━'],
+  [30000, 66000, '━━━━━'],
+  [13000, 66000, '━━'],
+  [10000, 66000, '━━'],
+  [1, 88000, '━'],
   [0, 88000, ''],
   [5, 0, ''],
 ] as const
 
 for (const [tokens, largest, expected] of barCases) {
-  test(`It returns ${JSON.stringify(expected)} from barFor for ${tokens} against ${largest}`, () => {
+  test(`It returns ${expected || 'nothing'} from barFor for ${tokens} of ${largest}`, () => {
     expect(barFor(tokens, largest)).toBe(expected)
   })
 }
