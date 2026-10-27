@@ -1,0 +1,23 @@
+{
+  "name": "reread",
+  "version": "0.0.0",
+  "description": "Answers a repeat Read of an unchanged file with a short stub instead of its contents a second time.",
+  "author": {
+    "name": "Mike Lane"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "readMode": {
+      "type": "string",
+      "title": "Reread mode",
+      "description": "off logs a shadow baseline and acts on nothing. ask answers a repeat Read of an unchanged file with a stub and shows a line for each one. act answers with the stub without the line.",
+      "options": [
+        "off",
+        "ask",
+        "act"
+      ],
+      "default": "off"
+    }
+  }
+}

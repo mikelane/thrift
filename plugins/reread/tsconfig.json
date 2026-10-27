@@ -1,0 +1,5 @@
+{
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": { "noEmit": true, "noUnusedLocals": true },
+  "include": ["hooks", "types", "test"]
+}
