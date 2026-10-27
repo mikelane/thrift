@@ -50,7 +50,9 @@ elapsed: a fill that stops short of it is under pace.
   `/meter` still toggles. This is covered by tests; not run live.
 - `/meter refresh` takes a full count (see Refresh policy). It works without focus. While the pane
   is closed or unplaced it opens the pane and takes the full count in place of the open-time
-  summary.
+  summary. The exception is a pane that was already listed and whose asked open still answers
+  unplaced (no surface can place it). Refresh closes that pane, takes no count, and replies
+  `Meter closed.`, the same as `/meter`.
 - Any other argument answers with a usage line and changes nothing.
 - The setting `meterAutoOpen` (default `false`) opens the pane at session start. An unasked pane is
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
