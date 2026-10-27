@@ -32,6 +32,10 @@ export type World = {
   turns: number
   // tool_use_ids each loop's context holds, by agent id ('main' for the main loop)
   contexts: Map<string, string[]>
+  // The text each answered call left in the conversation, by tool_use_id: what the model read.
+  resultTexts: Map<string, string>
+  // Results the conversation holds as an error, as when a plugin above withheld or refused the answer.
+  errorResults: Set<string>
   deniedAgents: Set<string>
   readBehavior: ReadBehavior
   // Reads that reached the bottom, i.e. the ones the plugin let through.
@@ -57,7 +61,8 @@ const modelText = (path: string, lines: string[], startLine: number): string => 
 const sliceOf = (text: string, offset: number | undefined, limit: number | undefined) => {
   const all = text.split('\n')
   const start = Math.max(offset ?? 1, 1)
-  const picked = all.slice(start - 1, limit === undefined ? undefined : start - 1 + limit)
+  // Read reads to the end for a limit of zero or less, as with none (2.1.311).
+  const picked = all.slice(start - 1, limit === undefined || limit <= 0 ? undefined : start - 1 + limit)
   return { all, picked, start }
 }
 
@@ -113,7 +118,9 @@ const installToolMocks = (on: On, world: World) => {
     world.contexts.set(loop, [...(world.contexts.get(loop) ?? []), e.tool_use_id])
     world.duringRead?.()
     world.duringRead = undefined
-    return readResult(world, e)
+    const answer = readResult(world, e)
+    world.resultTexts.set(e.tool_use_id, answer.text)
+    return answer
   })
 }
 
@@ -152,7 +159,7 @@ const installSessionMocks = (on: On, world: World) => {
     const loop = e.agentId ?? MAIN
     if (world.deniedAgents.has(loop)) return ok({ deny: `no conversation for ${loop}` })
     const ids = world.contexts.get(loop) ?? []
-    return ok([{ role: 'user' as const, text: '', toolUses: [], toolResults: ids.map(id => ({ tool_use_id: id, text: '', isError: false })) }])
+    return ok([{ role: 'user' as const, text: '', toolUses: [], toolResults: ids.map(id => ({ tool_use_id: id, text: world.resultTexts.get(id) ?? '', isError: world.errorResults.has(id) })) }])
   })
   on('session.compact', () => (world.compactSkips ? { skip: 'vetoed' } : { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
 }
@@ -196,6 +203,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     versionReads: 0,
     turns: 1,
     contexts: new Map(),
+    resultTexts: new Map(),
+    errorResults: new Set(),
     deniedAgents: new Set(),
     readBehavior: 'text',
     readsThatRan: [],

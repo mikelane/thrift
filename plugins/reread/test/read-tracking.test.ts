@@ -66,6 +66,19 @@ describe('requestOf', () => {
     expect(requestOf('/work/a.ts', { offset: 5 }).key).toBe('/work/a.ts|5:end')
   })
 
+  // Read reads to the end of the file for a limit of zero or less, as with no limit (2.1.311).
+  test('It keys a limit of 0 as open-ended', () => {
+    expect(requestOf('/work/a.ts', { offset: 5, limit: 0 }).key).toBe('/work/a.ts|5:end')
+  })
+
+  test('It keys a negative limit as open-ended', () => {
+    expect(requestOf('/work/a.ts', { offset: 5, limit: -2 }).key).toBe('/work/a.ts|5:end')
+  })
+
+  test('It keys a negative limit from line 1 as full', () => {
+    expect(requestOf('/work/a.ts', { limit: -2 }).isFull).toBe(true)
+  })
+
   test('It adds the allow_large flag to the key', () => {
     expect(requestOf('/work/a.ts', { allow_large: true }).key).toBe('/work/a.ts|full+large')
   })

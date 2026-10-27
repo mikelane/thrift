@@ -42,8 +42,10 @@ export const newReads = (): Reads => new Map()
 
 export const contextOf = (agentId: string | undefined): string => agentId ?? MAIN
 
-export const requestOf = (realPath: string, { offset, limit, allow_large }: ReadInput): ReadRequest => {
+// Read starts at line 1 for an offset below 1, and reads to the end for a limit of zero or less, as with none (2.1.311).
+export const requestOf = (realPath: string, { offset, limit: asked, allow_large }: ReadInput): ReadRequest => {
   const start = Math.max(offset ?? 1, 1)
+  const limit = asked !== undefined && asked > 0 ? asked : undefined
   const isFull = start === 1 && limit === undefined
   const range = isFull ? 'full' : `${start}:${limit ?? 'end'}`
   return { key: `${realPath}|${range}${allow_large === true ? '+large' : ''}`, realPath, isFull, start, limit }
