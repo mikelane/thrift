@@ -12,6 +12,28 @@ test_live_start_sets_the_permission_mode_instead_of_inheriting_the_owners() {
   assert_tmux_called '--permission-mode'
 }
 
+test_live_start_makes_the_session_120_columns_wide_by_default() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
+  assert_tmux_called ' -x 120 -y 40 '
+}
+
+test_live_start_makes_the_session_as_wide_as_live_columns() {
+  run_live 'LIVE_COLUMNS=144; LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
+  assert_tmux_called ' -x 144 -y 40 '
+}
+
+test_a_width_that_is_not_a_whole_number_is_an_error() {
+  run_live 'LIVE_COLUMNS=wide; live_init'
+  assert_exit_code 2
+  assert_out_has 'LIVE_COLUMNS must be a whole number'
+}
+
+test_a_width_of_zero_is_an_error() {
+  run_live 'LIVE_COLUMNS=0; live_init'
+  assert_exit_code 2
+  assert_out_has 'LIVE_COLUMNS must be a whole number'
+}
+
 test_live_start_is_an_error_when_tmux_cannot_start_the_session() {
   run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_CWD=$TMPDIR; LIVE_NAMES=(); live_start a'
   assert_exit_code 2
