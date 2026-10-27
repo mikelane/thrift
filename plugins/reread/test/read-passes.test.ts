@@ -1,12 +1,26 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, putFile, read, rewriteKeepingStat, SEVEN_LINES, triggerValues, type World } from './world'
+import {
+  install,
+  isStub,
+  putFile,
+  putFileBytes,
+  read,
+  rewriteBytesKeepingStat,
+  rewriteKeepingStat,
+  SEVEN_LINES,
+  triggerValues,
+  type World,
+} from './world'
 
 const ACT = { options: { readMode: 'act' } }
 
 const reasonOf = (world: World) => [triggerValues(world).decision, triggerValues(world).reason]
 
 const lastAction = (world: World): string => world.records.at(-1)?.action ?? ''
+
+// The seven lines, then one byte that is not valid UTF-8 on its own, so the bytes decode to the same text for either value.
+const sevenLinesEndingIn = (byte: number): Uint8Array => new Uint8Array([...new TextEncoder().encode(SEVEN_LINES), byte])
 
 describe('readTool: a Read the plugin lets through', () => {
   test('It passes when the file changed size and mtime', ACT, async ($, on) => {
@@ -23,6 +37,15 @@ describe('readTool: a Read the plugin lets through', () => {
     putFile(world, '/work/a.ts', 'aaaa\nbbbb')
     await read($, '/work/a.ts')
     rewriteKeepingStat(world, '/work/a.ts', 'cccc\ndddd')
+    const second = await read($, '/work/a.ts')
+    expect([isStub(second), reasonOf(world)]).toEqual([false, ['pass', 'changed']])
+  })
+
+  test('It passes when the stat is the same but the bytes differ only where the text does not', ACT, async ($, on) => {
+    const world = install($, on)
+    putFileBytes(world, '/work/a.ts', sevenLinesEndingIn(0xff))
+    await read($, '/work/a.ts')
+    rewriteBytesKeepingStat(world, '/work/a.ts', sevenLinesEndingIn(0xfe))
     const second = await read($, '/work/a.ts')
     expect([isStub(second), reasonOf(world)]).toEqual([false, ['pass', 'changed']])
   })

@@ -1,6 +1,26 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { pathHash, sha256Hex } from '../hooks/hashing'
+import { bytesOfBase64, pathHash, sha256Hex, sha256OfBytes } from '../hooks/hashing'
+
+describe('sha256OfBytes', () => {
+  test('It returns the SHA-256 of the bytes as lowercase hex', async () => {
+    expect(await sha256OfBytes(new Uint8Array([0x61, 0x62, 0x63]))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  })
+
+  test('It returns different hashes for bytes that are not valid UTF-8 and differ only in those bytes', async () => {
+    expect(await sha256OfBytes(new Uint8Array([0xff]))).not.toBe(await sha256OfBytes(new Uint8Array([0xfe])))
+  })
+})
+
+describe('bytesOfBase64', () => {
+  test('It returns the bytes that the base64 encodes', () => {
+    expect([...bytesOfBase64('/w==')]).toEqual([0xff])
+  })
+
+  test('It returns the bytes of a multi-byte base64 string', () => {
+    expect([...bytesOfBase64('YWJj')]).toEqual([0x61, 0x62, 0x63])
+  })
+})
 
 describe('sha256Hex', () => {
   test('It returns the SHA-256 of the text as lowercase hex', async () => {

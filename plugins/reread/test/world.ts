@@ -11,7 +11,11 @@ export type LogRecord = {
   trigger_values: Record<string, unknown>
 }
 
-type FileState = { text: string; mtimeMs: number }
+type FileState = { text: string; bytes: Uint8Array; mtimeMs: number }
+
+const encoder = new TextEncoder()
+
+const base64Of = (bytes: Uint8Array): string => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
 
 // How the bottom Read answers: the file as text, or one of the results the plugin must not track.
 export type ReadBehavior = 'text' | 'error' | 'image' | 'pdf' | 'notebook' | 'core_unchanged' | 'truncated'
@@ -43,6 +47,8 @@ export type World = {
   otherToolsThatRan: string[]
   // Runs inside the next Read that reaches the bottom, so a test can change the file while the tool runs.
   duringRead: (() => void) | undefined
+  // Runs at the next fs.read, before it answers, so a test can change the file between the plugin's stat and its read.
+  beforeFsRead: (() => void) | undefined
   statThrowsFor: Set<string>
   // Paths whose stat answers a directory, and paths whose stat answers no real path.
   directories: Set<string>
@@ -135,8 +141,12 @@ const installFsMocks = (on: On, world: World) => {
     return ok({ kind, size: file.text.length, mtimeMs: file.mtimeMs, isLink: real !== e.path, ...resolved })
   })
   on('fs.read', (_$, e) => {
+    world.beforeFsRead?.()
+    world.beforeFsRead = undefined
     const file = world.files.get(world.links.get(e.path) ?? e.path)
     if (file === undefined || world.readThrowsFor.has(e.path)) throw new Error('cannot read')
+    // The engine answers bytes as base64, and text as the file decoded as UTF-8.
+    if (e.as === 'bytes') return ok({ base64: base64Of(file.bytes) })
     return ok(file.text)
   })
 }
@@ -210,6 +220,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     readsThatRan: [],
     otherToolsThatRan: [],
     duringRead: undefined,
+    beforeFsRead: undefined,
     statThrowsFor: new Set(),
     directories: new Set(),
     unresolvable: new Set(),
@@ -230,14 +241,27 @@ let clockTick = 1
 
 export const putFile = (world: World, path: string, text: string): void => {
   clockTick += 1
-  world.files.set(path, { text, mtimeMs: clockTick })
+  world.files.set(path, { text, bytes: encoder.encode(text), mtimeMs: clockTick })
+}
+
+// Stores the file's exact bytes, which need not be valid UTF-8. The text the Read tool sees is the bytes decoded as UTF-8.
+export const putFileBytes = (world: World, path: string, bytes: Uint8Array): void => {
+  clockTick += 1
+  world.files.set(path, { text: new TextDecoder().decode(bytes), bytes, mtimeMs: clockTick })
 }
 
 // Changes a file's content and leaves its size and mtime as they were.
 export const rewriteKeepingStat = (world: World, path: string, text: string): void => {
   const file = world.files.get(path)
   if (file === undefined) throw new Error(`no file ${path}`)
-  world.files.set(path, { text, mtimeMs: file.mtimeMs })
+  world.files.set(path, { text, bytes: encoder.encode(text), mtimeMs: file.mtimeMs })
+}
+
+// Changes a file's bytes and leaves its size and mtime as they were.
+export const rewriteBytesKeepingStat = (world: World, path: string, bytes: Uint8Array): void => {
+  const file = world.files.get(path)
+  if (file === undefined) throw new Error(`no file ${path}`)
+  world.files.set(path, { text: new TextDecoder().decode(bytes), bytes, mtimeMs: file.mtimeMs })
 }
 
 // `$.tool.call`'s parameter type is a union over every built-in and MCP tool, and resolving it overflows the compiler once many

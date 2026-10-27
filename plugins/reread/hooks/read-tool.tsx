@@ -4,7 +4,7 @@ import { coveredLines, grossBytesOf, rangeKindOf } from './coverage'
 import type { DecisionReason, Evaluation, Savings } from './decision-record'
 import { engineInfo, type EngineInfo } from './engine-info'
 import { debug } from './engine-log'
-import { pathHash, sha256Hex } from './hashing'
+import { bytesOfBase64, pathHash, sha256Hex, sha256OfBytes } from './hashing'
 import { classifyReadResult } from './read-result'
 import {
   contextOf,
@@ -56,9 +56,11 @@ async function statFile($: EngineInterface, path: string): Promise<FileStat | un
   }
 }
 
-async function readText($: EngineInterface, path: string): Promise<string | undefined> {
+// The bytes, not the text: text decoding replaces bytes that are not valid UTF-8, so two files could hash alike while differing.
+async function readBytes($: EngineInterface, path: string): Promise<Uint8Array | undefined> {
   try {
-    return await $.fs.read(path)
+    const { base64 } = await $.fs.read(path, { as: 'bytes' })
+    return bytesOfBase64(base64)
   } catch (error) {
     debug($, `could not read a file: ${String(error)}`)
     return undefined
@@ -93,9 +95,9 @@ async function judge($: EngineInterface, subject: Subject, call: ReadCall, reque
   const { tracked } = found
   if (tracked.stubbedKeys.has(request.key)) return { kind: 'pass', decision: 'override', reason: 'override_after_stub', found }
   if (!unchanged(before, tracked)) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
-  const text = await readText($, request.realPath)
-  if (text === undefined) return { kind: 'pass', decision: 'pass', reason: 'unreadable', found }
-  if ((await sha256Hex(text)) !== tracked.sha256) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
+  const bytes = await readBytes($, request.realPath)
+  if (bytes === undefined) return { kind: 'pass', decision: 'pass', reason: 'unreadable', found }
+  if ((await sha256OfBytes(bytes)) !== tracked.sha256) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
   if (!(await isInContext($, call.agentId, tracked))) return { kind: 'pass', decision: 'pass', reason: 'not_in_context', found }
   // Last, so a stub is only costed once a dedupe is possible: a stub that is not smaller than the read it replaces saves nothing.
   const dedupe = await dedupeEvaluation($, call, request, found)
@@ -138,8 +140,8 @@ async function trackResult(
   if (outcome.kind === 'file_unchanged') return 'core_dedup'
   const after = await statFile($, request.realPath)
   if (after === undefined || !unchanged(before, after)) return 'changed'
-  const text = await readText($, request.realPath)
-  if (text === undefined) return 'unreadable'
+  const bytes = await readBytes($, request.realPath)
+  if (bytes === undefined) return 'unreadable'
   const { startLine, numLines, totalLines } = outcome.lines
   const isFull = isFullResult(outcome.lines)
   trackRead(state.reads, subject.context, request.key, {
@@ -148,7 +150,7 @@ async function trackResult(
     turn: await $.session.turns(),
     size: after.size,
     mtimeMs: after.mtimeMs,
-    sha256: await sha256Hex(text),
+    sha256: await sha256OfBytes(bytes),
     startLine,
     numLines,
     totalLines,
@@ -156,7 +158,7 @@ async function trackResult(
     modelTextSha256: await sha256Hex(outcome.modelText),
     modelTextLength: outcome.modelText.length,
     isFull,
-    lineBytes: isFull ? lineByteLengths(text) : [],
+    lineBytes: isFull ? lineByteLengths(new TextDecoder().decode(bytes)) : [],
     stubbedKeys: new Set(),
   })
   return outcome.lines.truncatedByTokenCap === true ? 'token_cap_truncated' : undefined

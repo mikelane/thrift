@@ -5,6 +5,11 @@ const hexOf = (digest: ArrayBuffer): string =>
 
 export const sha256Hex = async (text: string): Promise<string> => hexOf(await crypto.subtle.digest('SHA-256', encoder.encode(text)))
 
+export const sha256OfBytes = async (bytes: Uint8Array): Promise<string> => hexOf(await crypto.subtle.digest('SHA-256', bytes))
+
+// The engine answers `$.fs.read(path, { as: 'bytes' })` as standard padded base64.
+export const bytesOfBase64 = (base64: string): Uint8Array => Uint8Array.from(atob(base64), character => character.charCodeAt(0))
+
 const PATH_HASH_LENGTH = 16
 
 // The log names a file by this, never by its path: the salt lives in memory for one session, so the same file hashes to
