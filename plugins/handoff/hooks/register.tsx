@@ -11,7 +11,6 @@ import {
   type PressActions,
 } from './band-controller'
 import { snapshotTrigger, type Trigger } from './decision-record'
-import { announce } from './announcement'
 import { registerHandoffCommand } from './command-registration'
 import { debug, logFailure } from './engine-log'
 import { startHandoffCommand } from './handoff-command'
@@ -54,10 +53,6 @@ import { planTurnEnd } from './turn-end-plan'
 
 const HANDING_OFF_FIRST = 'Handing off first. Your prompt will be sent in the fresh session.'
 const HELD_PROMPT = 'Held your prompt. Choose below, or press Enter again to send it here.'
-
-// /handoff is registered only when a person is at the prompt, so only then is it there to mention.
-const untestedEngineNotice = (engineVersion: string, isInteractive: boolean): string =>
-  `Untested on Claude Code ${engineVersion}, so this session only logs decisions.${isInteractive ? ' /handoff still works.' : ''}`
 
 const readVersion = async ($: EngineInterface) => {
   try {
@@ -180,8 +175,6 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
     state.mode = e.isInteractive && !isUntested ? setting : 'off'
     if (e.isInteractive) await registerHandoffCommand($)
     if (isUntested) {
-      // In the transcript as well as the toast: a toast can be gone before a screen reader reads it.
-      if (setting !== 'off') announce($, untestedEngineNotice(engineVersion, e.isInteractive))
       await writeRecord($, state, { ...snapshotTrigger(state, 'session-start', 'none', false), action: 'untested_engine' })
     }
     return started

@@ -37,7 +37,6 @@ test_live_sh_exits_2_for_a_name_that_is_not_a_slug() {
 make_plugin_fixture() { # make_plugin_fixture <dir> [omit-constant]
   mkdir -p "$1/.claude-plugin" "$1/hooks"
   echo '{"userConfig":{"handoffContextTokens":{"min":80000}}}' > "$1/.claude-plugin/plugin.json"
-  echo "export const TESTED_THROUGH = '2.1.1'" > "$1/hooks/engine-version.ts"
   echo 'const MIN_THRESHOLD = 80_000' > "$1/hooks/signals.ts"
   [[ "${2:-}" != omit-threshold ]] || echo 'const OTHER = 1' > "$1/hooks/signals.ts"
 }
@@ -46,11 +45,10 @@ test_handoff_prepare_patches_the_copy_and_leaves_the_source_alone() {
   make_plugin_fixture "$TEST_DIR/src"
   run_live 'source "$LIVE_DIR/handoff/common.sh"
     live_init; LIVE_PLUGIN_SOURCE='"$TEST_DIR"'/src; handoff_prepare "{}"
-    cat "$LIVE_RUN/plugin/hooks/engine-version.ts" "$LIVE_RUN/plugin/hooks/signals.ts"
+    cat "$LIVE_RUN/plugin/hooks/signals.ts"
     jq -c .userConfig "$LIVE_RUN/plugin/.claude-plugin/plugin.json"
     check ok detail true; live_verdict s'
   assert_exit_code 0
-  assert_out_has "TESTED_THROUGH = '2.1.999'"
   assert_out_has 'MIN_THRESHOLD = 1_000'
   assert_out_has '"min":1000'
   assert_file_has "$TEST_DIR/src/hooks/signals.ts" '80_000'

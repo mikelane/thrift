@@ -6,7 +6,7 @@ import { answered, compacted, completeTurn, growTo200k, holdFork, install, lastR
 const ACT = { options: { handoffMode: 'act' } } as const
 const ASK = { options: { handoffMode: 'ask' } } as const
 
-const UNTESTED_ENGINE = { version: '9.9.9', base: '9.9.9' }
+const UNTESTED_ENGINE = { version: '2.1.302-dev.1', base: '2.1.302-dev' }
 
 const holdCompact = (world: World) => {
   const pending: { release: (result: SessionCompactResult) => void; fail: (error: Error) => void } = {
