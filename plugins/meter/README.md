@@ -51,8 +51,8 @@ elapsed: a fill that stops short of it is under pace.
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
   dir and not closed by hand since (the 110 floor was seen in fullscreen; the main screen was not
   run). Closing it with a second `/meter` does not count as closing by hand. Narrower, it waits
-  undrawn but is still listed, so the first `/meter` opens it as asked and places it (#135; not yet
-  re-verified live). Placed unasked, it docks in fullscreen and sits inline on the main screen.
+  undrawn but is still listed, so the first `/meter` opens it as asked and places it (#135; verified live on
+  2.1.312, scenario `unplaced-open`). Placed unasked, it docks in fullscreen and sits inline on the main screen.
 - In non-interactive runs (`-p`) no command is registered and nothing opens.
 - `/clear` fires `session.end` with `reason: "clear"` and no `session.start` follows, so the plugin
   registers `/meter` again inside `$.clock.after(0, ...)`. The cost ledger and `startedAt` restart
@@ -190,9 +190,11 @@ Runs on Claude Code 2.1.311 against commit `5fb560e`, in tmux. Scenarios are
    | asked (`/meter`) | main screen | inline | inline | | |
    | unasked, after `/meter` open then `/meter` close | fullscreen | not placed | dock | dock | |
 
-   Every unplaced pane was still listed, and on 2.1.311 a `/meter` closed it. #135 fixes that: a
-   `/meter` on a listed but unplaced pane now opens it as asked. The fix is not yet re-verified
-   live. Closing with `/meter` left meter
+   This table was recorded on 2.1.311, before the #135 fix. Every unplaced pane was still listed, and
+   a `/meter` closed it. #135 fixes that: a `/meter` on a listed but unplaced pane now opens it as
+   asked. Verified live on 2.1.312 (scenario `unplaced-open`): with `meterAutoOpen` at 109 columns
+   fullscreen the pane was not placed; the first `/meter` replied `Meter opened.` and drew the pane,
+   and the second replied `Meter closed.` and closed it. Closing with `/meter` left meter
    in the asked list. Only closing by hand (ctrl+x tab, then ctrl+x x) removed it.
 9. **`/config` restart and `/clear` re-registration** (by hand): not yet verified, tracked in
    #121.
