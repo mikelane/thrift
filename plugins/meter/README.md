@@ -40,14 +40,15 @@ elapsed: a fill that stops short of it is under pace.
 
 - `/meter` toggles the pane. If a `meter` pane is listed by `$.ui.panes()` and placed, it closes.
   If it is listed but not placed (`isPlaced` false), or not listed, it opens and replies
-  `Meter opened.`. A pane opened from `/meter` counts as asked, so the engine places it
+  `Meter opened.` A pane opened from `/meter` counts as asked, so the engine places it
   at 109 columns as well as 110 (the narrowest widths tried): docked beside a fullscreen transcript
   from 110 terminal columns, otherwise inline above the prompt.
-  Where no surface places panes (a `-p` run, or only surfaces that place nothing) even an asked
-  open answers unplaced. A pane that was not listed stays open and the reply says why nothing shows
-  it (`Meter opened, but nothing here can show it yet (<reason>).`), so it shows once a surface
-  attaches. A pane that was already listed is closed instead and the reply is `Meter closed.`, so
-  `/meter` still toggles. This is covered by tests; not run live.
+  Where no terminal is attached (the declarations name the SDK and the desktop app), even an asked
+  open answers unplaced. A pane that was not listed stays open, so it shows once a terminal
+  attaches. The reply says why nothing shows it yet:
+  `Meter opened, but nothing here can show it yet (<reason>).` A pane that was already listed is
+  closed instead and the reply is `Meter closed.`, so `/meter` still toggles. This is covered by
+  tests; not run live.
 - `/meter refresh` takes a full count (see Refresh policy). It works without focus. While the pane
   is closed or unplaced it opens the pane and takes the full count in place of the open-time
   summary. The exception is a pane that was already listed and whose asked open still answers
@@ -58,8 +59,9 @@ elapsed: a fill that stops short of it is under pace.
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
   dir and not closed by hand since (the 110 floor was seen in fullscreen; the main screen was not
   run). Closing it with a second `/meter` does not count as closing by hand. Narrower, it waits
-  undrawn but is still listed, so the first `/meter` opens it as asked and places it (#135; verified live on
-  2.1.312, scenario `unplaced-open`). Placed unasked, it docks in fullscreen and sits inline on the main screen.
+  undrawn but is still listed, so the first `/meter` opens it as asked and places it (#135;
+  verified live on 2.1.312, scenario `unplaced-open`). Placed unasked, it docks in fullscreen and
+  sits inline on the main screen.
 - In non-interactive runs (`-p`) no command is registered and nothing opens.
 - `/clear` fires `session.end` with `reason: "clear"` and no `session.start` follows, so the plugin
   registers `/meter` again inside `$.clock.after(0, ...)`. The cost ledger and `startedAt` restart
@@ -197,11 +199,11 @@ Runs on Claude Code 2.1.311 against commit `5fb560e`, in tmux. Scenarios are
    | asked (`/meter`) | main screen | inline | inline | | |
    | unasked, after `/meter` open then `/meter` close | fullscreen | not placed | dock | dock | |
 
-   This table was recorded on 2.1.311, before the #135 fix. Every unplaced pane was still listed, and
-   a `/meter` closed it. #135 fixes that: a `/meter` on a listed but unplaced pane now opens it as
-   asked. Verified live on 2.1.312 (scenario `unplaced-open`): with `meterAutoOpen` at 109 columns
-   fullscreen the pane was not placed; the first `/meter` replied `Meter opened.` and drew the pane,
-   and the second replied `Meter closed.` and closed it. Closing with `/meter` left meter
+   This table was recorded on 2.1.311, before the #135 fix. Every unplaced pane was still listed,
+   and a `/meter` closed it. #135 fixes that: a `/meter` on a listed but unplaced pane now opens it
+   as asked. Verified live on 2.1.312 (scenario `unplaced-open`): with `meterAutoOpen` at 109
+   columns fullscreen the pane was not placed. The first `/meter` replied `Meter opened.` and drew
+   the pane, and the second replied `Meter closed.` and closed it. Closing with `/meter` left meter
    in the asked list. Only closing by hand (ctrl+x tab, then ctrl+x x) removed it.
 9. **`/config` restart and `/clear` re-registration** (by hand): not yet verified, tracked in
    #121.
