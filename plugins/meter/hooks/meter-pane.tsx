@@ -8,6 +8,7 @@ import type { GlyphSet } from './glyphs'
 import { refreshMeter } from './meter-actions'
 import {
   contextDetailText,
+  contextGaugeText,
   contextRowText,
   costRowText,
   mcpServersRowText,
@@ -26,21 +27,21 @@ export async function drawMeter($: EngineInterface, e: RenderInput<'Pane'>, set:
   const utcOffsetMinutes = -new Date(now).getTimezoneOffset()
   const figures = headline ?? NO_READING
   const contextRow = contextRowText(figures, breakdown?.compactsAt, set)
+  const contextGauge = contextGaugeText(figures, breakdown?.compactsAt)
   const costRow = costRowText(figures, set)
   const mcpServersRow = mcpServersRowText(breakdown?.mcpServers ?? [], set)
 
   return (
     <Box flexDirection="column">
       <Text color={contextRow.color}>{contextRow.text}</Text>
-      <Box paddingLeft={2}>
-        <Text dimColor>{contextDetailText(breakdown)}</Text>
-      </Box>
+      {contextGauge && <Text color={contextGauge.color}>{contextGauge.text}</Text>}
+      <Text dimColor>{contextDetailText(breakdown)}</Text>
       {figures.rateLimits.map(limit => (
         <Box flexDirection="column" marginTop={1}>
-          {windowRowTexts(windowView(limit, now, utcOffsetMinutes), set).map((row, index) => (
-            <Box paddingLeft={index === 0 ? 0 : 2}>
-              <Text color={row.color}>{row.text}</Text>
-            </Box>
+          {windowRowTexts(windowView(limit, now, utcOffsetMinutes), set).map(row => (
+            <Text color={row.color} dimColor={row.dim}>
+              {row.text}
+            </Text>
           ))}
         </Box>
       ))}
@@ -51,7 +52,7 @@ export async function drawMeter($: EngineInterface, e: RenderInput<'Pane'>, set:
       )}
       <Box marginTop={1} gap={1}>
         <Text>TOP CONTEXT</Text>
-        <Button key="refresh" hotkey="r" label={labelled(set, 'refresh', '[r] refresh')} onPress={() => void logFailure($, refreshMeter($))} />
+        <Button key="refresh" hotkey="r" label={labelled(set, 'refresh', 'refresh (r)')} onPress={() => void logFailure($, refreshMeter($))} />
         {breakdown && <Text dimColor>{`· ${ageLabel(now - breakdown.takenAt)}`}</Text>}
         {isStale && <Text color="warning">{labelled(set, 'stale', 'stale')}</Text>}
       </Box>

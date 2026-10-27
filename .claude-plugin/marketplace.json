@@ -16,6 +16,11 @@
       "name": "meter",
       "source": "./plugins/meter",
       "description": "A side pane with context fill, rate-limit burn pace, cost and the largest context categories, drawn outside the model's context."
+    },
+    {
+      "name": "reread",
+      "source": "./plugins/reread",
+      "description": "Answers a repeat Read of an unchanged file with a short stub instead of its contents a second time."
     }
   ]
 }

@@ -20,6 +20,7 @@ type WindowBase = {
   label: string
   slot?: GlyphSlot
   percentText: string
+  percentUsed: number
 }
 
 // One variant per state, so a paced view always carries its pace and reset, and no other state can claim them.
@@ -27,7 +28,7 @@ export type WindowView =
   | (WindowBase & {
       state: 'paced'
       color: BandColor
-      elapsedPercent: number
+      elapsedShare: number
       paceText: string
       projection?: string
       resetsLabel: string
@@ -50,7 +51,7 @@ const slotFor = (kind: string): GlyphSlot | undefined => {
 
 export const windowView = (limit: RateLimitReading, now: number, utcOffsetMinutes: number): WindowView => {
   const { kind, percentUsed } = limit
-  const base = { label: labelFor(kind), slot: slotFor(kind), percentText: formatPercent(percentUsed) }
+  const base = { label: labelFor(kind), slot: slotFor(kind), percentText: formatPercent(percentUsed), percentUsed }
   const windowMs = windowLengthMs(kind)
   const isAtLimit = percentUsed >= LIMIT_PERCENT
   if (windowMs === undefined) {
@@ -68,7 +69,7 @@ export const windowView = (limit: RateLimitReading, now: number, utcOffsetMinute
     ...base,
     state: 'paced',
     color: paceBand(pace),
-    elapsedPercent: Math.round(share * 100),
+    elapsedShare: share,
     paceText: formatPace(pace),
     projection: exhaustion === undefined ? undefined : clockLabel(exhaustion, now, utcOffsetMinutes),
     resetsLabel,
