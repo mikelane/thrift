@@ -1,14 +1,14 @@
 import type { ResultLines } from './read-tracking'
 
 // What core's Read left, narrowed to what the plugin acts on. `text` is the result as the model read it.
-export type ReadOutcome =
+type ReadOutcome =
   | { kind: 'text'; lines: ResultLines; modelText: string }
   | { kind: 'file_unchanged' }
   | { kind: 'not_text' }
   | { kind: 'error' }
 
 // Only the keys this reads, so a result needs no cast to reach them.
-export type ReadAnswer = { readonly deny?: string; readonly isError?: boolean; readonly result?: unknown; readonly text?: string }
+type ReadAnswer = { readonly deny?: string; readonly isError?: boolean; readonly result?: unknown; readonly text?: string }
 
 const fieldOf = (value: unknown, key: string): unknown => (typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined)
 

@@ -8,7 +8,7 @@ import { writeRecord } from './record-writer'
 import { endSession, type SessionState } from './session-state'
 
 // Only the keys this reads, so a call's input needs no cast to reach them.
-export type ToolCall = { readonly tool: string; readonly agentId?: string } & Readonly<Record<string, unknown>>
+type ToolCall = { readonly tool: string; readonly agentId?: string } & Readonly<Record<string, unknown>>
 
 const FILE_EDITING_TOOLS: readonly string[] = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 
@@ -30,8 +30,8 @@ async function pathsNamedBy($: EngineInterface, path: string): Promise<string[]>
 
 async function noteDropped($: EngineInterface, state: SessionState, dropped: number, reason: DecisionReason, agentId: string | undefined, sessionId?: string) {
   if (dropped === 0) return
-  const info = await engineInfo($, state)
-  await writeRecord($, info, { decision: 'invalidate', reason, dropped, isSubagent: agentId !== undefined }, sessionId)
+  const engine = await engineInfo($, state)
+  await writeRecord($, engine, { decision: 'invalidate', reason, dropped, isSubagent: agentId !== undefined }, sessionId)
 }
 
 // Runs after the tool, and never throws: the tool has already run, and a failure here must not run it again.
@@ -50,9 +50,9 @@ export async function noteToolRan($: EngineInterface, state: SessionState, call:
 
 // SAFETY: as for noteToolRan, no test reaches the catch; it is the guard against an unhandled rejection if a call inside changes.
 // A compaction that stands replaces the loop's context with a summary; one that was vetoed leaves it as it is.
-export async function noteCompaction($: EngineInterface, state: SessionState, agentId: string | undefined, wasVetoed: boolean): Promise<void> {
+export async function noteCompaction($: EngineInterface, state: SessionState, agentId: string | undefined, isVetoed: boolean): Promise<void> {
   try {
-    if (wasVetoed) return
+    if (isVetoed) return
     await noteDropped($, state, dropContext(state.reads, contextOf(agentId)), 'compaction', agentId)
   } catch (error) {
     debug($, `could not drop reads after a compaction: ${String(error)}`)

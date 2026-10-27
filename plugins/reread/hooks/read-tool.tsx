@@ -32,11 +32,11 @@ export type ReadCall = {
 }
 
 // `run` hands the call on to the tool. `origin` names who raised it: the engine for the model's own call.
-export type Proceed = { origin: Origin; run: () => Promise<ToolCallResult<string>> }
+type Proceed = { origin: Origin; run: () => Promise<ToolCallResult<string>> }
 
 type FileStat = { size: number; mtimeMs: number; realPath: string }
 
-type Subject = { info: EngineInfo; isSubagent: boolean; context: string; agentId: string | undefined }
+type Subject = { engine: EngineInfo; isSubagent: boolean; context: string }
 
 type PassVerdict = { kind: 'pass'; decision: 'pass' | 'override'; reason: DecisionReason; found: Found; savings?: Savings }
 
@@ -84,17 +84,17 @@ async function isInContext($: EngineInterface, agentId: string | undefined, trac
 }
 
 async function note($: EngineInterface, subject: Subject, evaluation: Omit<Evaluation, 'isSubagent'>): Promise<void> {
-  await writeRecord($, subject.info, { ...evaluation, isSubagent: subject.isSubagent })
+  await writeRecord($, subject.engine, { ...evaluation, isSubagent: subject.isSubagent })
 }
 
-const unchanged = (before: FileStat, tracked: { size: number; mtimeMs: number }): boolean =>
+const isUnchanged = (before: FileStat, tracked: { size: number; mtimeMs: number }): boolean =>
   before.size === tracked.size && before.mtimeMs === tracked.mtimeMs
 
 // The steps after the lookup, in order. Anything short of all of them passes: absence always means pass.
 async function judge($: EngineInterface, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, before: FileStat): Promise<Verdict> {
   const { tracked } = found
   if (tracked.stubbedKeys.has(request.key)) return { kind: 'pass', decision: 'override', reason: 'override_after_stub', found }
-  if (!unchanged(before, tracked)) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
+  if (!isUnchanged(before, tracked)) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
   const bytes = await readBytes($, request.realPath)
   if (bytes === undefined) return { kind: 'pass', decision: 'pass', reason: 'unreadable', found }
   if ((await sha256OfBytes(bytes)) !== tracked.sha256) return { kind: 'pass', decision: 'pass', reason: 'changed', found }
@@ -142,7 +142,7 @@ async function trackResult(
   const bytes = await readBytes($, request.realPath)
   if (bytes === undefined) return 'unreadable'
   const after = await statFile($, request.realPath)
-  if (after === undefined || !unchanged(before, after)) return 'changed'
+  if (after === undefined || !isUnchanged(before, after)) return 'changed'
   const { startLine, numLines, totalLines } = outcome.lines
   const isFull = isFullResult(outcome.lines)
   trackRead(state.reads, subject.context, request.key, {
@@ -189,8 +189,8 @@ async function dedupeEvaluation($: EngineInterface, call: ReadCall, request: Rea
 
 async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found, { line, evaluation }: DedupeEvaluation) {
   found.tracked.stubbedKeys.add(request.key)
-  if (subject.info.effectiveMode === 'ask') {
-    $.ui.log(`reread: ${call.file_path} is unchanged, so its Read was answered with a stub (${evaluation.savings.grossBytes} bytes held back, stub ${evaluation.savings.stubBytes})`)
+  if (subject.engine.effectiveMode === 'ask') {
+    $.ui.log(`reread: ${call.file_path} is unchanged, so the repeat Read got a stub instead of its contents (${evaluation.savings.grossBytes - evaluation.savings.stubBytes} bytes saved)`)
   }
   await note($, subject, { ...evaluation, pathHash: await pathHash(state.salt, request.realPath) })
   return { result: stubResult(call.file_path), context: [line] }
@@ -222,8 +222,8 @@ async function passAndTrack($: EngineInterface, state: SessionState, subject: Su
 }
 
 export async function readTool($: EngineInterface, state: SessionState, call: ReadCall, proceed: Proceed): Promise<ToolCallResult<string>> {
-  const info = await engineInfo($, state)
-  const subject: Subject = { info, isSubagent: call.agentId !== undefined, context: contextOf(call.agentId), agentId: call.agentId }
+  const engine = await engineInfo($, state)
+  const subject: Subject = { engine, isSubagent: call.agentId !== undefined, context: contextOf(call.agentId) }
   if (proceed.origin.plugin !== ENGINE) return passUntracked($, subject, proceed, 'plugin_call')
   if (call.pages !== undefined) return passUntracked($, subject, proceed, 'pdf_pages')
   const before = await statFile($, call.file_path)
@@ -232,6 +232,6 @@ export async function readTool($: EngineInterface, state: SessionState, call: Re
   const found = findTracked(state.reads, subject.context, request)
   const verdict = found === undefined ? undefined : await judge($, subject, call, request, found, before)
   if (verdict?.kind !== 'dedupe') return passAndTrack($, state, subject, call, request, before, proceed, verdict)
-  if (info.effectiveMode === 'off') return shadowDedupe($, state, subject, call, request, verdict.dedupe, before, proceed)
+  if (engine.effectiveMode === 'off') return shadowDedupe($, state, subject, call, request, verdict.dedupe, before, proceed)
   return answerWithStub($, state, subject, call, request, verdict.found, verdict.dedupe)
 }

@@ -3,7 +3,7 @@ import type { DecisionReason } from './decision-reasons'
 
 export type { DecisionReason }
 
-export type Decision = 'dedupe' | 'pass' | 'override' | 'invalidate' | 'untested_engine'
+type Decision = 'dedupe' | 'pass' | 'override' | 'invalidate' | 'untested_engine'
 
 export type RangeKind = 'full' | 'range' | 'subrange'
 
@@ -41,7 +41,7 @@ export const LOG_WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> 
 const actionOf = (decision: Decision, effectiveMode: ReadMode): Decision | 'none' =>
   decision === 'untested_engine' ? decision : effectiveMode === 'off' ? 'none' : decision
 
-export type ByteFields = { bytes_saved?: number; bytes_would_save?: number; gross_bytes?: number; stub_bytes?: number }
+type ByteFields = { bytes_saved?: number; bytes_would_save?: number; gross_bytes?: number; stub_bytes?: number }
 
 // Only a dedupe saved (or would save) anything. A pass that compared the bytes reports the two figures and no net.
 const netFields = (savings: Savings, effectiveMode: ReadMode): ByteFields => {
@@ -83,8 +83,6 @@ export const decisionRecord = ({ now, sessionId, engineVersion, setting, effecti
     },
   }
 }
-
-export type DecisionRecord = ReturnType<typeof decisionRecord>
 
 // A relative THRIFT_HOME, or one that starts with ~, would resolve against the session's working directory, not the home.
 export const isUsableThriftHome = (thriftHome: string | undefined): thriftHome is string => thriftHome?.startsWith('/') === true

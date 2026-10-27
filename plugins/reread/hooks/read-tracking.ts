@@ -26,7 +26,7 @@ export type Tracked = {
 // Loop id -> request key -> entry. The main loop is 'main'; a subagent or teammate is its agent id.
 export type Reads = Map<string, Map<string, Tracked>>
 
-export type ReadInput = { offset?: number; limit?: number; allow_large?: boolean }
+type ReadInput = { offset?: number; limit?: number; allow_large?: boolean }
 
 export type ReadRequest = {
   key: string

@@ -1,7 +1,7 @@
-import { mock, type Engine, type MockClock } from 'claude-code/testing'
+import { mock, type Engine } from 'claude-code/testing'
 import type { On, SessionVersion, ToolCallResult } from 'claude-code'
 
-export type LogRecord = {
+type LogRecord = {
   ts: string
   session_id: string
   component: string
@@ -18,10 +18,9 @@ const encoder = new TextEncoder()
 const base64Of = (bytes: Uint8Array): string => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
 
 // How the bottom Read answers: the file as text, or one of the results the plugin must not track.
-export type ReadBehavior = 'text' | 'error' | 'image' | 'pdf' | 'notebook' | 'core_unchanged' | 'truncated'
+type ReadBehavior = 'text' | 'error' | 'image' | 'pdf' | 'notebook' | 'core_unchanged' | 'truncated'
 
 export type World = {
-  clock: MockClock
   files: Map<string, FileState>
   // alias path -> real path
   links: Map<string, string>
@@ -31,7 +30,7 @@ export type World = {
   transcriptLines: string[]
   sessionId: string
   version: SessionVersion
-  versionThrows: boolean
+  isVersionFailing: boolean
   versionReads: number
   turns: number
   // tool_use_ids each loop's context holds, by agent id ('main' for the main loop)
@@ -55,9 +54,9 @@ export type World = {
   unresolvable: Set<string>
   readThrowsFor: Set<string>
   logWrite: 'ok' | 'exit' | 'throw'
-  compactSkips: boolean
-  turnsThrows: boolean
-  messagesThrows: boolean
+  isCompactVetoed: boolean
+  isTurnsFailing: boolean
+  isMessagesFailing: boolean
 }
 
 export const MAIN = 'main'
@@ -74,11 +73,22 @@ const sliceOf = (text: string, offset: number | undefined, limit: number | undef
 
 const LOG_STRINGS = ['ts', 'session_id', 'component', 'mode', 'action', 'engine_version'] as const
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isLogRecord = (value: unknown): value is LogRecord =>
+  isPlainObject(value) && LOG_STRINGS.every(key => typeof value[key] === 'string') && isPlainObject(value.trigger_values)
+
 const parseLogRecord = (line: string): LogRecord => {
   const parsed: unknown = JSON.parse(line)
-  if (typeof parsed !== 'object' || parsed === null) throw new Error(`not a decision record: ${line}`)
-  if (!LOG_STRINGS.every(key => typeof Reflect.get(parsed, key) === 'string')) throw new Error(`not a decision record: ${line}`)
-  return parsed as LogRecord
+  if (!isLogRecord(parsed)) throw new Error(`not a decision record: ${line}`)
+  return parsed
+}
+
+// A trigger value the test does arithmetic on: proves it is a number instead of asserting it.
+export const numberOf = (value: unknown): number => {
+  if (typeof value !== 'number') throw new Error(`not a number: ${String(value)}`)
+  return value
 }
 
 const ok = <T,>(value: T) => ({ value })
@@ -156,22 +166,22 @@ const installSessionMocks = (on: On, world: World) => {
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => ok(world.sessionId))
   on('session.turns', () => {
-    if (world.turnsThrows) throw new Error('no turns')
+    if (world.isTurnsFailing) throw new Error('no turns')
     return ok(world.turns)
   })
   on('session.version', () => {
     world.versionReads += 1
-    if (world.versionThrows) throw new Error('no version')
+    if (world.isVersionFailing) throw new Error('no version')
     return ok(world.version)
   })
   on('session.messages', (_$, e) => {
-    if (world.messagesThrows) throw new Error('no messages')
+    if (world.isMessagesFailing) throw new Error('no messages')
     const loop = e.agentId ?? MAIN
     if (world.deniedAgents.has(loop)) return ok({ deny: `no conversation for ${loop}` })
     const ids = world.contexts.get(loop) ?? []
     return ok([{ role: 'user' as const, text: '', toolUses: [], toolResults: ids.map(id => ({ tool_use_id: id, text: world.resultTexts.get(id) ?? '', isError: world.errorResults.has(id) })) }])
   })
-  on('session.compact', () => (world.compactSkips ? { skip: 'vetoed' } : { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
+  on('session.compact', () => (world.isCompactVetoed ? { skip: 'vetoed' } : { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
 }
 
 const installOutputMocks = (on: On, world: World) => {
@@ -194,13 +204,12 @@ type Environment = { home?: string | null; thriftHome?: string }
 
 export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Environment = {}): World => {
   void $
-  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
+  mock.clock(on, { now: Date.UTC(2026, 9, 8, 20, 0, 0) })
   mock.env(on, {
     ...(home === null ? {} : { HOME: home }),
     ...(thriftHome === undefined ? {} : { THRIFT_HOME: thriftHome }),
   })
   const world: World = {
-    clock,
     files: new Map(),
     links: new Map(),
     records: [],
@@ -209,7 +218,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     transcriptLines: [],
     sessionId: 'session-1',
     version: { version: '2.1.311', base: '2.1.311' },
-    versionThrows: false,
+    isVersionFailing: false,
     versionReads: 0,
     turns: 1,
     contexts: new Map(),
@@ -226,9 +235,9 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     unresolvable: new Set(),
     readThrowsFor: new Set(),
     logWrite: 'ok',
-    compactSkips: false,
-    turnsThrows: false,
-    messagesThrows: false,
+    isCompactVetoed: false,
+    isTurnsFailing: false,
+    isMessagesFailing: false,
   }
   installToolMocks(on, world)
   installFsMocks(on, world)
