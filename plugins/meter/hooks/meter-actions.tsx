@@ -114,8 +114,8 @@ const USAGE = 'Usage: /meter to open or close the pane, /meter refresh to take a
 export async function runMeterCommand($: EngineInterface, args: string): Promise<{ text: string }> {
   const argument = args.trim()
   if (argument !== '' && argument !== 'refresh') return { text: USAGE }
-  const isShown = await isMeterPlaced($)
-  if (!isShown) {
+  const isPlaced = await isMeterPlaced($)
+  if (!isPlaced) {
     await openMeter($, argument === 'refresh' ? 'full' : 'summary')
     return { text: 'Meter opened.' }
   }
