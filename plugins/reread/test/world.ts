@@ -85,12 +85,6 @@ const parseLogRecord = (line: string): LogRecord => {
   return parsed
 }
 
-// A trigger value the test does arithmetic on: proves it is a number instead of asserting it.
-export const numberOf = (value: unknown): number => {
-  if (typeof value !== 'number') throw new Error(`not a number: ${String(value)}`)
-  return value
-}
-
 const ok = <T,>(value: T) => ({ value })
 
 type ReadCall = { tool_use_id: string; agentId?: string; file_path: string; offset?: number; limit?: number }
