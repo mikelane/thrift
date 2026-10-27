@@ -24,23 +24,6 @@ meter_placed_shape() {
   fi
 }
 
-# ensure_not_asked: the config holds no asked entry for meter, closing the pane by hand if need be.
-ensure_not_asked() {
-  meter_was_asked || return 0
-  # shellcheck disable=SC2034 # read by live_start
-  LIVE_COLUMNS=120
-  # shellcheck disable=SC2034 # read by live_start
-  LIVE_SESSION_ENV=$METER_FULLSCREEN
-  meter_prepare '{}'
-  local prep="prep$SECONDS"
-  meter_start "$prep"
-  meter_command "$prep" '/meter' 'Meter opened\.'
-  wait_for 'the pane to open' meter_pane_is_open "$prep"
-  meter_close_by_hand "$prep"
-  end_session "$prep"
-  if meter_was_asked; then live_abort "meter is still in the asked list after closing it by hand: $(meter_asked_panes)"; fi
-}
-
 prime_with_plugin_close() {
   # shellcheck disable=SC2034 # read by live_start
   LIVE_COLUMNS=120
@@ -57,23 +40,23 @@ prime_with_plugin_close() {
   end_session "$prime"
 }
 
-end_session() { tmux kill-session -t "=$(session_of "$1")" 2>/dev/null || true; }
-
 # record_cell <name> <how> <layout-label> <columns> <asked-before>: classifies the screen and keeps the row.
 record_cell() {
-  local name=$1 how=$2 layout=$3 columns=$4 asked_before=$5 placed=no shape listed asked_after
+  local name=$1 how=$2 layout=$3 columns=$4 asked_before=$5 placed=no shape probe_reply asked_after
   meter_pane_is_open "$name" && placed=yes
   shape=$(meter_placed_shape "$name")
   show_pane "$name" "$how, $layout, $columns columns" 24
   asked_after=$(meter_asked_panes)
-  # A second /meter says whether the engine kept the pane listed: it closes a listed pane, opens a missing one.
+  # A second /meter is recorded as the raw reply. It closes a placed pane; since #135 it opens a listed pane
+  # that was never placed, so the reply does not say whether the pane is listed (asked_after does).
   local replies_before last_reply
   replies_before=$(pane_count "$name" 'Meter (opened|closed)\.')
   submit "$name" '/meter'
   wait_for 'the reply to the probe /meter' pane_count_above "$name" 'Meter (opened|closed)\.' "$replies_before"
   last_reply=$(pane "$name" | grep -oE 'Meter (opened|closed)\.' | tail -n 1)
-  if [[ "$last_reply" == 'Meter closed.' ]]; then listed=yes; else listed=no; fi
-  local row="$how | $layout | $columns | placed=$placed | shape=$shape | listed=$listed | asked_before=$asked_before | asked_after=$asked_after"
+  probe_reply=${last_reply#Meter }
+  probe_reply=${probe_reply%.}
+  local row="$how | $layout | $columns | placed=$placed | shape=$shape | probe_reply=$probe_reply | asked_before=$asked_before | asked_after=$asked_after"
   PLACEMENT_MATRIX+="$row"$'\n'
   echo "CELL $row"
   check "$how, $layout, $columns columns: the screen shows a pane in one shape, or none" "placed=$placed shape=$shape" \
@@ -136,6 +119,6 @@ scenario_run() {
     unasked_cell "$METER_FULLSCREEN" fullscreen "$columns" -after-plugin-close
   done
 
-  section 'placement matrix (how | layout | columns | placed | shape | listed | asked_before | asked_after)'
+  section 'placement matrix (how | layout | columns | placed | shape | probe_reply | asked_before | asked_after)'
   printf '%s' "$PLACEMENT_MATRIX"
 }

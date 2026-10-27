@@ -161,6 +161,25 @@ meter_close_by_hand() {
   wait_for "the pane of '$1' to close" meter_pane_is_closed "$1"
 }
 
+end_session() { tmux kill-session -t "=$(session_of "$1")" 2>/dev/null || true; }
+
+# ensure_not_asked: the config holds no asked entry for meter, closing the pane by hand if need be.
+ensure_not_asked() {
+  meter_was_asked || return 0
+  # shellcheck disable=SC2034 # read by live_start
+  LIVE_COLUMNS=120
+  # shellcheck disable=SC2034 # read by live_start
+  LIVE_SESSION_ENV=$METER_FULLSCREEN
+  meter_prepare '{}'
+  local prep="prep$SECONDS"
+  meter_start "$prep"
+  meter_command "$prep" '/meter' 'Meter opened\.'
+  wait_for 'the pane to open' meter_pane_is_open "$prep"
+  meter_close_by_hand "$prep"
+  end_session "$prep"
+  if meter_was_asked; then live_abort "meter is still in the asked list after closing it by hand: $(meter_asked_panes)"; fi
+}
+
 # meter_screen_is_still <name> <polls>: succeeds once the screen has not changed for that many calls in
 # a row. The effort indicator blinks, so its line is left out. A pane that never appears has nothing to wait for, so this is how "not placed" is judged.
 # A screen that cannot be read fails, so a session that died is not judged still.
