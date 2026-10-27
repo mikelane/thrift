@@ -110,7 +110,8 @@ async function judge($: EngineInterface, attempt: Attempt, found: Found): Promis
 }
 
 // Runs the tool, then tracks what it returned. Returns why nothing (or not everything) was tracked, if so. Never throws once the
-// tool has run: a failure here must not run the tool a second time.
+// tool has run: the engine would not run the tool again (its `.catch` replays a `next` the hook already called), but a failure here
+// is logged with its cause and the Read still gets its decision record.
 async function runAndTrack($: EngineInterface, state: SessionState, attempt: Attempt, proceed: Proceed): Promise<{ ran: ToolCallResult<string>; untracked: DecisionReason | undefined }> {
   const ran = await proceed.run()
   try {

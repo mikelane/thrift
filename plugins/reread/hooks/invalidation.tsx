@@ -34,9 +34,9 @@ async function noteDropped($: EngineInterface, state: SessionState, dropped: num
   await writeRecord($, engine, { decision: 'invalidate', reason, dropped, isSubagent: agentId !== undefined }, sessionId)
 }
 
-// Runs after the tool, and never throws: the tool has already run, and a failure here must not run it again.
-// SAFETY: every call inside the try catches its own engine failures, so no test reaches this catch. Keep it: the hook's own
-// .catch would run the tool a second time, and a second Bash or Edit is not harmless.
+// Runs after the tool, and never throws. A throw would not run the tool again: the engine's `.catch` handler replays a `next` the hook
+// already called (`Caught` in the engine's types). It would only fail the hook, so the failure is logged here, with its cause.
+// SAFETY: every call inside the try catches its own engine failures, so no test reaches this catch.
 export async function noteToolRan($: EngineInterface, state: SessionState, call: ToolCall): Promise<void> {
   try {
     if (call.tool === 'Bash') return await noteDropped($, state, dropAll(state.reads), 'bash', call.agentId)
