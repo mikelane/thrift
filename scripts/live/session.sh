@@ -128,7 +128,7 @@ live_start() {
   claude_command=$(live_claude_command "$name" "$@")
   # Recorded before the call: a Ctrl-C during it must still find the session the server made.
   LIVE_SESSIONS+=("$session")
-  tmux new-session -d -s "$session" -x 120 -y 40 -c "$LIVE_CWD" "$claude_command" \
+  tmux new-session -d -s "$session" -x "$LIVE_COLUMNS" -y 40 -c "$LIVE_CWD" "$claude_command" \
     || live_abort "tmux could not start session '$session'"
   LIVE_NAMES+=("$name")
   wait_for "'$name' to show its prompt" start_dialogs_cleared "$name"

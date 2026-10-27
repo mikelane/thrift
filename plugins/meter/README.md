@@ -40,18 +40,22 @@ elapsed: a fill that stops short of it is under pace.
 
 - `/meter` toggles the pane. If a `meter` pane is listed by `$.ui.panes()`, placed or not, it
   closes. Otherwise it opens. A pane opened from `/meter` counts as asked, so the engine places it
-  from 110 terminal columns. Narrower than that it waits undrawn, which is not an error and writes
-  nothing to the debug log.
+  at 109 columns as well as 110 (the narrowest widths tried): docked beside a fullscreen transcript
+  from 110 terminal columns, otherwise inline above the prompt.
 - `/meter refresh` takes a full count (see Refresh policy). It works without focus. While the pane
   is closed it opens the pane and takes the full count in place of the open-time summary.
 - Any other argument answers with a usage line and changes nothing.
 - The setting `meterAutoOpen` (default `false`) opens the pane at session start. An unasked pane is
-  placed only from 144 columns; narrower, it waits for `/meter`.
+  placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
+  dir and not closed by hand since (the 110 floor was seen in fullscreen; the main screen was not
+  run). Closing it with a second `/meter` does not count as closing by hand. Narrower, it waits
+  undrawn but is still listed, so a `/meter` closes it (seen live; a further `/meter` to open it
+  as asked was not run). Placed unasked, it docks in fullscreen and sits inline on the main screen.
 - In non-interactive runs (`-p`) no command is registered and nothing opens.
 - `/clear` fires `session.end` with `reason: "clear"` and no `session.start` follows, so the plugin
   registers `/meter` again inside `$.clock.after(0, ...)`. The cost ledger and `startedAt` restart
-  at a clear, so the COST row restarts too. Whether the pane itself stays open across a clear is
-  not stated by the declarations and has not been checked live.
+  at a clear, so the COST row restarts too. The pane itself stays open across a clear (seen live on
+  2.1.311; the declarations don't say).
 
 ## Definitions
 
@@ -154,12 +158,37 @@ thresholds are fixed.
 
 ## What has been verified live
 
-Nothing yet. The unit and testing-kit tests cover the numbers, the text each row draws, the
-refresh policy and the hooks. These still need a check in a real terminal:
+Runs on Claude Code 2.1.311 against commit `5fb560e`, in tmux. Scenarios are
+`scripts/live/live.sh meter <scenario>`; the trimmed output is posted on #121.
 
-- `/meter` opens the pane, and a second `/meter` closes it.
-- The pane redraws after a turn.
-- `r` refreshes it while the pane has focus.
-- Both glyph sets draw with the labels aligned (`unicode` in the default font, `nerd` in a Nerd
-  Font).
-- Whether the pane stays open across `/clear`.
+1. **Open and close** (`toggle`): in both fullscreen and the main screen, the first `/meter`
+   replies `Meter opened.` and draws the frame and the CONTEXT row; in fullscreen it also draws
+   TOP CONTEXT (the main-screen pane is clipped above it and the scenario does not look for it). The
+   second replies `Meter closed.` and the frame and the CONTEXT row are gone.
+2. **Redraw after a turn** (`redraw-after-turn`): before the first prompt, CONTEXT reads
+   `waiting for first response`. After a one-word turn it shows a token figure.
+3. **`r` with focus** (`refresh-focus`): `r` typed in the composer lands in the prompt box,
+   logs no `ui.press meter/refresh` and leaves the age label as it was. After ctrl+x tab, `r`
+   logs the press and the label reads `0s ago`.
+4. **`/meter refresh`** (`refresh-command`): on an open pane it replies `Meter refreshed.` and
+   the label reads `0s ago`. On a closed pane it replies `Meter opened.` and opens the pane.
+5. **`unicode` glyphs in the default font** (by hand): not yet verified, tracked in #121.
+6. **`nerd` glyphs in a Nerd Font** (by hand): not yet verified, tracked in #121.
+7. **`/clear`** (`clear`): the pane stayed open. COST went from $0.08 before the clear to $0.00
+   after it, and the next `/meter` replied `Meter closed.`, which matches the pane being open. A
+   further `/meter` reopened it.
+8. **Placement** (`placement`). The "unasked, never asked" cells ran in a config dir where meter
+   had never been asked, or where it had been closed by hand. A blank cell was not run:
+
+   | Opened | Layout | 109 | 110 | 143 | 144 |
+   |---|---|---|---|---|---|
+   | unasked, never asked | fullscreen | not placed | not placed | not placed | dock |
+   | unasked, never asked | main screen | not placed | not placed | not placed | inline |
+   | asked (`/meter`) | fullscreen | inline | dock | | |
+   | asked (`/meter`) | main screen | inline | inline | | |
+   | unasked, after `/meter` open then `/meter` close | fullscreen | not placed | dock | dock | |
+
+   Every unplaced pane was still listed, so a `/meter` closed it. Closing with `/meter` left meter
+   in the asked list. Only closing by hand (ctrl+x tab, then ctrl+x x) removed it.
+9. **`/config` restart and `/clear` re-registration** (by hand): not yet verified, tracked in
+   #121.

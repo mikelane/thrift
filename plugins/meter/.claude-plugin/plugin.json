@@ -11,7 +11,7 @@
     "meterAutoOpen": {
       "type": "boolean",
       "title": "Open the meter pane at session start",
-      "description": "The pane is placed at session start only on a terminal 144 columns wide or more. Narrower, run /meter to open it.",
+      "description": "The pane is placed at session start on a terminal 144 columns wide or more, or 110 or more once you have opened it with /meter and not closed it by hand. Narrower, run /meter to open it.",
       "default": false
     },
     "meterGlyphs": {
