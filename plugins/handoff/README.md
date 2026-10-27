@@ -499,16 +499,15 @@ plugin without any error. Four layers guard against that:
    than the one CI pinned. At session start, if `$.session.version()` reports a `base` that is not
    exactly `MAJOR.MINOR.PATCH` (a development build such as `2.1.295-dev`, a malformed version) or
    is missing, the plugin acts as `off` for the session and logs `untested_engine` once. It says
-   nothing in the session: no toast, no transcript line. The gate
-   fails closed: the plugin acts as `off` until `session.start` has confirmed a release build and
+   nothing in the session: no toast, no transcript line. The gate fails closed: the plugin acts as `off` until `session.start` has confirmed a release build and
    an interactive run, so after a restart of the plugin it stays `off` until `session.start` has run.
    The engine's declarations say `session.start` fires once per fresh load of a plugin (never for a
    `/clear`). On 2.1.299 a setting changed in `/config` fired it and started the plugin's state over
    (a handoff right after one recorded `context_tokens: 0`), but `/reload-plugins` did not: the
    plugin kept its state and mode. Editing a file under `--plugin-dir` does not reload the plugin; the
    change waits for `/reload-plugins`.
-   In an interactive session `/handoff` still works, because you asked for it at a moment you
-   chose. A session with no prompt (`-p`, the SDK) never registers `/handoff`.
+   While this fallback holds an interactive session at `off`, `/handoff` still works, because you
+   asked for it at a moment you chose. A session with no prompt (`-p`, the SDK) never registers `/handoff`.
 4. **`engine_version` on every log record.**
 
 | Release | Tested through Claude Code |
@@ -516,8 +515,8 @@ plugin without any error. Four layers guard against that:
 | 0.1.0 | 2.1.302 |
 | 0.2.0 | 2.1.302 |
 
-The plugin no longer checks this at runtime. The table records which build CI pinned for each
-release.
+The table records the build CI pinned for each release. The plugin no longer compares the running
+build against it.
 
 ## What has been verified live
 

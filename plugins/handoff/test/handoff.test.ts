@@ -256,7 +256,7 @@ test('It runs a release build newer than any pinned build in the act mode', ACT,
   expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { setting: 'act', effective_mode: 'act' } })
 })
 
-test('It shows no toast on a development build in a session with no prompt', ACT, async ($, on) => {
+test('It shows no toast or transcript line on a development build in a session with no prompt', ACT, async ($, on) => {
   const world = install($, on)
   world.version = DEV_BUILD
   await startSession($, false)
@@ -309,7 +309,8 @@ test('It still starts the session when the version cannot be read', ACT, async (
   const world = install($, on)
   world.versionThrows = true
   expect(await startSession($)).toEqual({ cwd: '/work' })
-  expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', engine_version: 'unknown' })
+  expect(lastRecord(world)).toMatchObject({ action: 'untested_engine', engine_version: 'unknown', trigger_values: { setting: 'act', effective_mode: 'off' } })
+  expect(world.effects.filter(effect => effect.startsWith('toast:') || effect.startsWith('log:'))).toEqual([])
 })
 
 test('It records effective_mode off and setting act for /handoff before session.start', ACT, async ($, on) => {
