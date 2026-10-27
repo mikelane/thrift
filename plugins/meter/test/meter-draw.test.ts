@@ -25,8 +25,9 @@ describe('drawMeter', () => {
     const pane = await mountPane($)
     const row = await pane.find({ type: 'Text', text: /CONTEXT/ })
     expect(row?.props.color).toBe('warning')
-    expect(row?.text).toContain('90% of 167k')
-    expect(pairs(await textsOf(pane), /compacts at 167k/)).toHaveLength(1)
+    expect(row?.text).toContain('150k / 200k')
+    expect((await pane.find({ type: 'Text', text: /^█+▌? *░+ +90%$/ }))?.props.color).toBe('warning')
+    expect(pairs(await textsOf(pane), /compacts 167k/)).toHaveLength(1)
   })
 
   test('It colors the CONTEXT row against the window before any breakdown', async ($, on) => {
@@ -38,9 +39,8 @@ describe('drawMeter', () => {
     const pane = await mountPane($)
     const texts = await textsOf(pane)
     expect((await pane.find({ type: 'Text', text: /CONTEXT/ }))?.props.color).toBe('warning')
-    expect(pairs(texts, /compacts at/)).toEqual([])
-    expect(pairs(texts, /cache hit/)).toHaveLength(1)
-    expect(texts.join('\n')).toContain('cache hit \u2014')
+    expect(pairs(texts, /compacts/)).toEqual([])
+    expect(pairs(texts, /cache/)).toEqual(['cache \u2014'])
   })
 
   test('It draws the CONTEXT row red at 105 percent over the window with no breakdown', async ($, on) => {
@@ -49,26 +49,27 @@ describe('drawMeter', () => {
     world.isBreakdownFailing = true
     await startSession($)
     await runMeter($)
-    const row = await (await mountPane($)).find({ type: 'Text', text: /CONTEXT/ })
+    const pane = await mountPane($)
+    const row = await pane.find({ type: 'Text', text: /CONTEXT/ })
     expect(row?.props.color).toBe('error')
-    expect(row?.text).toContain('105%')
+    expect(pairs(await textsOf(pane), /^█{25} +105%$/)).toHaveLength(1)
   })
 
   test('It draws the cache line from the breakdown', async ($, on) => {
     install($, on)
     await startSession($)
     await runMeter($)
-    expect((await (await mountPane($)).find({ type: 'Text', text: /cache hit/ }))?.text).toContain('cache hit 96%')
+    expect((await (await mountPane($)).find({ type: 'Text', text: /cache/ }))?.text).toContain('cache 96%')
   })
 
-  test('It draws cache hit with a dash when every count is 0', async ($, on) => {
+  test('It draws cache with a dash when every count is 0', async ($, on) => {
     const world = install($, on)
     world.breakdown = breakdownOf({
       apiUsage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
     })
     await startSession($)
     await runMeter($)
-    expect((await (await mountPane($)).find({ type: 'Text', text: /cache hit/ }))?.text).toContain('cache hit —')
+    expect((await (await mountPane($)).find({ type: 'Text', text: /cache/ }))?.text).toContain('cache —')
   })
 
   test('It waits uncolored for the first response when the context has no tokens', async ($, on) => {
@@ -90,7 +91,7 @@ describe('drawMeter', () => {
     expect(texts).not.toContain('5-HOUR')
     expect(texts).not.toContain('WEEKLY')
     expect(texts).toContain('CONTEXT')
-    expect(texts).toContain('COST   $4.82')
+    expect(texts).toContain('¢ COST      $4.82 at API rates')
   })
 
   test('It leaves out the COST row and any $0.00 when usage carries no cost', async ($, on) => {
@@ -102,6 +103,17 @@ describe('drawMeter', () => {
     expect(texts).not.toContain('$0.00')
   })
 
+  test('It draws a paced 5-HOUR window with its gauge marker, pace and reset line', async ($, on) => {
+    const world = install($, on)
+    world.usage = usageOf(1000, [{ kind: 'five_hour', percentUsed: 48, resetsAt: resetsIn(114) }])
+    await startSession($)
+    await runMeter($)
+    const texts = await textsOf(await mountPane($))
+    expect(pairs(texts, /48% · 0.77×/)).toHaveLength(1)
+    expect(pairs(texts, /^[█▌░│]{25}$/)).toEqual(['█'.repeat(12) + '░'.repeat(4) + '│' + '░'.repeat(8)])
+    expect(pairs(texts, /^resets /)).toHaveLength(1)
+  })
+
   test('It draws a green 5-HOUR row with its pace and no projection', async ($, on) => {
     const world = install($, on)
     world.usage = usageOf(1000, [{ kind: 'five_hour', percentUsed: 48, resetsAt: resetsIn(114) }])
@@ -110,7 +122,7 @@ describe('drawMeter', () => {
     const pane = await mountPane($)
     const row = await pane.find({ type: 'Text', text: /5-HOUR/ })
     expect(row?.props.color).toBe('success')
-    expect((await pane.find({ type: 'Text', text: /pace 0.77/ }))?.text).not.toContain('hits')
+    expect((await pane.find({ type: 'Text', text: /^resets/ }))?.text).not.toContain('hits')
   })
 
   test('It draws too early with the percent and no color under 5 percent elapsed', async ($, on) => {
@@ -118,9 +130,11 @@ describe('drawMeter', () => {
     world.usage = usageOf(1000, [{ kind: 'five_hour', percentUsed: 10, resetsAt: resetsIn(286) }])
     await startSession($)
     await runMeter($)
-    const row = await (await mountPane($)).find({ type: 'Text', text: /5-HOUR/ })
+    const pane = await mountPane($)
+    const row = await pane.find({ type: 'Text', text: /5-HOUR/ })
     expect(row?.text).toContain('10%')
-    expect(row?.text).toContain('too early')
+    expect(pairs(await textsOf(pane), /^too early$/)).toHaveLength(1)
+    expect(pairs(await textsOf(pane), /│/)).toEqual([])
     expect(row?.props.color).toBeUndefined()
   })
 
@@ -131,7 +145,7 @@ describe('drawMeter', () => {
     await runMeter($)
     const pane = await mountPane($)
     const row = await pane.find({ type: 'Text', text: /5-HOUR/ })
-    expect(row?.text).toBe('◷ 5-HOUR   30%')
+    expect(row?.text).toBe('◷ 5-HOUR                   30%')
     expect(row?.props.color).toBeUndefined()
     expect(pairs(await textsOf(pane), /pace/)).toEqual([])
   })
@@ -144,7 +158,9 @@ describe('drawMeter', () => {
     const pane = await mountPane($)
     const row = await pane.find({ type: 'Text', text: /5-HOUR/ })
     expect(row?.props.color).toBe('error')
-    expect(row?.text).toContain('limit reached')
+    expect(row?.text).toContain('100%')
+    expect(pairs(await textsOf(pane), /^█{25}$/)).toHaveLength(1)
+    expect(pairs(await textsOf(pane), /limit reached/)).toHaveLength(1)
     expect(pairs(await textsOf(pane), /pace|hits/)).toEqual([])
   })
 
@@ -261,6 +277,6 @@ describe('drawMeter', () => {
     await runMeter($)
     const button = await (await mountPane($)).find({ type: 'Button', key: 'refresh' })
     expect(button?.props.hotkey).toBe('r')
-    expect(button?.props.label).toBe('↻ [r] refresh')
+    expect(button?.props.label).toBe('↻ refresh (r)')
   })
 })

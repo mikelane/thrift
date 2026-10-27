@@ -9,26 +9,32 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 
 ```
 ┌ meter ─────────────────────────────────────────┐
-│ ◔ CONTEXT   142k / 200k   85% of 167k           │  yellow
-│   compacts at 167k  ·  cache hit 96%            │
+│ ◔ CONTEXT            149k / 1M                  │  green
+│ ████░░░░░░░░░░░░░░░░░░░░░  15%                  │
+│ compacts 967k · cache 100%                      │
 │                                                 │
-│ ◷ 5-HOUR   48%  ·  62% of window elapsed        │  green
-│   pace 0.77×  ●  resets 4:15pm                  │
+│ ◷ 5-HOUR            7% · 0.39×                  │  green
+│ ██░░░│░░░░░░░░░░░░░░░░░░░                       │
+│ resets Tue 2:10am                               │
 │                                                 │
-│ ⧖ WEEKLY   71%  ·  43% of window elapsed        │  red
-│   pace 1.66×  ●  hits 100% Wed 2:25pm, resets Sat 9:00am
+│ ⧖ WEEKLY           13% · 0.59×                  │  green
+│ ███▌░░│░░░░░░░░░░░░░░░░░░                       │
+│ resets Sun 9:00am                               │
 │                                                 │
-│ ¢ COST   $4.82 this session                     │
+│ ¢ COST     $79.90 at API rates                  │
 │                                                 │
-│ TOP CONTEXT  ↻ [r] refresh  · 3m ago            │
-│   Messages      88k  ██████                     │
-│   MCP tools     21k  █▌                         │
-│   Custom agents 14k  █                          │
-│   Skills         8k  ▌                          │
-│   Memory files   6k  ▌                          │
+│ TOP CONTEXT  ↻ refresh (r)  · 3m ago            │
+│ Messages       66k ━━━━━━━━━━                   │
+│ System tools   30k ━━━━━                        │
+│ Memory files   24k ━━━━                         │
+│ Custom agents  13k ━━                           │
+│ Skills         10k ━━                           │
 │   ⬡ mcp servers: github 9k, ha 6k               │
 └─────────────────────────────────────────────────┘
 ```
+
+Each gauge is 25 cells wide. The `│` in a window gauge marks the share of the window that has
+elapsed: a fill that stops short of it is under pace.
 
 ## Opening and closing
 
@@ -74,7 +80,7 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
   pace), so the thresholds above give the band in a monochrome terminal or to a screen reader. The
   band name itself is not printed, and the `●` after the pace carries only the band color.
 - **Cache hit**: `cache_read_input_tokens / (input_tokens + cache_read_input_tokens +
-  cache_creation_input_tokens)`, as a whole percent. Shown as `cache hit —` when `apiUsage` is
+  cache_creation_input_tokens)`, as a whole percent. Shown as `cache —` when `apiUsage` is
   null, no breakdown has been taken, or the denominator is 0.
 - **TOP CONTEXT rows**: categories with `kind === "used"` (never matched by name), largest first,
   ties by name in code-point order, at most 5. Each row shows the category's name unchanged, as
@@ -98,7 +104,7 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 - **Throttled summary**: when the event's `changed` includes `context` and the last breakdown is
   60 s old or older, a `breakdown: "summary"` call refreshes the cached figures. The threshold, the
   cache hit and TOP CONTEXT come only from a breakdown.
-- **Explicit refresh**: the `[r] refresh` button and `/meter refresh` call `breakdown: "full"`.
+- **Explicit refresh**: the `refresh (r)` button and `/meter refresh` call `breakdown: "full"`.
   A full count sends one token-count API request per tool and per memory file, as `/context`
   does. The `r` hotkey fires only while the pane has focus (ctrl+x tab, a click, or opening with
   focus); typing `r` in the composer does nothing.

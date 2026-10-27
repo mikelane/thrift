@@ -19,7 +19,8 @@ test('It returns a green pace of 0.77 from windowView for 48 percent with 1h54m 
     label: '5-HOUR',
     slot: 'fiveHour',
     percentText: '48',
-    elapsedPercent: 62,
+    percentUsed: 48,
+    elapsedShare: 0.62,
     paceText: '0.77',
     color: 'success',
     resetsLabel: '10:54am',
@@ -36,7 +37,8 @@ test('It returns a red pace of 1.66 with a projection from windowView for 71 per
     label: 'WEEKLY',
     slot: 'weekly',
     percentText: '71',
-    elapsedPercent: 43,
+    percentUsed: 71,
+    elapsedShare: 3 / 7,
     paceText: '1.66',
     color: 'error',
     projection: 'Wed 2:25pm',
@@ -53,7 +55,7 @@ test('It returns too early from windowView under 5 percent elapsed', () => {
     state: 'too-early',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '10',
+    percentText: '10', percentUsed: 10,
   })
 })
 
@@ -62,12 +64,12 @@ test('It returns a plain row from windowView when resetsAt is one minute ago', (
     state: 'plain',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '30',
+    percentText: '30', percentUsed: 30,
   })
 })
 
 test('It returns a plain row from windowView when resetsAt is missing', () => {
-  expect(view('five_hour', 30)).toEqual({ state: 'plain', label: '5-HOUR', slot: 'fiveHour', percentText: '30' })
+  expect(view('five_hour', 30)).toEqual({ state: 'plain', label: '5-HOUR', slot: 'fiveHour', percentText: '30', percentUsed: 30 })
 })
 
 test('It returns a plain row from windowView when resetsAt is not a date', () => {
@@ -79,7 +81,7 @@ test('It returns limit reached in red with its reset time from windowView at 100
     state: 'limit-reached',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '100',
+    percentText: '100', percentUsed: 100,
     color: 'error',
     resetsLabel: '9:40am',
   })
@@ -94,7 +96,7 @@ test('It returns limit reached with no reset time from windowView when resetsAt 
     state: 'limit-reached',
     label: '5-HOUR',
     slot: 'fiveHour',
-    percentText: '100',
+    percentText: '100', percentUsed: 100,
     color: 'error',
   })
 })
@@ -104,7 +106,7 @@ test('It returns limit reached with no reset time from windowView when resetsAt 
 })
 
 test('It returns limit reached from windowView when usage is past 100 percent', () => {
-  expect(view('seven_day', 103.2, after(60))).toMatchObject({ state: 'limit-reached', percentText: '103.2' })
+  expect(view('seven_day', 103.2, after(60))).toMatchObject({ state: 'limit-reached', percentText: '103.2', percentUsed: 103.2 })
 })
 
 const spendCases = [
@@ -119,13 +121,14 @@ for (const [used, name, colorFields] of spendCases) {
       state: 'plain',
       label: 'SPEND LIMIT',
       percentText: String(used),
+      percentUsed: used,
       ...colorFields,
     })
   })
 }
 
 test('It names an unknown window kind in capitals without a glyph slot in windowView', () => {
-  expect(view('monthly_cap', 5)).toEqual({ state: 'plain', label: 'MONTHLY CAP', percentText: '5' })
+  expect(view('monthly_cap', 5)).toEqual({ state: 'plain', label: 'MONTHLY CAP', percentText: '5', percentUsed: 5 })
 })
 
 test('It returns warning from windowView when pace is exactly 0.9 at 8.1 percent after 27 minutes', () => {

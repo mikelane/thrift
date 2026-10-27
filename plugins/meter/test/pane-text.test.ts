@@ -3,8 +3,10 @@ import { expect, test } from 'claude-code/testing'
 import type { BreakdownReading, HeadlineReading } from '../types'
 import {
   contextDetailText,
+  contextGaugeText,
   contextRowText,
   costRowText,
+  headerLine,
   mcpServersRowText,
   topContextRowTexts,
   windowRowTexts,
@@ -26,25 +28,39 @@ const breakdown = (extra: Partial<BreakdownReading> = {}): BreakdownReading => (
   ...extra,
 })
 
-test('It draws tokens, window and fill against the threshold in contextRowText', () => {
+const gauge = (filled: string, markerAt?: number): string => {
+  const cells = [...filled.padEnd(25, '░')]
+  if (markerAt !== undefined) cells[markerAt] = '│'
+  return cells.join('')
+}
+
+test('It right-aligns the second part to 30 columns in headerLine', () => {
+  expect(headerLine('◔ CONTEXT', '149k / 1M')).toBe('◔ CONTEXT            149k / 1M')
+})
+
+test('It keeps two spaces between the parts in headerLine when they overflow', () => {
+  expect(headerLine('◔ CONTEXT', 'waiting for first response')).toBe('◔ CONTEXT  waiting for first response')
+})
+
+test('It draws tokens and window colored by the threshold fill in contextRowText', () => {
   expect(contextRowText(headline(142000), 167000, 'unicode')).toEqual({
-    text: '◔ CONTEXT   142k / 200k   85% of 167k',
+    text: '◔ CONTEXT          142k / 200k',
     color: 'warning',
   })
 })
 
-test('It draws the fill against the window in contextRowText when no threshold is cached', () => {
-  expect(contextRowText(headline(150000), undefined, 'unicode')).toEqual({
-    text: '◔ CONTEXT   150k / 200k   75% of 200k',
-    color: 'warning',
-  })
+test('It draws the million window as 1M in contextRowText', () => {
+  expect(contextRowText(headline(149000, { contextWindow: 1000000 }), 967000, 'unicode').text).toBe(
+    '◔ CONTEXT            149k / 1M',
+  )
 })
 
-test('It draws 105 percent in red in contextRowText over the window', () => {
-  expect(contextRowText(headline(210000), undefined, 'unicode')).toMatchObject({
-    text: '◔ CONTEXT   210k / 200k   105% of 200k',
-    color: 'error',
-  })
+test('It colors by the window in contextRowText when no threshold is cached', () => {
+  expect(contextRowText(headline(150000), undefined, 'unicode').color).toBe('warning')
+})
+
+test('It draws red in contextRowText over the window', () => {
+  expect(contextRowText(headline(210000), undefined, 'unicode').color).toBe('error')
 })
 
 test('It draws green in contextRowText well under the threshold', () => {
@@ -53,7 +69,7 @@ test('It draws green in contextRowText well under the threshold', () => {
 
 test('It waits uncolored in contextRowText when the context has no tokens', () => {
   expect(contextRowText(headline(undefined), undefined, 'unicode')).toEqual({
-    text: '◔ CONTEXT   waiting for first response',
+    text: '◔ CONTEXT  waiting for first response',
   })
 })
 
@@ -65,28 +81,55 @@ test('It draws the nerd glyph in contextRowText', () => {
   expect(contextRowText(headline(1000), undefined, 'nerd').text).toStartWith('\u{F1C0} CONTEXT')
 })
 
-test('It joins compacts at and cache hit in contextDetailText', () => {
-  expect(contextDetailText(breakdown({ compactsAt: 167000 }))).toBe('compacts at 167k  ·  cache hit 96%')
+test('It fills to the threshold share and appends the percent in contextGaugeText', () => {
+  expect(contextGaugeText(headline(149000, { contextWindow: 1000000 }), 967000)).toEqual({
+    text: `${gauge('████')}  15%`,
+    color: 'success',
+  })
 })
 
-test('It leaves out compacts at in contextDetailText when auto-compact is off', () => {
-  expect(contextDetailText(breakdown())).toBe('cache hit 96%')
+test('It colors the gauge by the context band in contextGaugeText', () => {
+  expect(contextGaugeText(headline(142000), 167000)?.color).toBe('warning')
 })
 
-test('It reads cache hit with a dash in contextDetailText when no figure exists', () => {
-  expect(contextDetailText(breakdown({ cacheHitPercent: null }))).toBe('cache hit —')
+test('It keeps one half cell in contextGaugeText for a sliver of context', () => {
+  expect(contextGaugeText(headline(1), undefined)?.text).toBe(`${gauge('▌')}  0%`)
 })
 
-test('It reads cache hit with a dash in contextDetailText before any breakdown', () => {
-  expect(contextDetailText(null)).toBe('cache hit —')
+test('It fills the whole gauge in contextGaugeText over the window', () => {
+  expect(contextGaugeText(headline(210000), undefined)).toEqual({ text: `${'█'.repeat(25)}  105%`, color: 'error' })
 })
 
-test('It draws the cost to cents in costRowText', () => {
-  expect(costRowText(headline(1, { costUsd: 4.8213 }), 'unicode')).toBe('¢ COST   $4.82 this session')
+test('It returns undefined from contextGaugeText when the context has no tokens', () => {
+  expect(contextGaugeText(headline(undefined), undefined)).toBeUndefined()
+})
+
+test('It joins compacts and cache in contextDetailText', () => {
+  expect(contextDetailText(breakdown({ compactsAt: 967000 }))).toBe('compacts 967k · cache 96%')
+})
+
+test('It leaves out compacts in contextDetailText when auto-compact is off', () => {
+  expect(contextDetailText(breakdown())).toBe('cache 96%')
+})
+
+test('It reads cache with a dash in contextDetailText when no figure exists', () => {
+  expect(contextDetailText(breakdown({ cacheHitPercent: null }))).toBe('cache —')
+})
+
+test('It reads cache with a dash in contextDetailText before any breakdown', () => {
+  expect(contextDetailText(null)).toBe('cache —')
+})
+
+test('It draws the cost to cents as an API-rate estimate in costRowText', () => {
+  expect(costRowText(headline(1, { costUsd: 79.9 }), 'unicode')).toBe('¢ COST     $79.90 at API rates')
 })
 
 test('It draws a cost of zero in costRowText when the ledger reports one', () => {
-  expect(costRowText(headline(1, { costUsd: 0 }), 'unicode')).toBe('¢ COST   $0.00 this session')
+  expect(costRowText(headline(1, { costUsd: 0 }), 'unicode')).toBe('¢ COST      $0.00 at API rates')
+})
+
+test('It never says this session in costRowText', () => {
+  expect(costRowText(headline(1, { costUsd: 4.8213 }), 'unicode')).not.toContain('this session')
 })
 
 test('It returns undefined from costRowText when usage carries no cost', () => {
@@ -97,26 +140,30 @@ const paced: WindowView = {
   state: 'paced',
   label: '5-HOUR',
   slot: 'fiveHour',
-  percentText: '48',
-  elapsedPercent: 62,
-  paceText: '0.77',
+  percentText: '7',
+  percentUsed: 7,
+  elapsedShare: 0.18,
+  paceText: '0.39',
   color: 'success',
-  resetsLabel: '4:15pm',
+  resetsLabel: 'Tue 2:10am',
 }
 
-test('It draws the percent, elapsed share, pace and reset in windowRowTexts', () => {
+test('It draws header, gauge with the marker and reset line in windowRowTexts', () => {
   expect(windowRowTexts(paced, 'unicode')).toEqual([
-    { text: '◷ 5-HOUR   48%  ·  62% of window elapsed', color: 'success' },
-    { text: 'pace 0.77×  ●  resets 4:15pm', color: 'success' },
+    { text: headerLine('◷ 5-HOUR', '7% · 0.39×'), color: 'success' },
+    { text: gauge('██', 5), color: 'success' },
+    { text: 'resets Tue 2:10am', dim: true },
   ])
 })
 
-test('It draws the projection before the reset in windowRowTexts', () => {
-  const [, second] = windowRowTexts(
-    { ...paced, label: 'WEEKLY', slot: 'weekly', paceText: '1.66', color: 'error', projection: 'Wed 2:25pm', resetsLabel: 'Sat 9:00am' },
-    'unicode',
-  )
-  expect(second?.text).toBe('pace 1.66×  ●  hits 100% Wed 2:25pm, resets Sat 9:00am')
+test('It adds the projection after the reset in windowRowTexts', () => {
+  const [, , detail] = windowRowTexts({ ...paced, projection: 'Wed 2:25pm', color: 'error' }, 'unicode')
+  expect(detail?.text).toBe('resets Tue 2:10am · hits 100% Wed 2:25pm')
+})
+
+test('It draws the marker over the fill in windowRowTexts when usage passes the elapsed share', () => {
+  const [, row] = windowRowTexts({ ...paced, percentText: '50', percentUsed: 50 }, 'unicode')
+  expect(row?.text).toBe('█████│' + '██████' + '▌' + '░'.repeat(12))
 })
 
 test('It draws the weekly glyph in windowRowTexts', () => {
@@ -124,39 +171,46 @@ test('It draws the weekly glyph in windowRowTexts', () => {
   expect(first?.text).toStartWith('\u{F073} WEEKLY')
 })
 
-test('It draws too early uncolored in windowRowTexts', () => {
-  expect(windowRowTexts({ state: 'too-early', label: '5-HOUR', slot: 'fiveHour', percentText: '10' }, 'unicode')).toEqual([
-    { text: '◷ 5-HOUR   10%  ·  too early' },
-  ])
+test('It draws too early with a markerless gauge and no color in windowRowTexts', () => {
+  expect(
+    windowRowTexts({ state: 'too-early', label: '5-HOUR', slot: 'fiveHour', percentText: '10', percentUsed: 10 }, 'unicode'),
+  ).toEqual([{ text: headerLine('◷ 5-HOUR', '10%') }, { text: gauge('██▌') }, { text: 'too early', dim: true }])
 })
 
-test('It draws a plain window with only its percent in windowRowTexts', () => {
-  expect(windowRowTexts({ state: 'plain', label: '5-HOUR', slot: 'fiveHour', percentText: '30' }, 'unicode')).toEqual([
-    { text: '◷ 5-HOUR   30%' },
-  ])
+test('It draws a plain window with only header and gauge in windowRowTexts', () => {
+  expect(
+    windowRowTexts({ state: 'plain', label: '5-HOUR', slot: 'fiveHour', percentText: '30', percentUsed: 30 }, 'unicode'),
+  ).toEqual([{ text: headerLine('◷ 5-HOUR', '30%') }, { text: gauge('███████▌') }])
 })
 
 test('It draws a spend limit without a glyph and in red in windowRowTexts at its limit', () => {
-  expect(windowRowTexts({ state: 'plain', label: 'SPEND LIMIT', percentText: '104.5', color: 'error' }, 'unicode')).toEqual([
-    { text: 'SPEND LIMIT   104.5%', color: 'error' },
+  const [header, bar] = windowRowTexts(
+    { state: 'plain', label: 'SPEND LIMIT', percentText: '104.5', percentUsed: 104.5, color: 'error' },
+    'unicode',
+  )
+  expect(header).toEqual({ text: headerLine('SPEND LIMIT', '104.5%'), color: 'error' })
+  expect(bar).toEqual({ text: '█'.repeat(25), color: 'error' })
+})
+
+test('It draws limit reached as a full red gauge with its reset time in windowRowTexts', () => {
+  expect(
+    windowRowTexts(
+      { state: 'limit-reached', label: '5-HOUR', slot: 'fiveHour', percentText: '100', percentUsed: 100, color: 'error', resetsLabel: '9:40am' },
+      'unicode',
+    ),
+  ).toEqual([
+    { text: headerLine('◷ 5-HOUR', '100%'), color: 'error' },
+    { text: '█'.repeat(25), color: 'error' },
+    { text: '✕ limit reached · resets 9:40am', color: 'error' },
   ])
 })
 
-test('It draws limit reached with its glyph and reset time in windowRowTexts', () => {
-  expect(
-    windowRowTexts(
-      { state: 'limit-reached', label: '5-HOUR', slot: 'fiveHour', percentText: '100', color: 'error', resetsLabel: '9:40am' },
-      'unicode',
-    ),
-  ).toEqual([{ text: '◷ 5-HOUR   100%  ·  ✕ limit reached  ·  resets 9:40am', color: 'error' }])
-})
-
 test('It draws limit reached with the nerd glyph and no reset time in windowRowTexts', () => {
-  const [first] = windowRowTexts(
-    { state: 'limit-reached', label: '5-HOUR', slot: 'fiveHour', percentText: '100', color: 'error' },
+  const [, , detail] = windowRowTexts(
+    { state: 'limit-reached', label: '5-HOUR', slot: 'fiveHour', percentText: '100', percentUsed: 100, color: 'error' },
     'nerd',
   )
-  expect(first?.text).toBe('\u{F017} 5-HOUR   100%  ·  \u{F05E} limit reached')
+  expect(detail?.text).toBe('\u{F05E} limit reached')
 })
 
 test('It aligns names, tokens and bars in topContextRowTexts', () => {
