@@ -4,7 +4,7 @@ import { install, isStub, lastRecord, putFile, read, SEVEN_LINES, startSession, 
 
 const ACT = { options: { readMode: 'act' } }
 
-describe('a repeat Read of an unchanged file in act', () => {
+describe('readTool: a repeat Read of an unchanged file in act', () => {
   test('It lets the first Read through to the tool', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
@@ -75,7 +75,7 @@ describe('a repeat Read of an unchanged file in act', () => {
   })
 })
 
-describe('the record of a Read evaluation', () => {
+describe('readTool: the record of a Read evaluation', () => {
   test('It records the first read as a pass with reason first_read', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)

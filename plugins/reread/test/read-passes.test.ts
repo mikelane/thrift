@@ -8,7 +8,7 @@ const reasonOf = (world: World) => [triggerValues(world).decision, triggerValues
 
 const lastAction = (world: World): string => world.records.at(-1)?.action ?? ''
 
-describe('a Read the plugin lets through', () => {
+describe('readTool: a Read the plugin lets through', () => {
   test('It passes when the file changed size and mtime', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
@@ -200,7 +200,7 @@ describe('a Read the plugin lets through', () => {
   })
 })
 
-describe('override after a stub', () => {
+describe('readTool: override after a stub', () => {
   test('It gives the contents when the model reads again after a stub', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)

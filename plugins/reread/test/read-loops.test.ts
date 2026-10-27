@@ -5,7 +5,7 @@ import { install, isStub, lastRecord, putFile, read, SEVEN_LINES, triggerValues 
 
 const ACT = { options: { readMode: 'act' } }
 
-describe('the main loop and a subagent', () => {
+describe('readTool: the main loop and a subagent', () => {
   test('It does not answer a subagent from a read the main loop made', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
@@ -75,7 +75,7 @@ const CALLER: Plugin = {
   },
 }
 
-describe('a Read raised by another plugin', () => {
+describe('readTool: a Read raised by another plugin', () => {
   test('It is passed through and recorded as plugin_call', { options: { readMode: 'act' }, plugins: [CALLER] }, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)

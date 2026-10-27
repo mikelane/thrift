@@ -28,6 +28,7 @@ export type World = {
   sessionId: string
   version: SessionVersion
   versionThrows: boolean
+  versionReads: number
   turns: number
   // tool_use_ids each loop's context holds, by agent id ('main' for the main loop)
   contexts: Map<string, string[]>
@@ -137,6 +138,7 @@ const installSessionMocks = (on: On, world: World) => {
     return ok(world.turns)
   })
   on('session.version', () => {
+    world.versionReads += 1
     if (world.versionThrows) throw new Error('no version')
     return ok(world.version)
   })
@@ -186,6 +188,7 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     sessionId: 'session-1',
     version: { version: '2.1.311', base: '2.1.311' },
     versionThrows: false,
+    versionReads: 0,
     turns: 1,
     contexts: new Map(),
     deniedAgents: new Set(),
@@ -242,7 +245,7 @@ export const endSessionWith = ($: Engine, reason: 'clear' | 'resume' | 'other', 
 type Trigger = 'manual' | 'auto' | 'plugin' | 'precompute'
 
 export const compact = ($: Engine, trigger: Trigger, agentId?: string) =>
-  $.session.compact({ trigger, messages: [], ...(agentId === undefined ? {} : { agentId }) })
+  $.session.compact({ trigger, messages: [{ role: 'user', text: 'work', toolUses: [] }], ...(agentId === undefined ? {} : { agentId }) })
 
 export const lastRecord = (world: World): LogRecord => {
   const record = world.records.at(-1)

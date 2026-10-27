@@ -6,7 +6,7 @@ const OFF = { options: { readMode: 'off' } }
 const ASK = { options: { readMode: 'ask' } }
 const ACT = { options: { readMode: 'act' } }
 
-describe('off', () => {
+describe('readTool in off', () => {
   test('It runs the tool for a repeat Read', OFF, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
@@ -83,7 +83,7 @@ describe('off', () => {
   })
 })
 
-describe('ask', () => {
+describe('readTool in ask', () => {
   test('It answers a repeat with the stub', ASK, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
@@ -124,7 +124,7 @@ describe('ask', () => {
   })
 })
 
-describe('act', () => {
+describe('readTool in act', () => {
   test('It shows no line in the transcript', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
