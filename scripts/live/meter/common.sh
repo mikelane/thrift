@@ -54,6 +54,13 @@ meter_frame_is_gone() {
   screen=$(pane "$1") || return 1
   ! text_matches "$METER_INLINE_FRAME" "$screen" && ! text_matches "$METER_DOCKED_FRAME" "$screen"
 }
+# meter_pane_lacks <name> <regex>: the screen can be read and has no match. `! pane_has` would pass on
+# a session that died.
+meter_pane_lacks() {
+  local screen
+  screen=$(pane "$1") || return 1
+  ! text_matches "$2" "$screen"
+}
 
 # The age label of the breakdown, drawn after the TOP CONTEXT header.
 meter_age_seconds() { pane "$1" | sed -En 's/.*TOP CONTEXT.*· ([0-9]+)s ago.*/\1/p' | head -n 1; }
@@ -81,10 +88,10 @@ pane_count_above() {
 # meter_command <name> <command> <reply-regex>: types a /meter command and waits for one more reply
 # of that text than the screen showed before.
 meter_command() {
-  local name=$1 command=$2 reply=$3 replies_before
-  replies_before=$(pane_count "$name" "$reply")
+  local name=$1 command=$2 reply_pattern=$3 replies_before
+  replies_before=$(pane_count "$name" "$reply_pattern")
   submit "$name" "$command"
-  wait_for "the reply to '$command' in '$name'" pane_count_above "$name" "$reply" "$replies_before"
+  wait_for "the reply to '$command' in '$name'" pane_count_above "$name" "$reply_pattern" "$replies_before"
 }
 
 # say_apple <name>: one tiny turn, so the session has a reply.
@@ -122,8 +129,27 @@ METER_MAIN_SCREEN='CLAUDE_CODE_NO_FLICKER=0'
 
 # The engine remembers which panes the person opened by asking, in the config file.
 meter_config_file() { echo "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"; }
-meter_asked_panes() { jq -c '.pluginPanes.asked // []' "$(meter_config_file)"; }
-meter_was_asked() { jq -e '(.pluginPanes.asked // []) | any(.plugin == "meter" and .id == "meter")' "$(meter_config_file)" >/dev/null; }
+# A config file that cannot be read as JSON is not "nothing asked": it would skip the close by hand and
+# record asked_before=no. These run in command substitutions and conditions, so they note the problem and
+# the next wait_for, check or verdict ends the run with an ERROR. A missing file holds no asked list.
+meter_asked_panes() {
+  local file
+  file=$(meter_config_file)
+  [[ -f "$file" ]] || { echo '[]'; return 0; }
+  jq -c '.pluginPanes.asked // []' "$file" 2>/dev/null || {
+    live_note_error "the config file $file could not be read as JSON"
+    echo '(unreadable)'
+  }
+}
+meter_was_asked() {
+  local file status=0
+  file=$(meter_config_file)
+  [[ -f "$file" ]] || return 1
+  jq -e '(.pluginPanes.asked // []) | any(.plugin == "meter" and .id == "meter")' "$file" >/dev/null 2>&1 || status=$?
+  # jq -e exits 1 for false; any other non-zero status is an error reading the file.
+  if ((status > 1)); then live_note_error "the config file $file could not be read as JSON (jq status $status)"; fi
+  return "$status"
+}
 
 # meter_close_by_hand <name>: focus the pane (ctrl+x tab) and close it (ctrl+x x), as a person does.
 # That removes the pane from the asked list.
@@ -137,14 +163,14 @@ meter_close_by_hand() {
 # a row. The effort indicator blinks, so its line is left out. A pane that never appears has nothing to wait for, so this is how "not placed" is judged.
 # A screen that cannot be read fails, so a session that died is not judged still.
 meter_screen_is_still() {
-  local name=$1 polls=$2 state="$LIVE_RUN/still-$1" screen current previous='' count=0
+  local name=$1 polls=$2 state_file="$LIVE_RUN/still-$1" screen current_checksum previous_checksum='' still_polls=0
   screen=$(pane "$name") || return 1
-  current=$({ grep -v '/effort' <<<"$screen" || true; } | cksum | tr ' ' '-')
-  if [[ -f "$state" ]]; then
-    read -r previous count <"$state" || true
-    count=${count:-0}
+  current_checksum=$({ grep -v '/effort' <<<"$screen" || true; } | cksum | tr ' ' '-')
+  if [[ -f "$state_file" ]]; then
+    read -r previous_checksum still_polls <"$state_file" || true
+    still_polls=${still_polls:-0}
   fi
-  if [[ "$current" == "$previous" ]]; then count=$((count + 1)); else count=0; fi
-  printf '%s %s\n' "$current" "$count" >"$state"
-  ((count >= polls))
+  if [[ "$current_checksum" == "$previous_checksum" ]]; then still_polls=$((still_polls + 1)); else still_polls=0; fi
+  printf '%s %s\n' "$current_checksum" "$still_polls" >"$state_file"
+  ((still_polls >= polls))
 }

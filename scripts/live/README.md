@@ -19,8 +19,8 @@ scripts/live/live.sh handoff held-prompt-origin --keep  # keep the run directory
 
 Needs `tmux`, `claude` (logged in), and `jq`. Runs on bash 3.2 and newer.
 
-Every session's terminal is 120 columns by 40 rows. `LIVE_COLUMNS` (a whole number) sets the width, for a
-scenario that tests a width-dependent layout (`meter placement`); a scenario sets it before `live_start`.
+Each session's terminal is 120 columns by 40 rows, unless `LIVE_COLUMNS` (a whole number) sets the
+width. A scenario that tests a width-dependent layout (`meter placement`) sets it before `live_start`.
 
 Before the first run, trust the harness's working directory yourself. Sessions start in
 `$XDG_CACHE_HOME/thrift-live/cwd`, or `~/.cache/thrift-live/cwd` when `XDG_CACHE_HOME` is unset
@@ -162,8 +162,8 @@ previous session" line. Those two are the evidence for #57; the scenario checks 
 
 ### meter
 
-The meter pane is drawn by the engine, so most of these read the screen. Scenarios 2 to 4 and 7 run in a
-fullscreen session (`LIVE_SESSION_ENV='CLAUDE_CODE_NO_FLICKER=1'`), because the main-screen layout draws the
+The meter pane is drawn by the engine, so most of these read the screen. `redraw-after-turn`, `refresh-focus`,
+`refresh-command` and `clear` run in a fullscreen session (`LIVE_SESSION_ENV='CLAUDE_CODE_NO_FLICKER=1'`), because the main-screen layout draws the
 pane inline, clipped to about a third of the terminal, and cuts it off above the `TOP CONTEXT` header that
 holds the age label. `placement` sets `LIVE_COLUMNS` per cell. `common.sh` copies the plugin unchanged: meter has
 no thresholds to lower.
@@ -175,7 +175,7 @@ no thresholds to lower.
 | `refresh-focus` | #121 item 3 | With the pane open and its age label at 1s or more (open, wait 2 s, run a turn), `r` typed in the composer reaches the box, writes no `ui.press meter/refresh` line to the debug log, and leaves the label alone. After ctrl+x tab, `r` writes one `ui.press meter/refresh` line and the label reads `0s ago`. |
 | `refresh-command` | #121 item 4 | With the label at 1s or more, `/meter refresh` replies `Meter refreshed.` and the label reads `0s ago`. After `/meter` closes the pane, `/meter refresh` replies `Meter opened.` and the pane is back. |
 | `clear` | #121 item 7 | No expected outcome for the pane. After a turn that lifts COST above `$0.00`, `/clear` runs; the scenario prints whether the pane stayed on screen. Then `/meter` replies `Meter closed.` if it stayed, `Meter opened.` if not (so the command was registered again), the pane is open at the end, and COST reads `$0.00` or less than before the clear. |
-| `placement` | #121 item 8 | No expected outcome. For asked (`/meter`) and unasked (`meterAutoOpen`) opens, in fullscreen and main-screen sessions, at 109, 110, 143 and 144 columns (asked: 109 and 110), it prints one row per cell: placed or not, `dock` or `inline` (judged from the screen), whether a further `/meter` found the pane listed, and the asked list of `.claude.json` before and after. Unasked cells start from a config without the asked entry, closing the pane by hand (ctrl+x tab, ctrl+x x) first. Three more unasked cells (109, 110, 143) follow a `/meter` open-then-close. A cell passes when it shows a pane in exactly one shape, or none. The scenario itself only reads `.claude.json`, but its sessions change it: opening with `/meter` adds meter to the asked list and closing by hand removes it, in the real config (`CLAUDE_CONFIG_DIR`, else `~/.claude.json`). Run it in a config where meter may be opened and where that list may change. |
+| `placement` | #121 item 8 | No expected outcome. For asked (`/meter`) and unasked (`meterAutoOpen`) opens, in fullscreen and main-screen sessions, at 109, 110, 143 and 144 columns (asked: 109 and 110), it prints one row per cell: placed or not, `dock` or `inline` (judged from the screen), whether a further `/meter` found the pane listed, and the asked list of `.claude.json` before and after. Every unasked cell except the three below starts from a config without the asked entry: if meter is in the list, a session first opens the pane and closes it by hand (ctrl+x tab, ctrl+x x), which removes it. Three more unasked cells (109, 110, 143) follow a `/meter` open-then-close. A cell passes when it shows a pane in exactly one shape, or none. The scenario itself only reads `.claude.json`, but its sessions change it: opening with `/meter` adds meter to the asked list and closing by hand removes it, in the real config (`CLAUDE_CONFIG_DIR`, else `~/.claude.json`). Run it in a config where meter may be opened and where that list may change. |
 
 ## How it works
 

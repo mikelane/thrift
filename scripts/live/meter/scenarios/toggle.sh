@@ -5,9 +5,9 @@
 # button.
 
 toggle_in_layout() {
-  local name=$1 layout=$2 label=$3
+  local name=$1 layout_env=$2 label=$3
   # shellcheck disable=SC2034 # read by live_start
-  LIVE_SESSION_ENV=$layout
+  LIVE_SESSION_ENV=$layout_env
   meter_prepare '{}'
   meter_start "$name"
 
@@ -16,7 +16,7 @@ toggle_in_layout() {
   show_pane "$name" "after the first /meter ($label)" 30
   check "the CONTEXT row is on screen after the first /meter ($label)" 'no CONTEXT row on screen' meter_pane_is_open "$name"
   check "the frame is on screen after the first /meter ($label)" 'no close button of a frame on screen' meter_frame_is_drawn "$name"
-  if [[ "$layout" == "$METER_FULLSCREEN" ]]; then
+  if [[ "$layout_env" == "$METER_FULLSCREEN" ]]; then
     check 'the TOP CONTEXT header is on screen after the first /meter (fullscreen)' 'no TOP CONTEXT header on screen' \
       meter_top_context_is_drawn "$name"
   fi

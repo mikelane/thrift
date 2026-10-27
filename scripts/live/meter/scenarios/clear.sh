@@ -26,27 +26,27 @@ scenario_run() {
   show_pane a "before /clear (COST $cost_before)" 30
 
   submit a '/clear'
-  wait_for 'the transcript to be cleared' eval '! pane_has a "say the word apple"'
+  wait_for 'the transcript to be cleared' meter_pane_lacks a 'say the word apple'
   # The pane is judged once the screen stops changing, so a redraw still on its way is not mistaken
   # for a pane that closed.
   wait_for 'the screen to settle after /clear' meter_screen_is_still a 16
   show_pane a 'after /clear' 30
-  local reply_expected stayed=no
+  local expected_reply pane_stayed=no
   if meter_pane_is_open a; then
-    stayed=yes
-    reply_expected='Meter closed\.'
+    pane_stayed=yes
+    expected_reply='Meter closed\.'
   else
-    reply_expected='Meter opened\.'
+    expected_reply='Meter opened\.'
   fi
-  echo "OBSERVED: the pane stayed open across /clear: $stayed"
+  echo "OBSERVED: the pane stayed open across /clear: $pane_stayed"
 
   submit a '/meter'
   wait_for 'the reply to /meter after the clear' meter_replied_after_clear a
   show_pane a 'after /meter following the clear' 30
-  check "/meter after /clear replies $reply_expected, as the pane's state on screen implies" \
-    'the reply does not match what the screen showed, or /meter is not registered' pane_has a "$reply_expected"
+  check "/meter after /clear replies $expected_reply, as the pane's state on screen implies" \
+    'the reply does not match what the screen showed, or /meter is not registered' pane_has a "$expected_reply"
 
-  if [[ "$stayed" == yes ]]; then
+  if [[ "$pane_stayed" == yes ]]; then
     meter_command a '/meter' 'Meter opened\.'
   fi
   wait_for 'the pane to be open' meter_pane_is_open a

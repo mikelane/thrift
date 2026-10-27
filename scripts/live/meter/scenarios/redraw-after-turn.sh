@@ -20,5 +20,5 @@ scenario_run() {
   check 'the CONTEXT row shows a token figure after the turn' 'the CONTEXT row shows no <tokens> / <window> figure' \
     pane_has a "CONTEXT +$METER_CONTEXT_FIGURES"
   check 'the CONTEXT row no longer waits for a response' 'the CONTEXT row still reads waiting for first response' \
-    eval '! pane_has a "CONTEXT +waiting for first response"'
+    meter_pane_lacks a 'CONTEXT +waiting for first response'
 }

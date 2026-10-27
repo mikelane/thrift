@@ -48,10 +48,9 @@ elapsed: a fill that stops short of it is under pace.
 - The setting `meterAutoOpen` (default `false`) opens the pane at session start. An unasked pane is
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
   dir and not closed by hand since (the 110 floor was seen in fullscreen; the main screen was not
-  run). Closing it with a second `/meter` does not count as closing by
-  hand. Narrower, it waits undrawn but is still listed, so a `/meter` closes it (seen live;
-  that a further `/meter` then opens it as asked was not run). Placed unasked, it docks in fullscreen and sits inline on the
-  main screen.
+  run). Closing it with a second `/meter` does not count as closing by hand. Narrower, it waits
+  undrawn but is still listed, so a `/meter` closes it (seen live; a further `/meter` to open it
+  as asked was not run). Placed unasked, it docks in fullscreen and sits inline on the main screen.
 - In non-interactive runs (`-p`) no command is registered and nothing opens.
 - `/clear` fires `session.end` with `reason: "clear"` and no `session.start` follows, so the plugin
   registers `/meter` again inside `$.clock.after(0, ...)`. The cost ledger and `startedAt` restart
@@ -178,8 +177,8 @@ Runs on Claude Code 2.1.311 against commit `5fb560e`, in tmux. Scenarios are
 7. **`/clear`** (`clear`): the pane stayed open. COST went from $0.08 before the clear to $0.00
    after it, and the next `/meter` replied `Meter closed.`, which matches the pane being open. A
    further `/meter` reopened it.
-8. **Placement** (`placement`). The unasked cells ran in a config dir where meter had never been
-   asked, or where it had been closed by hand:
+8. **Placement** (`placement`). The "unasked, never asked" cells ran in a config dir where meter
+   had never been asked, or where it had been closed by hand. A blank cell was not run:
 
    | Opened | Layout | 109 | 110 | 143 | 144 |
    |---|---|---|---|---|---|
