@@ -33,7 +33,7 @@ claude --plugin-dir ~/dev/thrift/plugins/reread
 
 | Mode | What it does |
 |---|---|
-| `off` | Answers nothing with a stub. Runs every `Read` as usual and logs what a stub would have saved, so you can see the size of the lever before you pull it. A repeat whose stub would not be smaller than the text it replaces is logged as a pass (`stub_not_smaller`), with no saving. |
+| `off` | Sends no stubs. Runs every `Read` as usual and logs what a stub would have saved, so you can see the saving before you turn it on. A repeat whose stub would not be smaller than the text it replaces is logged as a pass (`stub_not_smaller`), with no saving. |
 | `ask` | Answers a repeat `Read` with the stub, and shows one dim line in the transcript for each stub, so you can watch it work before you switch to `act`. |
 | `act` | Answers a repeat `Read` with the stub and says nothing. |
 
