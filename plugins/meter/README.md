@@ -40,16 +40,16 @@ elapsed: a fill that stops short of it is under pace.
 
 - `/meter` toggles the pane. If a `meter` pane is listed by `$.ui.panes()`, placed or not, it
   closes. Otherwise it opens. A pane opened from `/meter` counts as asked, so the engine places it
-  at any width: docked beside a fullscreen transcript from 110 terminal columns, otherwise inline
-  above the prompt.
+  at 109 columns as well as 110 (the narrowest widths tried): docked beside a fullscreen transcript
+  from 110 terminal columns, otherwise inline above the prompt.
 - `/meter refresh` takes a full count (see Refresh policy). It works without focus. While the pane
   is closed it opens the pane and takes the full count in place of the open-time summary.
 - Any other argument answers with a usage line and changes nothing.
 - The setting `meterAutoOpen` (default `false`) opens the pane at session start. An unasked pane is
   placed from 144 columns, or from 110 once the pane has been opened with `/meter` in this config
   dir and not closed by hand since. Closing it with a second `/meter` does not count as closing by
-  hand. Narrower, it waits undrawn but is still listed, so the first `/meter` closes it and a
-  second `/meter` opens it as asked. Placed unasked, it docks in fullscreen and sits inline on the
+  hand. Narrower, it waits undrawn but is still listed, so a `/meter` closes it (seen live;
+  that a further `/meter` then opens it as asked was not run). Placed unasked, it docks in fullscreen and sits inline on the
   main screen.
 - In non-interactive runs (`-p`) no command is registered and nothing opens.
 - `/clear` fires `session.end` with `reason: "clear"` and no `session.start` follows, so the plugin
@@ -162,8 +162,9 @@ Runs on Claude Code 2.1.311 against commit `5fb560e`, in tmux. Scenarios are
 `scripts/live/live.sh meter <scenario>`; the trimmed output is posted on #121.
 
 1. **Open and close** (`toggle`): in both fullscreen and the main screen, the first `/meter`
-   replies `Meter opened.` and draws the frame, the CONTEXT row and TOP CONTEXT. The second replies
-   `Meter closed.` and all three are gone.
+   replies `Meter opened.` and draws the frame and the CONTEXT row; in fullscreen it also draws
+   TOP CONTEXT (the main-screen pane is clipped above it and the scenario does not look for it). The
+   second replies `Meter closed.` and the frame and the CONTEXT row are gone.
 2. **Redraw after a turn** (`redraw-after-turn`): before the first prompt, CONTEXT reads
    `waiting for first response`. After a one-word turn it shows a token figure.
 3. **`r` with focus** (`refresh-focus`): `r` typed in the composer lands in the prompt box,

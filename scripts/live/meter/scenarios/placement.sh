@@ -119,12 +119,12 @@ scenario_run() {
   for layout in "${LAYOUTS[@]}"; do
     for columns in 109 110 143 144; do
       ensure_not_asked
-      unasked_cell ${layout% *} ${layout#* } "$columns" ''
+      unasked_cell "${layout% *}" "${layout#* }" "$columns" ''
     done
   done
   for layout in "${LAYOUTS[@]}"; do
     for columns in 109 110; do
-      asked_cell ${layout% *} ${layout#* } "$columns"
+      asked_cell "${layout% *}" "${layout#* }" "$columns"
     done
   done
 
