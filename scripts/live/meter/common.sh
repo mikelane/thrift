@@ -26,9 +26,12 @@ meter_start() {
 
 # --- what the screen shows ---------------------------------------------------------------------------
 
+# The CONTEXT row's figures once a response has reported a fill: `41k / 1M`, `1.2M / 2M`, `950 / 200k`.
+METER_CONTEXT_FIGURES='[0-9]+(\.[0-9])?[kM]? / [0-9]+(\.[0-9])?[kM]?'
+
 # The CONTEXT row is the pane's first row, drawn in both layouts. The transcript never prints it, so it
 # tells the pane from the `/meter` that opened it.
-meter_pane_is_open() { pane_has "$1" 'CONTEXT +(waiting for first response|[0-9]+k? / [0-9]+k)'; }
+meter_pane_is_open() { pane_has "$1" "CONTEXT +(waiting for first response|$METER_CONTEXT_FIGURES)"; }
 # The TOP CONTEXT header is the pane's twelfth row. The main-screen layout clips the pane above it.
 meter_top_context_is_drawn() { pane_has "$1" 'TOP CONTEXT'; }
 # The frame's close button. Inline the pane is boxed, with the button in the top border; docked it sits
@@ -48,7 +51,7 @@ meter_age_is_at_least() {
 meter_age_is_zero() { [[ "$(meter_age_seconds "$1")" == 0 ]]; }
 
 # meter_cost <name>: the dollars the COST row shows, or nothing.
-meter_cost() { pane "$1" | sed -En 's/.*COST +\$([0-9]+\.[0-9]+) this session.*/\1/p' | head -n 1; }
+meter_cost() { pane "$1" | sed -En 's/.*COST +\$([0-9]+\.[0-9]+) at API rates.*/\1/p' | head -n 1; }
 meter_cost_is_above_zero() {
   local cost
   cost=$(meter_cost "$1")

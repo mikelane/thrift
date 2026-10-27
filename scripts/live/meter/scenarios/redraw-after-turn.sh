@@ -15,10 +15,10 @@ scenario_run() {
     pane_has a 'CONTEXT +waiting for first response'
 
   say_apple a
-  wait_for 'the CONTEXT row to show a token figure' pane_has a 'CONTEXT +[0-9]+k? / [0-9]+k'
+  wait_for 'the CONTEXT row to show a token figure' pane_has a "CONTEXT +$METER_CONTEXT_FIGURES"
   show_pane a 'after the turn' 30
   check 'the CONTEXT row shows a token figure after the turn' 'the CONTEXT row shows no <tokens> / <window> figure' \
-    pane_has a 'CONTEXT +[0-9]+k? / [0-9]+k'
+    pane_has a "CONTEXT +$METER_CONTEXT_FIGURES"
   check 'the CONTEXT row no longer waits for a response' 'the CONTEXT row still reads waiting for first response' \
     eval '! pane_has a "CONTEXT +waiting for first response"'
 }
