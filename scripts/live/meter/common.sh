@@ -133,13 +133,15 @@ meter_config_file() { echo "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"; }
 # record asked_before=no. These run in command substitutions and conditions, so they note the problem and
 # the next wait_for, check or verdict ends the run with an ERROR. A missing file holds no asked list.
 meter_asked_panes() {
-  local file
+  local file asked
   file=$(meter_config_file)
   [[ -f "$file" ]] || { echo '[]'; return 0; }
-  jq -c '.pluginPanes.asked // []' "$file" 2>/dev/null || {
+  if asked=$(jq -c '.pluginPanes.asked // []' "$file" 2>/dev/null) && [[ -n "$asked" ]]; then
+    echo "$asked"
+  else
     live_note_error "the config file $file could not be read as JSON"
     echo '(unreadable)'
-  }
+  fi
 }
 meter_was_asked() {
   local file status=0

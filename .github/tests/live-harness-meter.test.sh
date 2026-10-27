@@ -229,6 +229,16 @@ test_meter_asked_panes_notes_an_error_when_the_config_file_is_not_json() {
   assert_out_has 'could not be read as JSON'
 }
 
+# An empty config file is not JSON either: meter_was_asked notes it (jq -e exits 4), so the asked list
+# printed beside it must not come back blank with nothing noted.
+test_meter_asked_panes_notes_an_error_when_the_config_file_is_empty() {
+  run_meter 'LIVE_RUN=$TMPDIR; : >"$HOME/.claude.json"
+    echo "ASKED=$(meter_asked_panes)."
+    cat "$LIVE_RUN/harness-error" || true'
+  assert_out_has 'ASKED=(unreadable).'
+  assert_out_has 'could not be read as JSON'
+}
+
 test_meter_pane_lacks_fails_when_the_pane_cannot_be_read() {
   run_meter "$(status_of 'meter_pane_lacks a "TOP CONTEXT"')"
   assert_status 1
