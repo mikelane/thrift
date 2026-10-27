@@ -42,7 +42,8 @@ export type World = {
   readThrowsFor: Set<string>
   logWrite: 'ok' | 'exit' | 'throw'
   compactSkips: boolean
-  nextToolUse: number
+  turnsThrows: boolean
+  messagesThrows: boolean
 }
 
 export const MAIN = 'main'
@@ -131,12 +132,16 @@ const installSessionMocks = (on: On, world: World) => {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => ok(world.sessionId))
-  on('session.turns', () => ok(world.turns))
+  on('session.turns', () => {
+    if (world.turnsThrows) throw new Error('no turns')
+    return ok(world.turns)
+  })
   on('session.version', () => {
     if (world.versionThrows) throw new Error('no version')
     return ok(world.version)
   })
   on('session.messages', (_$, e) => {
+    if (world.messagesThrows) throw new Error('no messages')
     const loop = e.agentId ?? MAIN
     if (world.deniedAgents.has(loop)) return ok({ deny: `no conversation for ${loop}` })
     const ids = world.contexts.get(loop) ?? []
@@ -192,7 +197,8 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
     readThrowsFor: new Set(),
     logWrite: 'ok',
     compactSkips: false,
-    nextToolUse: 1,
+    turnsThrows: false,
+    messagesThrows: false,
   }
   installToolMocks(on, world)
   installFsMocks(on, world)

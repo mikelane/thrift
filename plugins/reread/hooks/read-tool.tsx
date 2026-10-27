@@ -159,6 +159,7 @@ async function answerWithStub($: EngineInterface, state: SessionState, subject: 
   const result = stubResult(call.file_path)
   const line = stubContextLine(call.file_path, tracked.turn, coveredLines(found, request))
   const savings = savingsOf(grossBytesOf(found, request), result, line)
+  const turnsSinceRead = (await $.session.turns()) - tracked.turn
   tracked.stubbedKeys.add(request.key)
   if (subject.info.effectiveMode === 'ask') {
     $.ui.log(`reread: ${call.file_path} is unchanged, so its Read was answered with a stub (${savings.grossBytes} bytes held back, stub ${savings.stubBytes})`)
@@ -170,7 +171,7 @@ async function answerWithStub($: EngineInterface, state: SessionState, subject: 
     savings,
     lines: coveredLines(found, request),
     rangeKind: rangeKindOf(found, request),
-    turnsSinceRead: (await $.session.turns()) - tracked.turn,
+    turnsSinceRead,
   })
   return { result, context: [line] }
 }
