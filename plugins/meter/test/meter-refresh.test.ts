@@ -87,6 +87,30 @@ describe('runMeterCommand with a listed but unplaced pane', () => {
   })
 })
 
+describe('runMeterCommand when the asked open still answers isPlaced false', () => {
+  // UiOpenResult: an asked open is still unplaced where no surface places panes, or none is attached
+  // (reason `no-surface`). /meter must stay a toggle there, as it was before #135.
+  const stayUnplaced = async ($: Parameters<typeof install>[0], on: Parameters<typeof install>[1]) => {
+    const world = install($, on)
+    world.isPlacedOnOpen = false
+    await startSession($)
+    return world
+  }
+
+  test('It closes the pane on a second /meter when the open left it unplaced', async ($, on) => {
+    const world = await stayUnplaced($, on)
+    await runMeter($)
+    await runMeter($)
+    expect(world.closes).toEqual(['meter'])
+  })
+
+  test('It does not reply Meter opened. to every /meter while the pane stays unplaced', async ($, on) => {
+    await stayUnplaced($, on)
+    await runMeter($)
+    expect(await runMeter($)).not.toEqual({ text: 'Meter opened.' })
+  })
+})
+
 describe('closeMeter', () => {
   test('It closes a listed and placed pane on /meter', async ($, on) => {
     const world = await opened($, on)
