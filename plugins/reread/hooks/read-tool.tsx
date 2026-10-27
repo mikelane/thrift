@@ -154,26 +154,30 @@ async function passUntracked($: EngineInterface, subject: Subject, proceed: Proc
   return ran
 }
 
-async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found) {
-  const { tracked } = found
-  const result = stubResult(call.file_path)
-  const line = stubContextLine(call.file_path, tracked.turn, coveredLines(found, request))
-  const savings = savingsOf(grossBytesOf(found, request), result, line)
-  const turnsSinceRead = (await $.session.turns()) - tracked.turn
-  tracked.stubbedKeys.add(request.key)
-  if (subject.info.effectiveMode === 'ask') {
-    $.ui.log(`reread: ${call.file_path} is unchanged, so its Read was answered with a stub (${savings.grossBytes} bytes held back, stub ${savings.stubBytes})`)
+// What a dedupe is recorded as, the same whether the stub was sent (act, ask) or only counted (off).
+async function dedupeEvaluation($: EngineInterface, call: ReadCall, request: ReadRequest, found: Found) {
+  const line = stubContextLine(call.file_path, found.tracked.turn, coveredLines(found, request))
+  return {
+    line,
+    evaluation: {
+      decision: 'dedupe' as const,
+      reason: found.match === 'exact' ? ('exact_repeat' as const) : ('inside_full_read' as const),
+      savings: savingsOf(grossBytesOf(found, request), stubResult(call.file_path), line),
+      lines: coveredLines(found, request),
+      rangeKind: rangeKindOf(found, request),
+      turnsSinceRead: (await $.session.turns()) - found.tracked.turn,
+    },
   }
-  await note($, subject, {
-    decision: 'dedupe',
-    reason: found.match === 'exact' ? 'exact_repeat' : 'inside_full_read',
-    pathHash: await pathHash(state.salt, request.realPath),
-    savings,
-    lines: coveredLines(found, request),
-    rangeKind: rangeKindOf(found, request),
-    turnsSinceRead,
-  })
-  return { result, context: [line] }
+}
+
+async function answerWithStub($: EngineInterface, state: SessionState, subject: Subject, call: ReadCall, request: ReadRequest, found: Found) {
+  const { line, evaluation } = await dedupeEvaluation($, call, request, found)
+  found.tracked.stubbedKeys.add(request.key)
+  if (subject.info.effectiveMode === 'ask') {
+    $.ui.log(`reread: ${call.file_path} is unchanged, so its Read was answered with a stub (${evaluation.savings.grossBytes} bytes held back, stub ${evaluation.savings.stubBytes})`)
+  }
+  await note($, subject, { ...evaluation, pathHash: await pathHash(state.salt, request.realPath) })
+  return { result: stubResult(call.file_path), context: [line] }
 }
 
 // In off the tool runs and the evaluation is logged as the saving a stub would have made.
@@ -184,17 +188,8 @@ async function shadowDedupe($: EngineInterface, state: SessionState, subject: Su
     await note($, subject, { decision: 'pass', reason: untracked, ...pathDetail })
     return ran
   }
-  const result = stubResult(call.file_path)
-  const line = stubContextLine(call.file_path, found.tracked.turn, coveredLines(found, request))
-  await note($, subject, {
-    decision: 'dedupe',
-    reason: found.match === 'exact' ? 'exact_repeat' : 'inside_full_read',
-    savings: savingsOf(grossBytesOf(found, request), result, line),
-    lines: coveredLines(found, request),
-    rangeKind: rangeKindOf(found, request),
-    turnsSinceRead: (await $.session.turns()) - found.tracked.turn,
-    ...pathDetail,
-  })
+  const { evaluation } = await dedupeEvaluation($, call, request, found)
+  await note($, subject, { ...evaluation, ...pathDetail })
   return ran
 }
 
