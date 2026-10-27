@@ -29,6 +29,9 @@ export type RecordContext = {
   effectiveMode: ReadMode
 }
 
+// What a record needs from the session beyond the evaluation itself.
+export type RecordSetting = Pick<RecordContext, 'engineVersion' | 'setting' | 'effectiveMode'>
+
 // umask only applies when the file is created, so a log that already exists is made owner-only by the chmod. `mkdir -p --`
 // works on BSD and GNU alike. chmod takes no `--`: BSD chmod (macOS) reads it as a file operand, sets the mode, then fails on it
 // and exits 1, while GNU chmod accepts it. The file is always absolute (see isUsableThriftHome), so it cannot read as an option.
