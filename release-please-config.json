@@ -28,6 +28,19 @@
           "jsonpath": "$.version"
         }
       ]
+    },
+    "plugins/reread": {
+      "release-type": "simple",
+      "component": "reread",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
