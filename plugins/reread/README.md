@@ -207,25 +207,33 @@ means fewer stubs until the files are read once more.
 ## What has been verified live
 
 The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
-log. One live check has been run on top of them: on 2026-10-27, in the Code tab of the Claude
-Desktop app, on Claude Code 2.1.308. The plugin was loaded from branch head `cba0844` with
-`CLAUDE_CODE_PLUGIN_DIRS`, with `readMode` set to `ask`. The probe file had 80 lines and 1111 bytes
-(`Read` showed 81 lines, the last one empty). Every step ran in one user turn.
+log. The current live check ran on top of them in the Code tab of the Claude Desktop app, with
+`engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
+`readMode` set to `ask`. The main probe file had 80 lines (`Read` showed 81, the last one empty).
+Every step ran in one user turn, and every record had `mode: active` and `effective_mode: ask`.
 
 | Step | Outcome |
 |---|---|
-| Read the whole file | Full contents, logged as `first_read` |
-| Read it again | Stub: `dedupe`, `exact_repeat`, `gross_bytes` 1345, `stub_bytes` 363, `bytes_saved` 982 |
-| Read it a third time | Full contents: `override`, `override_after_stub` |
-| Read `offset` 10, `limit` 20, a range inside the full read | Full contents: `pass`, `stub_not_smaller` (280 bytes of lines against a 363-byte stub), as the size rule says it should |
-| `Edit` the file after the stub and the override | Accepted, with no "file not read" error. `invalidate`, `edit`, 2 reads dropped |
-| Read the whole file | Full contents, logged as `first_read` |
-| Read the whole file, then `Edit` it right after the stub | Stub, then the edit "updated successfully" |
-| A subagent reads the file twice | Full contents, then a stub. The records carry `is_subagent: true` and the parent session id |
-| Run `Bash` (`true`), then read the file | `invalidate`, `bash`, 1 read dropped, then full contents |
-| Read with `limit` 0 | Stub, `range_kind: full`. `limit` 0 reads to the end, so it is an exact repeat of the full read |
+| A. Read the whole file | Full, `pass`, `first_read` |
+| B. Read it again | Stub: `dedupe`, `exact_repeat`, `gross_bytes` 865, `stub_bytes` 271, `bytes_saved` 594 |
+| C. Read it a third time | Full: `override`, `override_after_stub` |
+| D. Read `offset` 10, `limit` 20 | Full: `pass`, `stub_not_smaller` (160 bytes of lines against a 271-byte stub) |
+| E. `Edit` line 40 | Accepted, no "file not read" error. `invalidate`, `edit`, 2 dropped |
+| F. Read the whole file | Full, with the edit: `pass`, `first_read` |
+| G. Read it again, then `Edit` | Stub (868/271/597), then the edit was accepted. `invalidate`, `edit`, 1 dropped |
+| H. A subagent reads the file twice | Full, then a stub (875/271/604). Both records carry `is_subagent: true` |
+| I. `Bash` (`true`), then a read | Full: `pass`, `first_read`, then `invalidate`, `bash`, 2 dropped (see the note) |
+| J1. Read with `limit` 0 | Full: `pass`, `first_read` (see the note) |
+| J2. Read with `limit` 0 again | Stub (875/271/604), `range_kind: full` |
+| K. A 30-line CRLF file, read twice | Full (31 lines), then a stub (465/269/196) |
+| L. A 30-line file with a BOM, read twice | Full (31 lines, BOM not shown), then a stub (435/267/168) |
+| M. A 20-line file whose line 5 is 5000 `x`, read twice | Full (21 lines, line 5 not truncated), then a stub (5294/277/5017) |
 
-What the model read for a stub, verbatim. Claude Code rendered the `file_unchanged` result as:
+Stub byte counts are `gross_bytes`/`stub_bytes`/`bytes_saved`. A `Bash` call that created the K, L
+and M files logged `invalidate`, `bash`, 1 dropped.
+
+What the model read for a stub, verbatim, in the main context and the subagent alike. Claude Code
+rendered the `file_unchanged` result as:
 
 > Wasted call — file unchanged since your last Read. Refer to that earlier tool_result instead.
 
@@ -234,22 +242,44 @@ and the plugin's context line beside it was:
 > reread: &lt;path&gt; is unchanged since you read it at turn 1 (same content, 81 lines). Its contents
 > are earlier in this conversation. Read it again only if you need it in full.
 
+The line has the same shape for every file. Only the line count changes (31 for the CRLF and BOM
+files, 21 for the long-line file).
+
 The same run also showed:
 
-- The `$.session.messages()` check works live. Stubs were sent, so a result's text in the
-  transcript does begin with the text `tool.call` returned for it.
-- `core_dedup` never fired. Claude Code's own dedup answered none of these reads on 2.1.308.
-- "turn 1" in the context line is the user turn. Every step ran in that one turn, so
-  `turns_since_read` was 0 throughout.
+- The content-match check tracks LF, CRLF, BOM and 5000-character-line files. All four were stubbed
+  on the repeat read, and none fell back to a pass.
+- `lines` in the record and the context line counts the trailing empty line (81 for an 80-line
+  file), the same as the `Read` tool's own numbering.
+- An `Edit` after a stubbed read is accepted. Claude Code still treats the file as read.
+- `Edit` and `Bash` invalidation work, and `dropped` counts the entries cleared.
+- Subagent reads are tracked and stubbed apart from the parent's, with the same stub text.
+- All 17 path-specific records carry `path_hash`. The 4 `invalidate` records carry `dropped` and no
+  `path_hash`. No record contains a raw path or file contents.
+- `bytes_saved` is `gross_bytes` minus `stub_bytes` in every `dedupe` record.
+
+Note on I and J1: the `Bash` call and the read in step I were sent in one message, as parallel tool
+calls. The read was logged and tracked first, and the `Bash` hook's `invalidate` landed in the same
+second and dropped it (2 entries: the main context's and the subagent's). That is why J1 came back
+full as a `first_read` and not as a full-range repeat. Dropping a read that raced a `Bash` call is
+the fail-safe result. A `Bash` call followed by a separate read logs the `invalidate` first.
+
+An earlier live check, at `cba0844`, also passed steps A to J, before the content-match fix.
 
 ### Not verified live
 
 - The `ask`-mode transcript line (the model cannot see it, and no person looked).
-- Compaction, `/clear` and resume invalidation.
+- `off` and `act` modes in a live session (only `ask` ran).
+- The terminal CLI (only Desktop ran, on engine 2.1.308).
+- Compaction, `/clear` and resume invalidation, and `turns_since_read` above 0 (every step ran in
+  one user turn, so every stub says "turn 1").
 - Rewind, and whether `$.session.messages()` reflects it.
 - `precompute` install.
-- `off` and `act` modes in a live session (only `ask` ran).
-- The terminal CLI (only Desktop ran).
+- A file changed on disk by something other than `Edit` or `Bash` in the session.
+- The content-mismatch path. No step produced a read that was not tracked, so the fail-safe pass for
+  mismatched content was not seen live.
+- A line longer than the `Read` tool's own per-line truncation limit (the 5000-character line was
+  shown in full).
 
 ## Development
 
