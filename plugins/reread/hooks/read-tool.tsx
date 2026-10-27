@@ -138,10 +138,11 @@ async function trackResult(
   if (outcome.kind === 'error') return 'error_result'
   if (outcome.kind === 'not_text') return 'not_text'
   if (outcome.kind === 'file_unchanged') return 'core_dedup'
-  const after = await statFile($, request.realPath)
-  if (after === undefined || !unchanged(before, after)) return 'changed'
+  // Stat before the Read (`before`), read the bytes, then stat again: track only when both stats match.
   const bytes = await readBytes($, request.realPath)
   if (bytes === undefined) return 'unreadable'
+  const after = await statFile($, request.realPath)
+  if (after === undefined || !unchanged(before, after)) return 'changed'
   const { startLine, numLines, totalLines } = outcome.lines
   const isFull = isFullResult(outcome.lines)
   trackRead(state.reads, subject.context, request.key, {

@@ -194,6 +194,14 @@ describe('readTool: a Read the plugin lets through', () => {
     expect(reasonOf(world)).toEqual(['pass', 'changed'])
   })
 
+  test('It does not track a read when the file changed between the stat and the read', ACT, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    world.beforeFsRead = () => putFile(world, '/work/a.ts', `${SEVEN_LINES}\neight`)
+    await read($, '/work/a.ts')
+    expect(reasonOf(world)).toEqual(['pass', 'changed'])
+  })
+
   test('It runs the tool again after a read that changed under it', ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
