@@ -20,8 +20,8 @@ export async function writeRecord($: EngineInterface, setting: RecordSetting, ev
     if (location === null) return isThriftHomeIgnored ? undefined : debug($, 'no log location: neither THRIFT_HOME nor HOME is set')
     const record = decisionRecord({ ...setting, now, sessionId: id }, evaluation)
     const ran = await $.process.run([...LOG_WRITER, location.dir, location.file], { stdin: `${JSON.stringify(record)}\n` })
-    if (ran.exitCode !== 0) debug($, `log write failed: ${ran.stderr.trim()}`)
+    if (ran.exitCode !== 0) debug($, `log write to ${location.file} failed (exit ${ran.exitCode}): ${ran.stderr.trim()}`)
   } catch (error) {
-    debug($, `log write failed: ${String(error)}`)
+    debug($, `could not write a decision record: ${String(error)}`)
   }
 }

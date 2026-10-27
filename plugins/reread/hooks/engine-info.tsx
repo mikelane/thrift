@@ -22,11 +22,12 @@ async function readVersion($: EngineInterface) {
 async function settle($: EngineInterface, setting: ReadMode): Promise<EngineInfo> {
   const { engineVersion, base } = await readVersion($)
   const isUntested = isUntestedEngine(base)
-  const info: EngineInfo = { engineVersion, setting, effectiveMode: isUntested ? 'off' : setting }
+  const engine: EngineInfo = { engineVersion, setting, effectiveMode: isUntested ? 'off' : setting }
   if (isUntested) {
-    await writeRecord($, info, { decision: 'untested_engine', reason: 'untested_engine', isSubagent: false })
+    debug($, `engine ${engineVersion} is not a release at or before the one reread was tested through, so it runs as off`)
+    await writeRecord($, engine, { decision: 'untested_engine', reason: 'untested_engine', isSubagent: false })
   }
-  return info
+  return engine
 }
 
 // The engine is read on first use and kept: no session.start follows a /clear, and the plugin can be started again mid-session.
