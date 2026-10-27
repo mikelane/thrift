@@ -157,7 +157,7 @@ describe('runMeterCommand when the asked open still answers isPlaced false', () 
 
   test('It keeps a never-listed pane open and says why nothing shows it', async ($, on) => {
     const world = await stayUnplaced($, on)
-    expect(await runMeter($)).toEqual({ text: 'Meter opened, but nothing here can show it yet (narrow).' })
+    expect(await runMeter($)).toEqual({ text: 'Meter opened, but nothing here can show it yet (no-surface).' })
     expect(world.closes).toEqual([])
   })
 

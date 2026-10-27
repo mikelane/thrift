@@ -119,7 +119,7 @@ export const install = ($: Engine, on: On): World => {
     world.panes = [
       { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: world.isPlacedOnOpen },
     ]
-    return { value: world.isPlacedOnOpen ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'narrow' } }
+    return { value: world.isPlacedOnOpen ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'no-surface' } }
   })
   on('ui.close', (_$, e) => {
     world.closes.push(e.id)
