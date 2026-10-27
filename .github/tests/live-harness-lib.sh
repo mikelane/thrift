@@ -26,7 +26,7 @@ hermetic_env() {
   local name dropped=()
   for name in $(compgen -e); do
     case "$name" in
-      CLAUDE* | ANTHROPIC* | XDG_CACHE_HOME | LIVE_CWD | LIVE_KEEP | LIVE_TIMEOUT) dropped+=(-u "$name") ;;
+      CLAUDE* | ANTHROPIC* | XDG_CACHE_HOME | LIVE_CWD | LIVE_KEEP | LIVE_TIMEOUT | LIVE_COLUMNS) dropped+=(-u "$name") ;;
     esac
   done
   env ${dropped[@]+"${dropped[@]}"} "$@"
