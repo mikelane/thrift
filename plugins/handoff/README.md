@@ -351,8 +351,9 @@ plugin holds with `tokensAfter`, or with the size before the compaction when it 
 After a failed or vetoed compaction the growth is measured from the size before it. A strong signal
 is not held back.
 
-A weak signal is also held back while the post-compaction floor is at or above
-`handoffContextTokens`. See [Choosing `handoffContextTokens`](#choosing-handoffcontexttokens).
+If `handoffContextTokens` is at or below the context a compaction leaves behind, the backoff is what
+stops a compaction on every turn: the plugin compacts every 50,000 tokens past that floor. See
+[Choosing `handoffContextTokens`](#choosing-handoffcontexttokens).
 
 ### When something fails
 
@@ -407,16 +408,22 @@ The threshold has to sit above the context a compaction leaves behind, with at l
 [backoff](#backoff) of headroom. Past that, the choice is a cost trade-off.
 
 **The floor.** The floor is the first context the plugin measures after a compaction. It is what a
-session starts from every time: the summary, plus what Claude Code re-attaches (tool and skill
-listings, MCP instructions, `CLAUDE.md`). If the floor is at or above the threshold, a compaction
-cannot bring the context under it, and the plugin would compact on every turn it was allowed to. In
-that case the plugin compacts once, which sets the floor. After the backoff has released, each weak
-signal gets a record with `action: none`, `reason: floor_above_threshold` and `floor_tokens`, and no
-compaction or band, until you raise the threshold above the floor or the session is cleared. A
-strong signal still hands off.
+session starts from every time: the summary, plus what Claude Code attaches to a session (tool and
+skill listings, MCP instructions, `CLAUDE.md`). A `compacted` record carries the last floor the plugin
+had measured as `trigger_values.floor_tokens`. The first compaction of a session has none, and later
+ones do.
 
-To read your floor, take `context_tokens` from the first record after each `compacted` one in the
-same session:
+A floor at or above `handoffContextTokens` means the setting is too low. A compaction cannot bring the
+context under the threshold, so every weak signal compacts again as soon as the backoff releases,
+which is every 50,000 tokens past the floor. To find those records:
+
+```sh
+jq -c 'select(.action == "compacted" and (.trigger_values.floor_tokens // 0) >= .trigger_values.threshold)' \
+  "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
+```
+
+To read your floor without waiting for such a record, take `context_tokens` from the first record after
+each `compacted` one in the same session:
 
 ```sh
 jq -s 'group_by(.session_id)[] | . as $s | range(0; length - 1)
@@ -424,8 +431,7 @@ jq -s 'group_by(.session_id)[] | . as $s | range(0; length - 1)
   "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
 ```
 
-The `floor_above_threshold` record also carries the floor as `floor_tokens`. Do not read the floor from
-`tokensAfter`: it comes in lower than the context the next turn measures.
+Do not read the floor from `tokensAfter`: it has come in lower than the context the next turn measures.
 
 **The trade-off.** Every request re-reads the whole context from the prompt cache, so a larger context
 makes each request dearer. Every compaction costs a summarization call over the whole context, the
@@ -447,11 +453,22 @@ third is the compaction cost spread over the requests between compactions. This 
 D = sqrt(2·K·g / r)
 ```
 
+Work out K for your own floor. With the threshold at T, a compaction costs about
+
+```
+K ≈ 2·F + (summary tokens × output price ÷ input price) + 0.05·T
+```
+
+- `2·F` is the re-write of the floor to the 1-hour prompt cache, at 2 times the input price.
+- A summary of about 13,000 tokens at 5 times the input price is about 65,000.
+- `0.05·T` is the summarization call reading the context from the cache.
+
 Worked example, from measured Opus 5.5 sessions: F is about 165,000, g about 1,900, r is 0.05 (a cache
-read costs 5% of the input price), and K about 400,000. Then D is about 175,000 and the threshold
-about 340,000. The curve is flat from about 250,000 to 400,000. A threshold of 200,000 costs about 1.8
-times as much per request as the best one. These figures come from a few sessions and one model, so
-treat them as an estimate and compute your own.
+read costs 5% of the input price), and T about 340,000. That gives K of about 330,000 + 65,000 +
+17,000, or about 400,000. Then D is about 175,000 and the threshold about 340,000. Within the example,
+thresholds from 300,000 to 400,000 are within about 2% of the minimum per-request cost, 250,000 costs
+about 14% more, and 200,000 costs about 1.8 times as much. These figures come from a few sessions and
+one model, so treat them as an estimate and compute your own.
 
 To estimate g, take the growth in `context_tokens` between two records of one session and divide it by
 the number of model requests in between. The log does not count requests, so this one comes from your
@@ -459,6 +476,8 @@ own usage.
 
 **Caveats.**
 
+- A threshold of 300,000 to 340,000 assumes the 1,000,000-token context window. In a 200,000-token
+  window it does not fit.
 - The weights are API prices. Subscription rate limits may weight tokens differently.
 - Answer quality can drift in very long contexts. That argues for the low end of the flat region.
 - The threshold has to fit inside the model's context window, below the point where Claude Code
@@ -535,8 +554,8 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.setting` | The configured `handoffMode`. The plugin may run as `off` anyway (see Compatibility); `effective_mode` shows the mode it ran in |
 | `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: a development or unrecognized Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
-| `trigger_values.floor_tokens` | Present only with `reason: floor_above_threshold`: the floor, the first context the plugin measured after the last compaction in this session. A number, in tokens |
-| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `floor_above_threshold` (a weak signal arrived with the post-compaction floor at or above the threshold, so compacting would not bring the context under it), `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
+| `trigger_values.floor_tokens` | Present only on a `compacted` record, and only when a floor is known: the first context the plugin measured after the previous compaction in this session. A number, in tokens. A session's first compaction has none |
+| `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when Claude had not finished a reply in the session to fork (a new session before its first turn ends, right after a `/clear`, or a resume that starts the conversation afresh). Absent for every other reason the fork wrote no note |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
 | `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear`) or `person` (you typed `/clear` before the handoff's own clear was issued, so the note went into the fresh session you made and no second clear ran). A `/clear` you queued ahead of an already-issued handoff clear, or one still running when the handoff issued its clear, still reads `handoff`: the handoff's clear ran last and made the session that holds the note |
@@ -737,7 +756,7 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/handoff-hold.tsx` | What happens to a prompt that arrives while a handoff is pending (`decideDuringHandoff`): dropping a repeat of a carried prompt, refusing one with attachments or context, or holding it |
 | `hooks/box-leftover.ts` | The text the engine keeps in the prompt box after dropping a prompt, remembered until a clear confirms the box is empty (`noteBoxLeftover`, `noteBoxCleared`, `forgetBoxLeftover`), and stripping it from the next prompt (`typedAfterBoxLeftover`, `noteLeftoverStrip`) |
 | `hooks/signals.ts` | Pure signal logic: setting parsers (`asMode`, `asThreshold`), context size (`contextFromStep`, `formatTokens`), classification (`classify`), the band's buttons (`bandButtons`), the mode table (`respond`), and the busy-refusal trigger (`busyRefusalTrigger`) |
-| `hooks/turn-end-plan.ts` | What a turn's end calls for: the signal and the plan from `planTurnEnd` (advise, compact, hand off, back off, skip for a floor above the threshold, or nothing), the back-off window (`isBackedOff`) and the floor check (`isFloorAboveThreshold`) |
+| `hooks/turn-end-plan.ts` | What a turn's end calls for: the signal and the plan from `planTurnEnd` (advise, compact, hand off, back off, or nothing), and the back-off window (`isBackedOff`) |
 | `hooks/prompt-plan.ts` | What a submitted prompt calls for: prompt origins (`isPersonOrigin`, `isComposerOrigin`, `isUnattendedOrigin`), the sender named in a message (`senderLabel`), attachments or context (`carriesExtras`), what to do with one that arrives during a handoff (`planPromptDuringHandoff`), whether one can be held (`canHoldPrompt`), and the plan for new work (`planNewWorkPrompt`) |
 | `hooks/tool-call-tracking.ts` | What a tool call tells the state: background tasks that start or stop, and a finished task (`noteToolCall`) |
 | `hooks/command-parse.ts` | The shell lexer: command segments with heredocs skipped (`commandSegments`), its quoting step (`readQuotingStep`), and `finishesTask` |

@@ -403,7 +403,7 @@ export const noteCacheReads = (state: SessionState, cacheReadTokens: number | un
   state.cacheReadTokens = cacheReadTokens ?? 0
 }
 
-// tokensAfter does not count what Claude Code re-attaches after a compaction, so the first measured context after it is the real size.
+// tokensAfter has read well below the next turn's real context, so the first measured context after a compaction anchors the backoff and the floor.
 export const settlePostCompactionContext = (state: SessionState, measuredTokens: number): void => {
   if (!state.isAwaitingPostCompactionContext || measuredTokens <= 0) return
   state.isAwaitingPostCompactionContext = false

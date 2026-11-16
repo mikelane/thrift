@@ -143,49 +143,39 @@ const compactThenMeasure = async ($: Parameters<typeof runStep>[0], world: World
   await world.clock.settle()
 }
 
-test('It skips a compaction and records the floor when the floor is above the threshold', ACT_AT_150K, async ($, on) => {
+test('It records the last measured floor on the next compacted record', ACT_AT_150K, async ($, on) => {
   const world = install($, on)
   world.compact = async () => compacted(60_000)
   await compactThenMeasure($, world, 168_000)
   await measureContext($, world, 230_000)
   await completeTurn($)
   await world.clock.settle()
-  expect(compactions(world)).toHaveLength(1)
-  expect(lastRecord(world)).toMatchObject({
-    action: 'none',
-    trigger_values: { signal: 'weak', reason: 'floor_above_threshold', floor_tokens: 168_000, context_tokens: 230_000 },
-  })
+  expect(compactions(world)).toHaveLength(2)
+  expect(lastRecord(world)).toMatchObject({ action: 'compacted', trigger_values: { floor_tokens: 168_000 } })
 })
 
-test('It keeps skipping compactions while the floor stays above the threshold', ACT_AT_150K, async ($, on) => {
+test('It compacts again every 50000 tokens past the floor when the floor is above the threshold', ACT_AT_150K, async ($, on) => {
   const world = install($, on)
   world.compact = async () => compacted(60_000)
   await compactThenMeasure($, world, 168_000)
   await measureContext($, world, 230_000)
   await completeTurn($)
-  await measureContext($, world, 400_000)
+  await world.clock.settle()
+  await measureContext($, world, 290_000)
+  await measureContext($, world, 340_001)
   await completeTurn($)
   await world.clock.settle()
-  expect(compactions(world)).toHaveLength(1)
+  expect(compactions(world)).toHaveLength(3)
 })
 
-test('It records backoff, not floor_above_threshold, while the backoff holds', ACT_AT_150K, async ($, on) => {
-  const world = install($, on)
-  world.compact = async () => compacted(60_000)
-  await compactThenMeasure($, world, 168_000)
-  await measureContext($, world, 200_000)
-  await completeTurn($)
-  await world.clock.settle()
-  expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'backoff' } })
-})
-
-test('It compacts when a weak signal comes before any compaction has set a floor', ACT_AT_150K, async ($, on) => {
+test('It compacts and omits floor_tokens when a weak signal comes before any compaction has set a floor', ACT_AT_150K, async ($, on) => {
   const world = install($, on)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   await world.clock.settle()
   expect(compactions(world)).toHaveLength(1)
+  expect(lastRecord(world)).toMatchObject({ action: 'compacted' })
   expect(lastRecord(world).trigger_values).not.toHaveProperty('floor_tokens')
 })
 
@@ -214,7 +204,7 @@ test('It treats a floor of 0 as unknown and compacts', ACT_AT_150K, async ($, on
   expect(lastRecord(world).trigger_values).toMatchObject({ reason: 'backoff' })
 })
 
-test('It hands off on a strong signal even when the floor is above the threshold', ACT_AT_150K, async ($, on) => {
+test('It hands off on a strong signal when the floor is above the threshold', ACT_AT_150K, async ($, on) => {
   const world = install($, on)
   world.compact = async () => compacted(60_000)
   await compactThenMeasure($, world, 168_000)

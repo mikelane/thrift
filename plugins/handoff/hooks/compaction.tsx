@@ -5,6 +5,8 @@ import { debug, logFailure } from './engine-log'
 import { writeRecord } from './record-writer'
 import { claimPending, type SessionState } from './session-state'
 
+const knownFloor = (state: SessionState): number | undefined => (state.floorTokens > 0 ? state.floorTokens : undefined)
+
 async function runCompaction($: EngineInterface, state: SessionState, trigger: Trigger): Promise<void> {
   const sizeBefore = state.contextTokens
   try {
@@ -13,7 +15,7 @@ async function runCompaction($: EngineInterface, state: SessionState, trigger: T
       state.backoffFrom = sizeBefore
       await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed' })
     } else {
-      await writeRecord($, state, { ...trigger, action: 'compacted' })
+      await writeRecord($, state, { ...trigger, action: 'compacted', floorTokens: knownFloor(state) })
       state.backoffFrom = compaction.tokensAfter ?? sizeBefore
       state.contextTokens = compaction.tokensAfter ?? sizeBefore
       state.isAwaitingPostCompactionContext = true

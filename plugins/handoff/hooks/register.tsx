@@ -91,16 +91,11 @@ const evaluateTurnEnd = async (
     mode: state.mode,
     isUnattended: state.isTurnUnattended,
     backoffFrom: state.backoffFrom,
-    floorTokens: state.floorTokens,
   })
   const trigger = snapshotTrigger(state, 'turn-end', signal, isBusy)
   if (outcome.kind === 'back-off') {
     await takeDownBand($, state)
     return writeRecord($, state, { ...trigger, action: 'none', reason: 'backoff' })
-  }
-  if (outcome.kind === 'floor-above-threshold') {
-    await takeDownBand($, state)
-    return writeRecord($, state, { ...trigger, action: 'none', reason: 'floor_above_threshold', floorTokens: state.floorTokens })
   }
   if (outcome.kind === 'advise') return offerBand($, state, trigger, outcome.holdsPrompt)
   await takeDownBand($, state)

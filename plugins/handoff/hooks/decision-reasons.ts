@@ -1,6 +1,5 @@
 export const DECISION_REASONS = [
   'backoff',
-  'floor_above_threshold',
   'compaction_vetoed',
   'compaction_failed',
   'no_handoff_written',
