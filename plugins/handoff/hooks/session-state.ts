@@ -76,6 +76,8 @@ export type SessionState = Settings & {
   isTurnUnattended: boolean
   resubmittedPrompts: HeldPrompt[]
   backoffFrom: number | null
+  // True from a successful compaction until the first context measurement after it.
+  isAwaitingPostCompactionContext: boolean
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
@@ -112,6 +114,7 @@ export const createState = (settings: Settings): SessionState => ({
   isTurnUnattended: false,
   resubmittedPrompts: [],
   backoffFrom: null,
+  isAwaitingPostCompactionContext: false,
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
@@ -142,6 +145,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnUnattended = false
   state.resubmittedPrompts = []
   state.backoffFrom = null
+  state.isAwaitingPostCompactionContext = false
   state.heldPrompt = null
   state.isTurnRunning = false
   state.isPressRunning = false
@@ -393,4 +397,11 @@ export const claimPending = (state: SessionState, kind: NonNullable<SessionState
 
 export const noteCacheReads = (state: SessionState, cacheReadTokens: number | undefined): void => {
   state.cacheReadTokens = cacheReadTokens ?? 0
+}
+
+// tokensAfter does not count what Claude Code re-attaches after a compaction, so the first measured context after it is the real size.
+export const settlePostCompactionContext = (state: SessionState, measuredTokens: number): void => {
+  if (!state.isAwaitingPostCompactionContext || measuredTokens <= 0) return
+  state.isAwaitingPostCompactionContext = false
+  state.backoffFrom = measuredTokens
 }

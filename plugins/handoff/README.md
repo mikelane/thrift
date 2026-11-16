@@ -344,8 +344,12 @@ from being evaluated.
 
 After Not now, after each compaction, and after a failed or vetoed compaction, the plugin does not
 show the weak band or compact again until the context grows another 50,000 tokens. The growth is
-measured from the compaction's `tokensAfter`, or from the size before the compaction when it
-failed, was vetoed, or reported no size. A strong signal is not held back.
+measured from the first context the plugin measures after a successful compaction, not from the
+compaction's `tokensAfter`: `tokensAfter` does not count everything Claude Code re-attaches
+afterwards, so it reads lower than the next turn's real context. Until that measurement exists, the
+plugin holds with `tokensAfter`, or with the size before the compaction when it reported no size.
+After a failed or vetoed compaction the growth is measured from the size before it. A strong signal
+is not held back.
 
 ### When something fails
 

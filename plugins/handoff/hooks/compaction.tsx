@@ -16,6 +16,7 @@ async function runCompaction($: EngineInterface, state: SessionState, trigger: T
       await writeRecord($, state, { ...trigger, action: 'compacted' })
       state.backoffFrom = compaction.tokensAfter ?? sizeBefore
       state.contextTokens = compaction.tokensAfter ?? sizeBefore
+      state.isAwaitingPostCompactionContext = true
     }
   } catch (error) {
     state.backoffFrom = sizeBefore

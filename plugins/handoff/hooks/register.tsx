@@ -41,6 +41,7 @@ import {
   recordSessionEnd,
   releaseTurnEndWaiter,
   resetForNewSession,
+  settlePostCompactionContext,
   startMainTurn,
   startSubagentTurn,
   endSubagentTurn,
@@ -227,6 +228,7 @@ const registerTurnHooks = (on: On, state: SessionState) => {
         advisorCalls: (step.serverToolUses ?? []).filter(use => use.name === 'advisor').length,
         reported,
       })
+      settlePostCompactionContext(state, state.contextTokens)
     }
     return step
   }).catch(async function* ($, e, next) {

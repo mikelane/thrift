@@ -36,6 +36,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     isTurnUnattended: false,
     resubmittedPrompts: [],
     backoffFrom: null,
+    isAwaitingPostCompactionContext: false,
     pending: null,
     heldPrompt: null,
     handoffHold: { phase: 'idle' },
@@ -75,6 +76,7 @@ const usedState = () => {
   state.hasFinishedTask = true
   state.isTurnUnattended = true
   state.backoffFrom = 180_000
+  state.isAwaitingPostCompactionContext = true
   state.pending = 'handoff'
   state.heldPrompt = 'now ENG-2'
   beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false, origin: 'composer', author: 'person' })
@@ -97,6 +99,7 @@ test('It clears what the old session learned in resetForNewSession', () => {
     hasFinishedTask: false,
     isTurnUnattended: false,
     backoffFrom: null,
+    isAwaitingPostCompactionContext: false,
     heldPrompt: null,
     isTurnRunning: false,
     isPressRunning: false,
