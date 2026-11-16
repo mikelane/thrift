@@ -80,6 +80,8 @@ export type SessionState = Settings & {
   isAwaitingPostCompactionContext: boolean
   // The first context measured after the last compaction in this session; 0 while unknown.
   floorTokens: number
+  // Counts the sessions this plugin has seen; resetForNewSession bumps it. A compaction that was running across a bump belongs to the old session.
+  sessionGeneration: number
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
@@ -118,6 +120,7 @@ export const createState = (settings: Settings): SessionState => ({
   backoffFrom: null,
   isAwaitingPostCompactionContext: false,
   floorTokens: 0,
+  sessionGeneration: 0,
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
@@ -150,6 +153,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.backoffFrom = null
   state.isAwaitingPostCompactionContext = false
   state.floorTokens = 0
+  state.sessionGeneration += 1
   state.heldPrompt = null
   state.isTurnRunning = false
   state.isPressRunning = false

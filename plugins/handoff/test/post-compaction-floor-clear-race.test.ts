@@ -26,3 +26,45 @@ test('It does not carry a floor into a new session when /clear lands while a com
   expect(lastRecord(world)).toMatchObject({ action: 'compacted' })
   expect(lastRecord(world).trigger_values).not.toHaveProperty('floor_tokens')
 })
+
+test('It does not carry a backoff into a new session when /clear lands while a vetoed compaction is running', ACT_AT_150K, async ($, on) => {
+  const world = install($, on)
+  const release: { done: () => void } = { done: () => undefined }
+  world.compact = () =>
+    new Promise(resolve => {
+      release.done = () => resolve({ skip: 'a hook vetoed it' })
+    })
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  await $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
+  release.done()
+  await world.clock.settle()
+  world.compact = async () => compacted(60_000)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'compacted' })
+})
+
+test('It does not carry a backoff into a new session when /clear lands while a failing compaction is running', ACT_AT_150K, async ($, on) => {
+  const world = install($, on)
+  const release: { done: () => void } = { done: () => undefined }
+  world.compact = () =>
+    new Promise((_resolve, reject) => {
+      release.done = () => reject(new Error('compaction failed'))
+    })
+  await startSession($)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  await $.session.end({ reason: 'clear', sessionId: 'old-session', resume: { id: 'old-session' } })
+  release.done()
+  await world.clock.settle()
+  world.compact = async () => compacted(60_000)
+  await growTo200k($, world)
+  await completeTurn($)
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'compacted' })
+})

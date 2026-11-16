@@ -39,6 +39,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     backoffFrom: null,
     isAwaitingPostCompactionContext: false,
     floorTokens: 0,
+    sessionGeneration: 0,
     pending: null,
     heldPrompt: null,
     handoffHold: { phase: 'idle' },
@@ -57,6 +58,13 @@ test('It returns the settings with a closed gate and an empty session from creat
     handoffStage: 'idle',
     sessionEndBeforeClear: null,
   })
+})
+
+test('It advances the session generation in resetForNewSession', () => {
+  const state = usedState()
+  resetForNewSession(state)
+  resetForNewSession(state)
+  expect(state.sessionGeneration).toBe(2)
 })
 
 test('It returns fresh sets from each createState call', () => {
