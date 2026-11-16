@@ -22,6 +22,7 @@ export type TriggerValues = {
   setting: Mode
   cache_read_tokens: number
   reason?: DecisionReason
+  floor_tokens?: number
   fork_reason?: ForkReason
   note?: NoteDelivery
   held_groups?: number
@@ -71,6 +72,7 @@ export type Trigger = {
 export type Evaluation = Trigger & {
   action: DecisionAction
   reason?: DecisionReason
+  floorTokens?: number
   forkReason?: ForkReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
@@ -140,7 +142,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
@@ -158,6 +160,7 @@ export const recordFromEvaluation = (
       setting: state.setting,
       cache_read_tokens: cacheReadTokens,
       ...(reason ? { reason } : {}),
+      ...(floorTokens === undefined ? {} : { floor_tokens: floorTokens }),
       ...(forkReason ? { fork_reason: forkReason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),

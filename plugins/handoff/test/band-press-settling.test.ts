@@ -11,9 +11,11 @@ import {
   install,
   mountBand,
   notify,
+  runStep,
   startSession,
   startTurn,
   submitPerson,
+  usageOf,
 } from './helpers'
 import { ASK, heldPromptBand, weakBand, BUSY_REFUSAL } from './band-turn-fixtures'
 
@@ -173,6 +175,7 @@ test('It runs a second idle press after the first one settled', ASK, async ($, o
   const first = await weakBand($, world)
   await first.press({ key: 'compact' })
   await world.clock.settle()
+  await runStep($, world, { usage: usageOf(1_000, 0, 9_000) })
   const second = await weakBand($, world)
   await second.press({ key: 'handoff' })
   await world.clock.settle()
@@ -199,6 +202,7 @@ test('It runs an idle press after a held press ran at a turn end', ASK, async ($
   await first.press({ key: 'compact' })
   await completeTurn($)
   await world.clock.settle()
+  await runStep($, world, { usage: usageOf(1_000, 0, 9_000) })
   const second = await weakBand($, world)
   await second.press({ key: 'handoff' })
   await world.clock.settle()

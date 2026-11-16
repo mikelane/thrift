@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import {
   addHeldPrompt,
@@ -13,6 +13,7 @@ import {
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
+  settlePostCompactionContext,
   takeHeldPrompts,
   takeLateArrivalsOrEndSending,
 } from '../hooks/session-state'
@@ -36,6 +37,9 @@ test('It returns the settings with a closed gate and an empty session from creat
     isTurnUnattended: false,
     resubmittedPrompts: [],
     backoffFrom: null,
+    isAwaitingPostCompactionContext: false,
+    floorTokens: 0,
+    sessionGeneration: 0,
     pending: null,
     heldPrompt: null,
     handoffHold: { phase: 'idle' },
@@ -54,6 +58,13 @@ test('It returns the settings with a closed gate and an empty session from creat
     handoffStage: 'idle',
     sessionEndBeforeClear: null,
   })
+})
+
+test('It advances the session generation in resetForNewSession', () => {
+  const state = usedState()
+  resetForNewSession(state)
+  resetForNewSession(state)
+  expect(state.sessionGeneration).toBe(2)
 })
 
 test('It returns fresh sets from each createState call', () => {
@@ -75,6 +86,8 @@ const usedState = () => {
   state.hasFinishedTask = true
   state.isTurnUnattended = true
   state.backoffFrom = 180_000
+  state.isAwaitingPostCompactionContext = true
+  state.floorTokens = 168_000
   state.pending = 'handoff'
   state.heldPrompt = 'now ENG-2'
   beginHandoffHold(state, { text: 'now ENG-2', isUnattended: false, origin: 'composer', author: 'person' })
@@ -97,6 +110,8 @@ test('It clears what the old session learned in resetForNewSession', () => {
     hasFinishedTask: false,
     isTurnUnattended: false,
     backoffFrom: null,
+    isAwaitingPostCompactionContext: false,
+    floorTokens: 0,
     heldPrompt: null,
     isTurnRunning: false,
     isPressRunning: false,
@@ -282,4 +297,26 @@ test('It returns to idle from endHandoff in every phase', () => {
 
 test('It tells whether a group shares an origin in isGroupOfOrigin', () => {
   expect([isGroupOfOrigin(person, false), isGroupOfOrigin(person, true), isGroupOfOrigin(nightly, true)]).toEqual([true, false, true])
+})
+
+describe('settlePostCompactionContext', () => {
+  test('It records the measured size as the backoff and the floor while a measurement is awaited', () => {
+    const state = createState(settings)
+    state.isAwaitingPostCompactionContext = true
+    settlePostCompactionContext(state, 168_000)
+    expect(state).toMatchObject({ backoffFrom: 168_000, floorTokens: 168_000, isAwaitingPostCompactionContext: false })
+  })
+
+  test('It leaves the backoff and the floor alone when no measurement is awaited', () => {
+    const state = createState(settings)
+    settlePostCompactionContext(state, 168_000)
+    expect(state).toMatchObject({ backoffFrom: null, floorTokens: 0 })
+  })
+
+  test('It keeps waiting when the measured size is 0', () => {
+    const state = createState(settings)
+    state.isAwaitingPostCompactionContext = true
+    settlePostCompactionContext(state, 0)
+    expect(state).toMatchObject({ backoffFrom: null, floorTokens: 0, isAwaitingPostCompactionContext: true })
+  })
 })

@@ -344,8 +344,16 @@ from being evaluated.
 
 After Not now, after each compaction, and after a failed or vetoed compaction, the plugin does not
 show the weak band or compact again until the context grows another 50,000 tokens. The growth is
-measured from the compaction's `tokensAfter`, or from the size before the compaction when it
-failed, was vetoed, or reported no size. A strong signal is not held back.
+measured from the first context the plugin measures after a successful compaction. It is not
+measured from the compaction's `tokensAfter`, which has come in well below the next turn's real
+context. The engine does not document what `tokensAfter` counts. It may leave out what Claude Code
+re-attaches after a compaction. Until that first measurement exists, the plugin holds with
+`tokensAfter`, or with the size before the compaction when it reported no size. After a failed or
+vetoed compaction, the growth is measured from the size before it. A strong signal is not held back.
+
+If `handoffContextTokens` is at or below the context a compaction leaves behind, the backoff is what
+stops a compaction on every turn: the plugin compacts every 50,000 tokens past that floor. See
+[Choosing `handoffContextTokens`](#choosing-handoffcontexttokens).
 
 ### When something fails
 
@@ -390,9 +398,95 @@ Set these in `/config`.
 | Setting | Type | Default | What it does |
 |---|---|---|---|
 | `handoffMode` | `off`, `ask`, `act` | `off` | See [Modes](#modes). |
-| `handoffContextTokens` | number, 80,000 to 2,000,000 | `150000` | The context size at which a signal becomes strong or weak. A fresh session starts near 48,000 tokens. |
+| `handoffContextTokens` | number, 80,000 to 2,000,000 | `150000` | The context size at which a signal becomes strong or weak. A fresh session starts near 48,000 tokens. Keep it above the post-compaction floor: see [Choosing `handoffContextTokens`](#choosing-handoffcontexttokens). |
 | `compactBeforeClear` | boolean | `false` | Compact the old session before clearing, so resuming it later costs less. It costs one compaction per handoff. **When it is on, `claude --resume <old id>` reopens the compacted transcript, not the full one.** |
 | `continueAfterHandoff` | boolean | `false` | After a handoff that did not follow a strong signal (a band press mid-work, or a typed `/handoff`), submit one prompt in the fresh session so Claude carries on from the note. Does nothing while the plugin runs in `off`. See [Continuing after a handoff](#continuing-after-a-handoff). |
+
+### Choosing `handoffContextTokens`
+
+The threshold has to sit above the context a compaction leaves behind, with at least the 50,000-token
+[backoff](#backoff) of headroom. Past that, the choice is a cost trade-off.
+
+**The floor.** The floor is the first context the plugin measures after a compaction. It is what a
+session starts from every time: the summary, plus what Claude Code attaches to a session (tool and
+skill listings, MCP instructions, `CLAUDE.md`). A `compacted` record carries the last floor the plugin
+had measured as `trigger_values.floor_tokens`. The first compaction of a session has none, and later
+ones do.
+
+A floor at or above `handoffContextTokens` means the setting is too low. A compaction cannot bring the
+context under the threshold, so every weak signal compacts again as soon as the backoff releases,
+which is every 50,000 tokens past the floor. To find those records:
+
+```sh
+jq -c 'select(.action == "compacted" and (.trigger_values.floor_tokens // 0) >= .trigger_values.threshold)' \
+  "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
+```
+
+To read your floor without waiting for such a record, take `context_tokens` from the first record after
+each `compacted` one in the same session:
+
+```sh
+jq -s 'group_by(.session_id)[] | . as $s | range(0; length - 1)
+  | select($s[.].action == "compacted") | $s[. + 1].trigger_values.context_tokens' \
+  "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
+```
+
+The next record's `context_tokens` is measured at the end of the next turn, not right after the
+compaction, so it can overstate the floor slightly.
+
+Do not read the floor from `tokensAfter`. It has come in lower than the context the next turn measures.
+
+**The trade-off.** Every request re-reads the whole context from the prompt cache, so a larger context
+makes each request more expensive. Every compaction costs a summarization call over the whole context, the
+summary it writes, and a re-write of the floor to the prompt cache. A higher threshold makes each
+request more expensive and compactions rarer. A lower one does the reverse.
+
+**A starting point.** Let F be the floor, g the context growth per request, r the price of a cache
+read relative to a fresh input token, and K the cost of one compaction. Measure F, g and K in input
+tokens. With the threshold at F + D, the cost per request is about
+
+```
+r·F + r·D/2 + K·g/D
+```
+
+The first term is the floor, the second is the average extra context between compactions, and the
+third is the compaction cost spread over the requests between compactions. This is lowest at
+
+```
+D = sqrt(2·K·g / r)
+```
+
+Work out K for your own floor. With the threshold at T, a compaction costs about
+
+```
+K ≈ 2·F + (summary tokens × output price ÷ input price) + 0.05·T
+```
+
+- `2·F` is the re-write of the floor to the 1-hour prompt cache, at 2 times the input price.
+- A summary of about 13,000 tokens at 5 times the input price is about 65,000.
+- `0.05·T` is the summarization call reading the context from the cache.
+
+Worked example, from measured Opus 5.5 sessions: F is about 165,000, g about 1,900, r is 0.05 (a cache
+read costs 5% of the input price), and T about 340,000. That gives K of about 330,000 + 65,000 +
+17,000, or about 400,000. Then D is about 175,000 and the threshold about 340,000. Within the example,
+thresholds from 300,000 to 400,000 are within about 2.5% of the minimum per-request cost, 250,000 costs
+about 14% more, and 200,000 costs about 1.8 times as much. These figures come from a few sessions and
+one model, so treat them as an estimate and compute your own.
+
+To estimate g, take the growth in `context_tokens` between two records of one session and divide it by
+the number of model requests in between. The log does not count requests, so this one comes from your
+own usage.
+
+**Caveats.**
+
+- A threshold of 300,000 to 340,000 assumes the 1,000,000-token context window. In a 200,000-token
+  window it does not fit.
+- The weights are API prices. Subscription rate limits may weight tokens differently.
+- Answer quality can drift in very long contexts. That argues for the low end of the flat region.
+- The threshold has to fit inside the model's context window, below the point where Claude Code
+  compacts on its own.
+- A smaller floor helps every request: fewer connected MCP servers, and a shorter `CLAUDE.md` and
+  skill listing.
 
 ### Continuing after a handoff
 
@@ -463,6 +557,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.setting` | The configured `handoffMode`. The plugin may run as `off` anyway (see Compatibility); `effective_mode` shows the mode it ran in |
 | `trigger_values.effective_mode` | The mode the plugin ran in when the decision was made: `off`, `ask`, or `act`. Every record a handoff writes (a `cleared` record, an abandon, a failed or vetoed compaction) carries the mode from when the handoff began, so a `/handoff` that starts before Claude Code reports the session started keeps `off` even though its record is written after. It equals `setting` unless a fallback held the plugin at `off`: a development or unrecognized Claude Code build, a non-interactive session, or the start of a session before Claude Code reports it started, including right after a `/config` change. When `setting` is already `off`, the two match even under a fallback. Present on every record. On a `/handoff` or band button record, where `mode` is always `active`, this is the field that shows a fallback. |
 | `trigger_values.cache_read_tokens` | Cache-read tokens of the turn the decision was made at, read at that moment (including the end of a turn that did not finish with an answer) |
+| `trigger_values.floor_tokens` | Present only on a `compacted` record, and only when a floor is known: the first context the plugin measured after the previous compaction in this session. A number, in tokens. A session's first compaction has none |
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when Claude had not finished a reply in the session to fork (a new session before its first turn ends, right after a `/clear`, or a resume that starts the conversation afresh). Absent for every other reason the fork wrote no note |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |

@@ -34,6 +34,7 @@ const isSampleRecord = (value: unknown): value is SampleRecord => {
     typeof values.setting === 'string' &&
     typeof values.effective_mode === 'string' &&
     isOptional(values.reason, 'string') &&
+    isOptional(values.floor_tokens, 'number') &&
     isOptional(values.note, 'string') &&
     isOptional(values.cleared_by, 'string') &&
     isOptional(values.continued, 'string') &&
@@ -81,6 +82,7 @@ export const rebuildSampleLine = (line: string, build: RecordBuilder): string =>
     effectiveMode: values.effective_mode,
     action: sample.action,
     reason: values.reason,
+    floorTokens: values.floor_tokens,
     note: values.note,
     clearedBy: values.cleared_by,
     compactedBeforeClear: values.compacted_before_clear,

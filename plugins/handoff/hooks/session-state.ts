@@ -76,6 +76,12 @@ export type SessionState = Settings & {
   isTurnUnattended: boolean
   resubmittedPrompts: HeldPrompt[]
   backoffFrom: number | null
+  // True from a successful compaction until the first context measurement after it.
+  isAwaitingPostCompactionContext: boolean
+  // The first context measured after the last compaction in this session; 0 while unknown.
+  floorTokens: number
+  // Counts the sessions this plugin has seen; resetForNewSession bumps it. A compaction that was running across a bump belongs to the old session.
+  sessionGeneration: number
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
@@ -112,6 +118,9 @@ export const createState = (settings: Settings): SessionState => ({
   isTurnUnattended: false,
   resubmittedPrompts: [],
   backoffFrom: null,
+  isAwaitingPostCompactionContext: false,
+  floorTokens: 0,
+  sessionGeneration: 0,
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
@@ -142,6 +151,9 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isTurnUnattended = false
   state.resubmittedPrompts = []
   state.backoffFrom = null
+  state.isAwaitingPostCompactionContext = false
+  state.floorTokens = 0
+  state.sessionGeneration += 1
   state.heldPrompt = null
   state.isTurnRunning = false
   state.isPressRunning = false
@@ -393,4 +405,12 @@ export const claimPending = (state: SessionState, kind: NonNullable<SessionState
 
 export const noteCacheReads = (state: SessionState, cacheReadTokens: number | undefined): void => {
   state.cacheReadTokens = cacheReadTokens ?? 0
+}
+
+// tokensAfter has read well below the next turn's real context, so the first measured context after a compaction anchors the backoff and the floor.
+export const settlePostCompactionContext = (state: SessionState, measuredTokens: number): void => {
+  if (!state.isAwaitingPostCompactionContext || measuredTokens <= 0) return
+  state.isAwaitingPostCompactionContext = false
+  state.backoffFrom = measuredTokens
+  state.floorTokens = measuredTokens
 }

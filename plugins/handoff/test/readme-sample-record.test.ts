@@ -42,6 +42,7 @@ const evaluations: ReadonlyArray<readonly [string, Evaluation]> = [
   ['a continue that is off', { ...cleared, continueFields: { continued: 'off' } }],
   ['a held restore', { ...cleared, action: 'none', heldFields: { held_groups: 1, held_unattended: true, handoff_unattended: false, held_restore: 'in_box' } }],
   ['a record without held fields', { ...cleared, action: 'advised', note: undefined, clearedBy: undefined, compactedBeforeClear: undefined, heldFields: undefined }],
+  ['a numeric floor', { ...cleared, floorTokens: 168_000 }],
 ]
 for (const [name, evaluation] of evaluations) {
   test(`It rebuilds the line byte for byte for ${name}`, () => {
@@ -110,6 +111,7 @@ const malformedLines: ReadonlyArray<readonly [string, string]> = [
   ['has a string for context_tokens', lineOf(cleared).replace('"context_tokens":200000', '"context_tokens":"200000"')],
   ['has a number for an optional note', lineOf(cleared).replace('"note":"appended"', '"note":1')],
   ['has false for compacted_before_clear', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":false')],
+  ['has a string for floor_tokens', lineOf({ ...cleared, floorTokens: 168_000 }).replace('"floor_tokens":168000', '"floor_tokens":"168000"')],
   ['has a number for continued', lineOf(skippedContinue).replace('"continued":"skipped"', '"continued":1')],
   ['has a number for continue_skip', lineOf(skippedContinue).replace('"continue_skip":"strong_signal"', '"continue_skip":1')],
   ['has false for late_turn', lineOf(cleared).replace('"compacted_before_clear":true', '"compacted_before_clear":true,"late_turn":false')],
