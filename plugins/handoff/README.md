@@ -344,12 +344,12 @@ from being evaluated.
 
 After Not now, after each compaction, and after a failed or vetoed compaction, the plugin does not
 show the weak band or compact again until the context grows another 50,000 tokens. The growth is
-measured from the first context the plugin measures after a successful compaction, not from the
-compaction's `tokensAfter`, which has read well below the next turn's real context (the engine does
-not document what it counts; possibly not what Claude Code re-attaches after a compaction). Until that measurement exists, the
-plugin holds with `tokensAfter`, or with the size before the compaction when it reported no size.
-After a failed or vetoed compaction the growth is measured from the size before it. A strong signal
-is not held back.
+measured from the first context the plugin measures after a successful compaction. It is not
+measured from the compaction's `tokensAfter`, which has come in well below the next turn's real
+context. The engine does not document what `tokensAfter` counts. It may leave out what Claude Code
+re-attaches after a compaction. Until that first measurement exists, the plugin holds with
+`tokensAfter`, or with the size before the compaction when it reported no size. After a failed or
+vetoed compaction, the growth is measured from the size before it. A strong signal is not held back.
 
 If `handoffContextTokens` is at or below the context a compaction leaves behind, the backoff is what
 stops a compaction on every turn: the plugin compacts every 50,000 tokens past that floor. See
@@ -431,14 +431,15 @@ jq -s 'group_by(.session_id)[] | . as $s | range(0; length - 1)
   "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
 ```
 
-The next record's `context_tokens` is measured at the end of the next turn, not right after the compaction, so it can overstate the floor slightly.
+The next record's `context_tokens` is measured at the end of the next turn, not right after the
+compaction, so it can overstate the floor slightly.
 
-Do not read the floor from `tokensAfter`: it has come in lower than the context the next turn measures.
+Do not read the floor from `tokensAfter`. It has come in lower than the context the next turn measures.
 
 **The trade-off.** Every request re-reads the whole context from the prompt cache, so a larger context
-makes each request dearer. Every compaction costs a summarization call over the whole context, the
+makes each request more expensive. Every compaction costs a summarization call over the whole context, the
 summary it writes, and a re-write of the floor to the prompt cache. A higher threshold makes each
-request dearer and compactions rarer. A lower one does the reverse.
+request more expensive and compactions rarer. A lower one does the reverse.
 
 **A starting point.** Let F be the floor, g the context growth per request, r the price of a cache
 read relative to a fresh input token, and K the cost of one compaction. Measure F, g and K in input
