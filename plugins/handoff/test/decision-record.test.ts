@@ -26,6 +26,16 @@ const evaluation: Evaluation = {
 const heldFields = { held_groups: 1, held_unattended: false, handoff_unattended: true, held_restore: 'in_box' } as const
 
 describe('recordFromEvaluation', () => {
+  test('It records the floor as floor_tokens when the evaluation has one', () => {
+    const { trigger_values } = recordFromEvaluation(state, { ...evaluation, floorTokens: 168_000 }, NOW, 'abc')
+    expect(trigger_values).toMatchObject({ floor_tokens: 168_000 })
+  })
+
+  test('It leaves floor_tokens out when the evaluation has no floor', () => {
+    const { trigger_values } = recordFromEvaluation(state, evaluation, NOW, 'abc')
+    expect(trigger_values).not.toHaveProperty('floor_tokens')
+  })
+
   test('It maps the evaluation and state onto the record fields', () => {
     expect(recordFromEvaluation(state, evaluation, NOW, 'abc')).toEqual({
       ts: '2026-10-11T12:00:00.000Z',

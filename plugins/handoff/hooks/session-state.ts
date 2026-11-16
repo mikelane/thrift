@@ -78,6 +78,8 @@ export type SessionState = Settings & {
   backoffFrom: number | null
   // True from a successful compaction until the first context measurement after it.
   isAwaitingPostCompactionContext: boolean
+  // The first context measured after the last compaction in this session; 0 while unknown.
+  floorTokens: number
   pending: 'handoff' | 'compact' | null
   heldPrompt: string | null
   handoffHold: HandoffHold
@@ -115,6 +117,7 @@ export const createState = (settings: Settings): SessionState => ({
   resubmittedPrompts: [],
   backoffFrom: null,
   isAwaitingPostCompactionContext: false,
+  floorTokens: 0,
   pending: null,
   heldPrompt: null,
   handoffHold: { phase: 'idle' },
@@ -146,6 +149,7 @@ export const resetForNewSession = (state: SessionState): void => {
   state.resubmittedPrompts = []
   state.backoffFrom = null
   state.isAwaitingPostCompactionContext = false
+  state.floorTokens = 0
   state.heldPrompt = null
   state.isTurnRunning = false
   state.isPressRunning = false
@@ -404,4 +408,5 @@ export const settlePostCompactionContext = (state: SessionState, measuredTokens:
   if (!state.isAwaitingPostCompactionContext || measuredTokens <= 0) return
   state.isAwaitingPostCompactionContext = false
   state.backoffFrom = measuredTokens
+  state.floorTokens = measuredTokens
 }

@@ -14,6 +14,7 @@ const turnEnd = (overrides: Partial<TurnEndInput>): TurnEndInput => ({
   mode: 'ask',
   isUnattended: false,
   backoffFrom: null,
+  floorTokens: 0,
   ...overrides,
 })
 
@@ -45,6 +46,14 @@ const planCases = [
     'weak',
     { kind: 'advise', holdsPrompt: false, buttons: ['compact', 'handoff', 'not-now'] },
   ],
+  ['a weak signal with the floor above the threshold', { mode: 'act', hasFinishedTask: false, floorTokens: 168_000 }, 'weak', { kind: 'floor-above-threshold' }],
+  ['a weak signal with the floor at the threshold', { mode: 'act', hasFinishedTask: false, floorTokens: 150_000 }, 'weak', { kind: 'floor-above-threshold' }],
+  ['a weak signal in ask mode with the floor above the threshold', { hasFinishedTask: false, floorTokens: 168_000 }, 'weak', { kind: 'floor-above-threshold' }],
+  ['a weak signal with the floor below the threshold', { mode: 'act', hasFinishedTask: false, floorTokens: 149_999 }, 'weak', { kind: 'compact' }],
+  ['a weak signal with an unknown floor of 0', { mode: 'act', hasFinishedTask: false, floorTokens: 0 }, 'weak', { kind: 'compact' }],
+  ['a weak signal inside the back-off window with the floor above the threshold', { hasFinishedTask: false, backoffFrom: 170_000, floorTokens: 168_000 }, 'weak', { kind: 'back-off' }],
+  ['a strong signal with the floor above the threshold', { mode: 'act', floorTokens: 168_000 }, 'strong', { kind: 'handoff', holdsPrompt: false }],
+  ['no signal with the floor above the threshold', { contextTokens: 100_000, floorTokens: 168_000 }, 'none', { kind: 'none' }],
   [
     'a strong signal inside the back-off window',
     { backoffFrom: 170_000 },

@@ -106,30 +106,30 @@ test('It sizes the context from tokensAfter once a compaction finishes', ACT, as
   expect(lastRecord(world).trigger_values.context_tokens).toBe(48_000)
 })
 
-test('It waits for 50000 more tokens past the first measurement after a compaction before it compacts again', ACT, async ($, on) => {
+test('It waits for 50000 more tokens past the first measurement after a compaction before it compacts again', { options: { handoffMode: 'act', handoffContextTokens: 160_000 } }, async ($, on) => {
   const world = install($, on)
   world.compact = async () => compacted(120_000)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   await world.clock.settle()
-  await runStep($, world, { usage: usageOf(1_000, 0, 159_000) })
-  await runStep($, world, { usage: usageOf(1_000, 0, 208_999) })
+  await runStep($, world, { usage: usageOf(1_000, 0, 158_000) })
+  await runStep($, world, { usage: usageOf(1_000, 0, 207_999) })
   await completeTurn($)
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
   expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { signal: 'weak', reason: 'backoff' } })
 })
 
-test('It compacts again once the context has grown 50000 tokens past the first measurement after the compaction', ACT, async ($, on) => {
+test('It compacts again once the context has grown 50000 tokens past the first measurement after the compaction', { options: { handoffMode: 'act', handoffContextTokens: 160_000 } }, async ($, on) => {
   const world = install($, on)
   world.compact = async () => compacted(120_000)
   await startSession($)
   await growTo200k($, world)
   await completeTurn($)
   await world.clock.settle()
-  await runStep($, world, { usage: usageOf(1_000, 0, 159_000) })
-  await runStep($, world, { usage: usageOf(1_000, 0, 209_000) })
+  await runStep($, world, { usage: usageOf(1_000, 0, 158_000) })
+  await runStep($, world, { usage: usageOf(1_000, 0, 208_000) })
   await completeTurn($)
   await world.clock.settle()
   expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(2)
