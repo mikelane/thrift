@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/mikelane/thrift/compare/handoff-v0.3.1...handoff-v0.3.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **handoff:** anchor the post-compaction backoff on measured context ([#142](https://github.com/mikelane/thrift/issues/142)) ([569abd5](https://github.com/mikelane/thrift/commit/569abd56f17a265f9a42887b5180fc4768459212))
+
 ## [0.3.1](https://github.com/mikelane/thrift/compare/handoff-v0.3.0...handoff-v0.3.1) (2026-10-27)
 
 
