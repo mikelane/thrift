@@ -13,9 +13,9 @@ import {
   releaseCarried,
   releaseCarriedGroup,
   resetForNewSession,
+  settlePostCompactionContext,
   takeHeldPrompts,
   takeLateArrivalsOrEndSending,
-  settlePostCompactionContext,
 } from '../hooks/session-state'
 import { settings, person, nightly } from './session-state-fixtures'
 
