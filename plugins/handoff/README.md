@@ -431,6 +431,8 @@ jq -s 'group_by(.session_id)[] | . as $s | range(0; length - 1)
   "${THRIFT_HOME:-$HOME/.claude/thrift}/decisions.jsonl"
 ```
 
+The next record's `context_tokens` is measured at the end of the next turn, not right after the compaction, so it can overstate the floor slightly.
+
 Do not read the floor from `tokensAfter`: it has come in lower than the context the next turn measures.
 
 **The trade-off.** Every request re-reads the whole context from the prompt cache, so a larger context
@@ -466,7 +468,7 @@ K ≈ 2·F + (summary tokens × output price ÷ input price) + 0.05·T
 Worked example, from measured Opus 5.5 sessions: F is about 165,000, g about 1,900, r is 0.05 (a cache
 read costs 5% of the input price), and T about 340,000. That gives K of about 330,000 + 65,000 +
 17,000, or about 400,000. Then D is about 175,000 and the threshold about 340,000. Within the example,
-thresholds from 300,000 to 400,000 are within about 2% of the minimum per-request cost, 250,000 costs
+thresholds from 300,000 to 400,000 are within about 2.5% of the minimum per-request cost, 250,000 costs
 about 14% more, and 200,000 costs about 1.8 times as much. These figures come from a few sessions and
 one model, so treat them as an estimate and compute your own.
 
