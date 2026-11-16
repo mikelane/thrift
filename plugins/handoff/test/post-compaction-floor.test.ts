@@ -29,7 +29,7 @@ describe('runCompaction', () => {
     expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { signal: 'weak', reason: 'backoff' } })
   })
 
-  test('It compacts again once the context is 50000 tokens past the measured post-compaction context', ACT_AT_160K, async ($, on) => {
+  test('It compacts again at exactly 50000 tokens past the measured post-compaction context', ACT_AT_160K, async ($, on) => {
     const world = install($, on)
     world.compact = async () => compacted(60_000)
     await startSession($)
@@ -39,13 +39,13 @@ describe('runCompaction', () => {
     await measureContext($, world, 158_000)
     await completeTurn($)
     await world.clock.settle()
-    await measureContext($, world, 208_001)
+    await measureContext($, world, 208_000)
     await completeTurn($)
     await world.clock.settle()
     expect(compactions(world)).toHaveLength(2)
   })
 
-  test('It does not compact at exactly 50000 tokens past the measured post-compaction context', ACT_AT_160K, async ($, on) => {
+  test('It does not compact again at 49999 tokens past the measured post-compaction context', ACT_AT_160K, async ($, on) => {
     const world = install($, on)
     world.compact = async () => compacted(60_000)
     await startSession($)
