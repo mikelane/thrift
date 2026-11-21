@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/mikelane/thrift/compare/meter-v0.4.0...meter-v0.4.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **meter:** stop waiting on a usage call that never answers ([#152](https://github.com/mikelane/thrift/issues/152)) ([7caccce](https://github.com/mikelane/thrift/commit/7caccce6955231fcc361080a0b9c9ac6ab5db3f0))
+
 ## [0.4.0](https://github.com/mikelane/thrift/compare/meter-v0.3.2...meter-v0.4.0) (2026-11-21)
 
 
