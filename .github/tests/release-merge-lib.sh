@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by release-merge.test.sh and by the merge step of .github/workflows/release-merge.yml.
+# Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
 #
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
@@ -152,4 +152,68 @@ release_merge_lost_race() {
   else
     return 1
   fi
+}
+
+# release_merge_merge_if_gate_passes <number> <tested-sha>: runs the gate on PR <number> against
+# <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. A refusal
+# returns 0, so the job stays green. A failed lookup, or a failed merge that is not a lost race,
+# returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
+# RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
+# shellcheck disable=SC2154,SC2153 # the variables above come from the caller
+release_merge_merge_if_gate_passes() {
+  local number=$1 TESTED_SHA=$2 pr files raw problems problem
+  # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
+  pr=$(mktemp "$work_dir/pr.XXXXXX") || return 1
+  files=$(mktemp "$work_dir/files.XXXXXX") || return 1
+  raw=$(mktemp "$work_dir/raw.XXXXXX") || return 1
+  gh api "repos/$REPO/pulls/$number" >"$pr" || return 1
+  # Two steps, not a pipe: a failed fetch must not read as "no changed files" without pipefail.
+  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" || return 1
+  release_merge_changed_files <"$raw" >"$files" || return 1
+
+  problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
+    "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA") || return 1
+  rm -f "$pr" "$files" "$raw"
+  # A refusal returns 0, so the job is green. Each reason also goes out as a warning
+  # annotation, which shows on the run summary without opening the log. Reasons carry
+  # PR-controlled text (branch, author, file paths): each log line starts with "- " so
+  # none is read as a workflow command, and % is escaped as the annotation format requires.
+  if [[ -n "$problems" ]]; then
+    echo "Not merging PR #$number:"
+    while IFS= read -r problem; do
+      echo "- $problem"
+      echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
+    done <<<"$problems"
+    return 0
+  fi
+
+  echo "Merging PR #$number at $TESTED_SHA."
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA" </dev/null || release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" || return 1
+}
+
+# release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
+# release PR whose CI passed at its head; otherwise merges the open PR from BRANCH at
+# CI_TESTED_SHA. Returns 1 when any lookup or merge failed, and goes on to the other PRs first.
+# Reads REPO, OWNER, BASE, TRIGGER, BRANCH, CI_TESTED_SHA and what the function above reads.
+release_merge_run() {
+  local failed=0 candidates number sha
+  if [[ "$TRIGGER" == "Release Please" ]]; then
+    # A failed CI lookup for one PR must not stop the others, but it must fail the job.
+    candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
+    if [[ -z "$candidates" ]]; then
+      echo "No open release PR has passed CI at its head. Nothing to merge."
+      return "$failed"
+    fi
+    while read -r number sha; do
+      release_merge_merge_if_gate_passes "$number" "$sha" || failed=1
+    done <<<"$candidates"
+    return "$failed"
+  fi
+
+  number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE")
+  if [[ -z "$number" ]]; then
+    echo "No open PR from $BRANCH in $REPO. Nothing to merge."
+    return 0
+  fi
+  release_merge_merge_if_gate_passes "$number" "$CI_TESTED_SHA"
 }

@@ -245,11 +245,19 @@ test_an_ordinary_file_list_from_the_files_api_has_no_problems() {
 
 # stub_gh: a `gh` on PATH that answers the pull request list, the CI runs of a head commit and a
 # single pull request from files in $TEST_DIR (pulls.json, runs-<sha>.json, pr-<n>.json). A head
-# commit with no runs-<sha>.json has no CI run.
+# commit with no runs-<sha>.json has no CI run. The merge command logs its arguments to merge-calls
+# and fails when merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if
+# that exists (the other trigger got there first).
 stub_gh() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     "dir=$TEST_DIR" \
+    'if [[ "$1 $2" == "pr merge" ]]; then' \
+    '  echo "$*" >>"$dir/merge-calls"' \
+    '  [[ -e "$dir/merge.error" ]] || exit 0' \
+    '  [[ -r "$dir/pr-after-failed-merge.json" ]] && cp "$dir/pr-after-failed-merge.json" "$dir/pr-$3.json"' \
+    '  echo "merge refused" >&2; exit 1' \
+    'fi' \
     'path= ; for arg in "$@"; do [[ "$arg" == repos/* ]] && path=$arg; done' \
     'case "$path" in' \
     '  */actions/runs\?head_sha=*)' \
@@ -258,6 +266,8 @@ stub_gh() {
     '    echo "$GH_TOKEN" >"$dir/runs-token"' \
     '    [[ -e "$dir/runs-$sha.error" ]] && { echo "HTTP 403" >&2; exit 1; }' \
     '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
+    '  */pulls) jq -r ".[0].number // empty" "$dir/pulls.json" ;;' \
+    '  */pulls/*/files) cat "$dir/files-$(basename "$(dirname "$path")").json" ;;' \
     '  */pulls\?*) [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
     '  */pulls/*) cat "$dir/pr-${path##*/}.json" ;;' \
     '  *) echo "unexpected gh call: $*" >&2; exit 1 ;;' \
@@ -537,16 +547,16 @@ test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
   return 0
 }
 
-# merge_commands: the lines of the workflow that run `gh pr merge`. A comment, an echo or trailing
+# merge_commands: the lines of the lib that run `gh pr merge`. A comment, an echo or trailing
 # text that merely mentions the command does not start with it, so it is not selected. A trailing
 # comment on a merge line is stripped, so a flag named only in that comment does not count. Each
 # line gets one trailing space, so a flag at the end of the line matches the ' --flag ' patterns.
 merge_commands() {
-  grep -E '^[[:space:]]*gh pr merge ' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+  grep -E '^[[:space:]]*gh pr merge ' "$HARNESS_DIR/release-merge-lib.sh" \
     | sed -e "s/[[:space:]]#.*$//" -e "s/$/ /"
 }
 
-test_the_workflow_runs_exactly_one_merge_command() {
+test_the_merge_step_runs_exactly_one_merge_command() {
   local got
   got=$(merge_commands | wc -l | tr -d ' ')
   [[ "$got" == 1 ]] || fail "got [$got]"
@@ -736,6 +746,204 @@ test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {
   write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.head.repo.full_name = "someone/thrift"')"
   got=$(gate_problems .)
   [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# --- The merge step: release_merge_merge_if_gate_passes and release_merge_run. ---
+
+# stage_release_pr <number> <sha> <component> <ci-conclusion>: a release PR that passes the gate,
+# with its changed files and its CI run, in $TEST_DIR. Each call adds the PR to the open list.
+stage_release_pr() {
+  local branch=release-please--branches--main--components--$3
+  write_pr "$TEST_DIR/pr-$1.json" ".number = $1 | .head.sha = \"$2\" | .head.ref = \"$branch\""
+  echo "[{\"filename\":\"plugins/$3/CHANGELOG.md\"}]" >"$TEST_DIR/files-$1.json"
+  write_runs "$2" "CI completed $4 2026-10-18T10:00:00Z .github/workflows/ci.yml $REPO $branch $1"
+  open_pr "$1" "$2" ".head.ref = \"$branch\"" >>"$TEST_DIR/open-prs.jsonl"
+  jq -s . "$TEST_DIR/open-prs.jsonl" >"$TEST_DIR/pulls.json"
+}
+
+# edit_pr <number> <jq filter>: edits the staged PR the stub serves.
+edit_pr() {
+  jq "$2" "$TEST_DIR/pr-$1.json" >"$TEST_DIR/pr.tmp" && mv "$TEST_DIR/pr.tmp" "$TEST_DIR/pr-$1.json"
+}
+
+# run_merge_step <command>...: runs a lib function the way the workflow step does (set -euo
+# pipefail, the step's variables), leaving its output in $OUTPUT and its status in $EXIT_CODE.
+run_merge_step() {
+  mkdir -p "$TEST_DIR/work"
+  stub_gh
+  (
+    set -euo pipefail
+    BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG "$@"
+  ) >"$OUTPUT" 2>&1
+  EXIT_CODE=$?
+}
+
+test_the_merge_step_squash_merges_a_pr_that_passes_the_gate_pinned_to_the_tested_commit() {
+  stage_release_pr 111 $SHA_A handoff success
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+  assert_out_has "Merging PR #111 at $SHA_A."
+}
+
+test_the_merge_step_logs_each_reason_and_returns_success_without_merging_a_pr_the_gate_refuses() {
+  stage_release_pr 111 $SHA_A handoff success
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_B
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "Not merging PR #111:"
+  assert_out_has "- the PR head is $SHA_A but CI tested $SHA_B"
+}
+
+test_the_merge_step_writes_one_warning_annotation_per_reason() {
+  local count
+  stage_release_pr 111 $SHA_A handoff success
+  edit_pr 111 '.state = "closed" | .draft = true'
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  count=$(grep -c '^::warning title=Release PR #111 not merged::' "$OUTPUT")
+  [[ "$count" == 2 ]] || fail "got $count warnings"
+}
+
+test_the_merge_step_escapes_percent_in_a_warning_annotation() {
+  stage_release_pr 111 $SHA_A handoff success
+  edit_pr 111 '.user.login = "100%25"'
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_out_has "::warning title=Release PR #111 not merged::the PR author is 100%2525, not $BOT"
+}
+
+test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workflow_command() {
+  local command_lines
+  stage_release_pr 111 $SHA_A handoff success
+  edit_pr 111 '.user.login = "::error::x"'
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  command_lines=$(grep -c '^::error::' "$OUTPUT")
+  [[ "$command_lines" == 0 ]] || fail "$command_lines line(s) of output start a workflow command"
+  assert_out_has "- the PR author is ::error::x, not $BOT"
+}
+
+test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
+  stage_release_pr 111 $SHA_A handoff success
+  rm "$TEST_DIR/pr-111.json"
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_when_the_changed_files_cannot_be_fetched() {
+  stage_release_pr 111 $SHA_A handoff success
+  rm "$TEST_DIR/files-111.json"
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipefail() {
+  stage_release_pr 111 $SHA_A handoff success
+  rm "$TEST_DIR/files-111.json"
+  stub_gh
+  mkdir -p "$TEST_DIR/work"
+  (BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_merge_if_gate_passes 111 $SHA_A) >"$OUTPUT" 2>&1
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() {
+  stage_release_pr 111 $SHA_A handoff success
+  jq '.state = "closed"' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_exit_code 0
+  assert_out_has "PR #111 is closed: another run merged it first."
+}
+
+test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_tested_commit() {
+  stage_release_pr 111 $SHA_A handoff success
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  assert_exit_code 1
+}
+
+test_the_merge_step_leaves_no_temp_files_after_a_merge() {
+  local left
+  stage_release_pr 111 $SHA_A handoff success
+  run_merge_step release_merge_merge_if_gate_passes 111 $SHA_A
+  left=$(ls "$TEST_DIR/work")
+  [[ -z "$left" ]] || fail "left [$left]"
+}
+
+test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {
+  stage_release_pr 111 $SHA_A handoff success
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA=$SHA_A \
+    run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"
+}
+
+test_a_ci_triggered_run_with_no_open_pr_from_the_branch_merges_nothing_and_succeeds() {
+  write_pulls
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA=$SHA_A \
+    run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "No open PR from release-please--branches--main--components--handoff in $REPO. Nothing to merge."
+}
+
+test_a_ci_triggered_run_fails_when_the_gate_cannot_fetch_the_pr() {
+  stage_release_pr 111 $SHA_A handoff success
+  rm "$TEST_DIR/pr-111.json"
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA=$SHA_A \
+    run_merge_step release_merge_run
+  assert_exit_code 1
+}
+
+test_a_sweep_run_with_no_candidate_says_so_and_succeeds() {
+  write_pulls
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_out_has "No open release PR has passed CI at its head. Nothing to merge."
+}
+
+test_a_sweep_run_merges_every_pr_whose_ci_passed_at_its_own_head() {
+  stage_release_pr 111 $SHA_A handoff success
+  stage_release_pr 112 $SHA_B meter success
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 112 --repo $REPO --admin --squash --match-head-commit $SHA_B"
+}
+
+test_a_sweep_run_fails_when_a_ci_lookup_fails_but_still_merges_the_other_pr() {
+  stage_release_pr 111 $SHA_A handoff success
+  stage_release_pr 112 $SHA_B meter success
+  : >"$TEST_DIR/runs-$SHA_B.error"
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
+  assert_file_lacks "$TEST_DIR/merge-calls" "pr merge 112 "
+}
+
+test_a_sweep_run_fails_when_the_ci_lookup_fails_and_nothing_else_is_a_candidate() {
+  stage_release_pr 111 $SHA_A handoff success
+  : >"$TEST_DIR/runs-$SHA_A.error"
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_out_has "Nothing to merge."
+}
+
+test_a_sweep_run_goes_on_to_the_next_pr_and_fails_when_one_pr_cannot_be_fetched() {
+  stage_release_pr 111 $SHA_A handoff success
+  stage_release_pr 112 $SHA_B meter success
+  rm "$TEST_DIR/pr-111.json"
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 112 "
+}
+
+test_a_sweep_run_stays_green_when_the_gate_refuses_a_pr() {
+  stage_release_pr 111 $SHA_A handoff success
+  edit_pr 111 '.user.login = "mikelane"'
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
 }
 
 run_tests "$@"
