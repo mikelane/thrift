@@ -69,7 +69,9 @@ test_the_merge_step_runs_exactly_one_merge_command() {
 # tests above read the lib, so these are what check the workflow itself.
 merge_step_script() {
   awk '/^      - name: Squash-merge the release PR/{f=1} f&&/^        run: \|/{r=1;next}
-       r&&/^          /{sub(/^          /,"");print;next} r{exit}' "$REPO_ROOT/.github/workflows/release-merge.yml"
+       r&&/^[[:space:]]*$/{blanks=blanks "\n";next}
+       r&&/^          /{printf "%s", blanks;blanks="";sub(/^          /,"");print;next}
+       r{exit}' "$REPO_ROOT/.github/workflows/release-merge.yml"
 }
 
 test_the_workflow_runs_no_merge_command_of_its_own() {
@@ -98,6 +100,35 @@ test_the_merge_step_script_is_exactly_the_expected_block() {
     'release_merge_run')
   got=$(merge_step_script)
   [[ "$got" == "$want" ]] || fail "the merge step's run block changed: [$got]"
+}
+
+test_merge_step_script_returns_a_line_that_follows_a_blank_line_in_the_run_block() {
+  local got
+  mkdir -p "$TEST_DIR/repo/.github/workflows"
+  awk '{print} /^          release_merge_run$/{print ""; print "          release_merge_problems() { :; }; TRIGGER=CI release_merge_run"}' \
+    "$REPO_ROOT/.github/workflows/release-merge.yml" >"$TEST_DIR/repo/.github/workflows/release-merge.yml"
+  got=$(REPO_ROOT=$TEST_DIR/repo merge_step_script)
+  [[ "$got" == *'release_merge_problems() { :; }'* ]] || fail "the line after a blank line is invisible: [$got]"
+}
+
+# checkout_with_block: the `with:` lines of the merge job's actions/checkout step, one per line,
+# continuation lines included. It ends at the step's next blank line.
+checkout_with_block() {
+  awk '/^      - uses: actions\/checkout@/{f=1;next} f&&/^        with:/{w=1;next} w&&/^[[:space:]]*$/{exit} w{print}' \
+    "$REPO_ROOT/.github/workflows/release-merge.yml"
+}
+
+test_the_checkout_step_takes_exactly_the_app_token_no_credentials_and_the_sparse_paths() {
+  local want got
+  want=$(printf '%s\n' \
+    '          token: ${{ steps.app-token.outputs.token }}' \
+    '          persist-credentials: false' \
+    '          sparse-checkout: |' \
+    '            .github/tests/release-merge-lib.sh' \
+    '            release-please-config.json' \
+    '          sparse-checkout-cone-mode: false')
+  got=$(checkout_with_block)
+  [[ "$got" == "$want" ]] || fail "the checkout step's with: block changed: [$got]"
 }
 
 # merge_step_block: the whole merge step (it is the last step), from its name line to the end.
