@@ -37,9 +37,9 @@ export const paceBand = (pace: number): BandColor => {
   return pace <= YELLOW_THROUGH + RATIO_TOLERANCE ? 'warning' : 'error'
 }
 
-const PACE_WORDS: Record<BandColor, string> = { success: 'under', warning: 'even', error: 'over' }
+const PACE_BAND_WORDS: Record<BandColor, string> = { success: 'under', warning: 'even', error: 'over' }
 
-export const paceBandWord = (band: BandColor): string => PACE_WORDS[band]
+export const paceBandWord = (band: BandColor): string => PACE_BAND_WORDS[band]
 
 export const projectedExhaustion = (
   now: number,
