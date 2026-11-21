@@ -1,10 +1,10 @@
 import { expect, test } from 'claude-code/testing'
-import { answered, compacted, completeTurn, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson } from './helpers'
+import { agentIn, answered, compacted, completeTurn, install, lastRecord, mountBand, notify, runCommand, startSession, startTurn, submitPerson } from './helpers'
 import { ACT, SESSION_ENDED_MESSAGE, COMPACTING, WAITING, BASE_MESSAGE, LATE_TURN_MESSAGE, holdFork, writingTheNote, endTurn, actHandoffWhileWritingTheNote, waitingForATurn, clearCount, shownText, countOf, personClearedThenTurnInFreshSession, WAITING_TOAST, SECOND_LATE_TURN_MESSAGE, bandText, firstHandoffEndsByPersonClear } from './wait-for-turn-helpers'
 
 test('It delivers the note into the fresh session when the person clears during the post-wait busy check', ACT, async ($, on) => {
   const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
-  world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+  world.agents = [agentIn('running')]
   world.onAgentList = async () => {
     world.onAgentList = undefined
     await runCommand($, 'clear')

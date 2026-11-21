@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { PromptOrigin } from 'claude-code'
 
-import { dropOf, entered, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
+import { agentIn, dropOf, entered, growTo200k, lastRecord, mountBand, submitPerson } from './helpers'
 import { ASK, ACT, ready } from './prompt-hold-fixtures'
 
 test('It drops a prompt that names new work and holds it in ask mode', ASK, async ($, on) => {
@@ -186,7 +186,7 @@ test('It sends the held prompt on when the box will not take it', ASK, async ($,
 
 test('It does not hold a prompt when background work makes the signal weak', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+  world.agents = [agentIn('running')]
   const result = await submitPerson($, 'now ENG-2')
   expect(result).toMatchObject({ text: 'now ENG-2' })
 })

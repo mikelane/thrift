@@ -9,7 +9,7 @@ session.
 Success means fewer cache-read tokens per turn in long sessions, measured against the shadow
 baseline that `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.302. Parts of the handoff have been
+> **Status:** early. The tests pass against Claude Code 2.1.330. Parts of the handoff have been
 > watched in live terminals (a hand run on 2.1.299, tmux harness runs on 2.1.299 through 2.1.302,
 > the latest on 2026-10-17 after the `register.tsx` split); the rest has not. See
 > [What has been verified live](#what-has-been-verified-live) and
