@@ -33,6 +33,7 @@ export type World = {
   isPlacedOnOpen: boolean
   debugLines: string[]
   hold: (call: UsageCall) => Release
+  releaseAll: Release
 }
 
 // Lets one held usage call answer. A held call answers with the world as it stood when the call started.
@@ -105,6 +106,7 @@ const answerFor = (world: World, call: UsageCall): UsageAnswer => {
 
 export const install = ($: Engine, on: On): World => {
   const heldGates: Record<UsageCall, Gate[]> = { plain: [], summary: [], full: [] }
+  const everyGate: Gate[] = []
   const world: World = {
     clock: mock.clock(on, { now: START }),
     usage: usageOf(142000),
@@ -124,7 +126,11 @@ export const install = ($: Engine, on: On): World => {
     hold: call => {
       const held = gate()
       heldGates[call].push(held)
+      everyGate.push(held)
       return held.release
+    },
+    releaseAll: () => {
+      for (const held of everyGate) held.release()
     },
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))

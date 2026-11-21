@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { breakdownOf, category, install, measure, mountPane, runMeter, startSession, textsOf, usageOf } from './meter-world'
+import type { World } from './meter-world'
 
 const SECOND = 1000
 
@@ -11,12 +12,22 @@ const summaryCalls = (calls: readonly string[]) => calls.filter(call => call ===
 // A pane mounts once per test, so each test reads it once and checks the text.
 const readPane = async ($: Engine) => (await textsOf(await mountPane($))).join('\n')
 
-const tracked = (dispatch: Promise<unknown>) => {
-  const state = { isResolved: false }
+type Tracked = { dispatch: Promise<unknown>; isResolved: boolean }
+
+const tracked = (dispatch: Promise<unknown>): Tracked => {
+  const state: Tracked = { dispatch, isResolved: false }
   void dispatch.then(() => {
     state.isResolved = true
   })
   return state
+}
+
+// Every test ends with nothing in flight. A held call or a dispatch that outlives its test runs on into
+// a later one, where nothing answers session.usage (seen with test files run in parallel).
+const drain = async (world: World, ...dispatches: Promise<unknown>[]) => {
+  world.releaseAll()
+  await world.clock.settle()
+  await Promise.all(dispatches)
 }
 
 // The pane is open with Messages 88k from a breakdown taken 61 s ago, and the next summary will answer 95k and is held.
@@ -40,47 +51,53 @@ const startHeldSummary = async ($: Engine, on: On) => {
 
 describe('takeBreakdown: a held summary and its 30 s deadline', () => {
   test('It still blocks throttled summaries 29 s into a held summary', async ($, on) => {
-    const { world } = await startHeldSummary($, on)
+    const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(29 * SECOND)
     await measure($, usageOf(151000), ['context'])
     expect(summaryCalls(world.usageCalls)).toHaveLength(1)
+    await drain(world, measuring.dispatch)
   })
 
   test('It stops blocking throttled summaries once a held summary reaches its 30 s deadline', async ($, on) => {
-    const { world } = await startHeldSummary($, on)
+    const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     await measure($, usageOf(151000), ['context'])
     expect(summaryCalls(world.usageCalls)).toHaveLength(2)
+    await drain(world, measuring.dispatch)
   })
 
   test('It logs a summary that reaches its deadline as a failed summary breakdown', async ($, on) => {
-    const { world } = await startHeldSummary($, on)
+    const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
+    await drain(world, measuring.dispatch)
   })
 
   test('It marks the TOP CONTEXT header stale and keeps Messages 88k when a summary reaches its deadline', async ($, on) => {
-    const { world } = await startHeldSummary($, on)
+    const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     const pane = await readPane($)
     expect(pane).toContain('stale')
     expect(pane).toMatch(/Messages +88k/)
+    await drain(world, measuring.dispatch)
   })
 
   test('It leaves the session.measure dispatch pending 29 s into a held summary', async ($, on) => {
     const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(29 * SECOND)
     expect(measuring.isResolved).toBe(false)
+    await drain(world, measuring.dispatch)
   })
 
   test('It resolves the session.measure dispatch at the summary deadline', async ($, on) => {
     const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     expect(measuring.isResolved).toBe(true)
+    await drain(world, measuring.dispatch)
   })
 
   test('It drops a summary that answers after its deadline and keeps the header stale', async ($, on) => {
-    const { world, release } = await startHeldSummary($, on)
+    const { world, release, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     await world.clock.advance(10 * SECOND)
     release()
@@ -89,14 +106,15 @@ describe('takeBreakdown: a held summary and its 30 s deadline', () => {
     expect(pane).not.toMatch(/Messages +95k/)
     expect(pane).toMatch(/Messages +88k/)
     expect(pane).toContain('stale')
+    await drain(world, measuring.dispatch)
   })
 
   test('It does not let a late summary release the count held by a newer summary', async ($, on) => {
-    const { world, release } = await startHeldSummary($, on)
+    const { world, release, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     await world.clock.advance(1 * SECOND)
     world.hold('summary')
-    void measure($, usageOf(151000), ['context'])
+    const secondMeasure = measure($, usageOf(151000), ['context'])
     await world.clock.settle()
     await world.clock.advance(9 * SECOND)
     release()
@@ -104,19 +122,24 @@ describe('takeBreakdown: a held summary and its 30 s deadline', () => {
     await world.clock.advance(1 * SECOND)
     await measure($, usageOf(152000), ['context'])
     expect(summaryCalls(world.usageCalls)).toHaveLength(2)
+    await drain(world, measuring.dispatch, secondMeasure)
   })
 
   test('It logs nothing more when a summary refused after its deadline answers', async ($, on) => {
-    const { world, release } = await startHeldSummary($, on)
+    const { world, release, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
     world.isBreakdownFailing = true
     release()
     await world.clock.settle()
     expect(world.debugLines).toHaveLength(1)
+    await drain(world, measuring.dispatch)
   })
 
+  // This test does not show that withinDeadline cancels its timer: the kit gives no view of a cancelled
+  // clock.after, and an uncancelled timer only rejects a race that has already settled, which does
+  // nothing. A no-op cancel passes every test here, so the cancel rests on review.
   test('It draws a summary that answers before its deadline and never times it out', async ($, on) => {
-    const { world, release } = await startHeldSummary($, on)
+    const { world, release, measuring } = await startHeldSummary($, on)
     await world.clock.advance(5 * SECOND)
     release()
     await world.clock.settle()
@@ -125,6 +148,7 @@ describe('takeBreakdown: a held summary and its 30 s deadline', () => {
     const pane = await readPane($)
     expect(pane).not.toContain('stale')
     expect(pane).toMatch(/Messages +95k/)
+    await drain(world, measuring.dispatch)
   })
 })
 
@@ -138,27 +162,31 @@ const heldFullWorld = async ($: Engine, on: On) => {
   return { world, release }
 }
 
+const pressRefresh = ($: Engine) => $.ui.press({ plugin: 'meter', key: 'refresh' })
+
 describe('takeBreakdown: a held full count and its 180 s deadline', () => {
   test('It draws a full count from the refresh Button that answers after 31 s', async ($, on) => {
     const { world, release } = await heldFullWorld($, on)
     const pane = await mountPane($)
-    void $.ui.press({ plugin: 'meter', key: 'refresh' })
+    const pressing = pressRefresh($)
     await world.clock.settle()
     await world.clock.advance(31 * SECOND)
     release()
     await world.clock.settle()
     expect((await textsOf(pane)).join('\n')).toMatch(/Messages +77k/)
     expect(world.debugLines.filter(line => line.includes('timed out'))).toEqual([])
+    await drain(world, pressing)
   })
 
   test('It logs a full count from the refresh Button that reaches 180 s and marks the header stale', async ($, on) => {
     const { world } = await heldFullWorld($, on)
     const pane = await mountPane($)
-    void $.ui.press({ plugin: 'meter', key: 'refresh' })
+    const pressing = pressRefresh($)
     await world.clock.settle()
     await world.clock.advance(180 * SECOND)
     expect(world.debugLines).toEqual(['meter: could not take the full breakdown: Error: timed out after 180s'])
     expect((await textsOf(pane)).join('\n')).toContain('stale')
+    await drain(world, pressing)
   })
 
   test('It keeps waiting on a full count 179 s in', async ($, on) => {
@@ -168,6 +196,7 @@ describe('takeBreakdown: a held full count and its 180 s deadline', () => {
     await world.clock.advance(179 * SECOND)
     expect(refreshing.isResolved).toBe(false)
     expect(world.debugLines).toEqual([])
+    await drain(world, refreshing.dispatch)
   })
 
   test('It replies Meter refreshed. to /meter refresh once its full count reaches 180 s', async ($, on) => {
@@ -176,6 +205,7 @@ describe('takeBreakdown: a held full count and its 180 s deadline', () => {
     await world.clock.settle()
     await world.clock.advance(180 * SECOND)
     expect(await refreshing).toEqual({ text: 'Meter refreshed.' })
+    await drain(world)
   })
 })
 
@@ -194,9 +224,11 @@ const heldPlainOpen = async ($: Engine, on: On) => {
 
 describe('loadHeadline: a held plain call and its 30 s deadline', () => {
   test('It logs a plain call during /meter that reaches 30 s as a failed usage read', async ($, on) => {
-    const { world } = await heldPlainOpen($, on)
+    const { world, opening } = await heldPlainOpen($, on)
     await world.clock.advance(30 * SECOND)
+    await opening
     expect(world.debugLines).toEqual(['meter: could not read usage: Error: timed out after 30s'])
+    await drain(world)
   })
 
   test('It goes on to the summary breakdown and replies Meter opened. once the plain call reaches 30 s', async ($, on) => {
@@ -204,21 +236,25 @@ describe('loadHeadline: a held plain call and its 30 s deadline', () => {
     await world.clock.advance(30 * SECOND)
     expect(await opening).toEqual({ text: 'Meter opened.' })
     expect(world.usageCalls).toEqual(['plain', 'summary'])
+    await drain(world)
   })
 
   test('It is still waiting on the plain call 29 s into /meter', async ($, on) => {
-    const { world } = await heldPlainOpen($, on)
+    const { world, opening } = await heldPlainOpen($, on)
     await world.clock.advance(29 * SECOND)
     expect(world.usageCalls).toEqual(['plain'])
+    await drain(world, opening)
   })
 
   test('It draws no cost from a plain call that answers after its deadline', async ($, on) => {
-    const { world, release } = await heldPlainOpen($, on)
+    const { world, release, opening } = await heldPlainOpen($, on)
     await world.clock.advance(30 * SECOND)
+    await opening
     await world.clock.advance(10 * SECOND)
     release()
     await world.clock.settle()
     expect(await readPane($)).not.toContain('$9.99')
+    await drain(world)
   })
 })
 
@@ -233,15 +269,17 @@ describe('reloadOpenMeter: deadlines across a clear', () => {
     await world.clock.advance(30 * SECOND)
     expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
     expect(await readPane($)).toContain('stale')
+    await drain(world)
   })
 
   test('It leaves the new session unmarked when a pre-clear summary reaches its deadline after the clear', async ($, on) => {
-    const { world } = await startHeldSummary($, on)
+    const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(10 * SECOND)
     await $.session.end(clear('s1'))
     await world.clock.settle()
     await world.clock.advance(20 * SECOND)
     expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
     expect(await readPane($)).not.toContain('stale')
+    await drain(world, measuring.dispatch)
   })
 })
