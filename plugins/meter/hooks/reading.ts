@@ -1,6 +1,24 @@
+import type { ContextBreakdownDetail } from 'claude-code'
+
 import type { BreakdownReading, HeadlineReading, MeterReading, RateLimitReading } from '../types'
 
 export const BREAKDOWN_REFRESH_MS = 60_000
+
+// $.session.usage takes no signal, so the meter stops waiting on a call after its deadline.
+export const PLAIN_DEADLINE_MS = 30_000
+export const SUMMARY_DEADLINE_MS = 30_000
+// A full count sends one token-count request per tool and per memory file.
+export const FULL_DEADLINE_MS = 180_000
+
+const BREAKDOWN_DEADLINES_MS: Record<ContextBreakdownDetail, number> = {
+  summary: SUMMARY_DEADLINE_MS,
+  full: FULL_DEADLINE_MS,
+}
+
+export const deadlineFor = (call: 'plain' | ContextBreakdownDetail): number =>
+  call === 'plain' ? PLAIN_DEADLINE_MS : BREAKDOWN_DEADLINES_MS[call]
+
+export const timedOutAfter = (deadlineMs: number): Error => new Error(`timed out after ${deadlineMs / 1000}s`)
 
 export const EMPTY_READING: MeterReading = { headline: null, breakdown: null, isStale: false }
 

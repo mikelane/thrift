@@ -4,9 +4,14 @@ import type { BreakdownReading, HeadlineReading } from '../types'
 import {
   BREAKDOWN_REFRESH_MS,
   EMPTY_READING,
+  FULL_DEADLINE_MS,
+  PLAIN_DEADLINE_MS,
+  SUMMARY_DEADLINE_MS,
+  deadlineFor,
   headlineFrom,
   isBreakdownDue,
   markStale,
+  timedOutAfter,
   withBreakdown,
   withHeadline,
 } from '../hooks/reading'
@@ -75,3 +80,26 @@ for (const [now, expected] of dueCases) {
     expect(isBreakdownDue({ headline, breakdown, isStale: false }, now)).toBe(expected)
   })
 }
+
+test('It gives the plain usage call PLAIN_DEADLINE_MS of 30 s from deadlineFor', () => {
+  expect(deadlineFor('plain')).toBe(PLAIN_DEADLINE_MS)
+  expect(PLAIN_DEADLINE_MS).toBe(30_000)
+})
+
+test('It gives the summary breakdown SUMMARY_DEADLINE_MS of 30 s from deadlineFor', () => {
+  expect(deadlineFor('summary')).toBe(SUMMARY_DEADLINE_MS)
+  expect(SUMMARY_DEADLINE_MS).toBe(30_000)
+})
+
+test('It gives the full count FULL_DEADLINE_MS of 180 s from deadlineFor', () => {
+  expect(deadlineFor('full')).toBe(FULL_DEADLINE_MS)
+  expect(FULL_DEADLINE_MS).toBe(180_000)
+})
+
+test('It names the deadline in whole seconds in timedOutAfter', () => {
+  expect(String(timedOutAfter(30_000))).toBe('Error: timed out after 30s')
+})
+
+test('It names a 180 s deadline as 180s in timedOutAfter', () => {
+  expect(timedOutAfter(180_000).message).toBe('timed out after 180s')
+})

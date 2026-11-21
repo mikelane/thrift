@@ -5,9 +5,11 @@ import { debug, logFailure } from './engine-log'
 import { PANE_ID, PANE_TITLE } from './pane-id'
 import {
   EMPTY_READING,
+  deadlineFor,
   headlineFrom,
   isBreakdownDue,
   markStale,
+  timedOutAfter,
   withBreakdown,
   withHeadline,
 } from './reading'
@@ -26,6 +28,16 @@ async function trackingBreakdown(count: () => Promise<void>): Promise<void> {
   } finally {
     breakdownsInFlight -= 1
   }
+}
+
+// Settles once, with the call or with a timeout at the deadline; a call that answers later is never read.
+function withinDeadline<T>($: EngineInterface, deadlineMs: number, call: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const deadline = $.clock.after(deadlineMs, () => reject(timedOutAfter(deadlineMs)))
+    call()
+      .then(resolve, reject)
+      .finally(() => deadline.cancel())
+  })
 }
 
 async function isMeterOpen($: EngineInterface): Promise<boolean> {
@@ -55,7 +67,7 @@ function loadBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Prom
 async function takeBreakdown($: EngineInterface, detail: ContextBreakdownDetail): Promise<void> {
   const generation = readingGeneration
   try {
-    const { context } = await $.session.usage({ breakdown: detail })
+    const { context } = await withinDeadline($, deadlineFor(detail), () => $.session.usage({ breakdown: detail }))
     if (context.breakdown === undefined) throw new Error('the reply held no breakdown')
     const snapshot = snapshotBreakdown(context.breakdown, await $.clock.now())
     if (generation !== readingGeneration) return
