@@ -11,6 +11,7 @@ import {
   topContextRowTexts,
   windowRowTexts,
 } from '../hooks/pane-text'
+import { windowView } from '../hooks/window-view'
 import type { WindowView } from '../hooks/window-view'
 
 const headline = (contextTokens: number | undefined, extra: Partial<HeadlineReading> = {}): HeadlineReading => ({
@@ -194,6 +195,21 @@ for (const [paceText, color, word] of paceWordCases) {
     expect(windowRowTexts(pacedWith(paceText, color), 'unicode')[0]?.text).toEndWith(`${paceText}× · ${word}`)
   })
 }
+
+const PACE_NOW = Date.UTC(2026, 9, 20, 9, 0)
+const halfwayReset = new Date(PACE_NOW + 150 * 60_000).toISOString()
+
+test('It ends the header with 1.10× · over for a pace of 1.104 taken through windowView', () => {
+  const view = windowView({ kind: 'five_hour', percentUsed: 55.2, resetsAt: halfwayReset }, PACE_NOW, 0)
+
+  expect(windowRowTexts(view, 'unicode')[0]?.text).toEndWith('1.10× · over')
+})
+
+test('It ends the header with 1.20× · over for a pace of 1.2 taken through windowView', () => {
+  const view = windowView({ kind: 'five_hour', percentUsed: 60, resetsAt: halfwayReset }, PACE_NOW, 0)
+
+  expect(windowRowTexts(view, 'unicode')[0]?.text).toEndWith('1.20× · over')
+})
 
 test('It prints the same pace word in the windowRowTexts header for the nerd glyph set', () => {
   expect(windowRowTexts(paced, 'nerd')[0]?.text).toEndWith('0.39× · under')
