@@ -180,6 +180,28 @@ test_a_sweep_run_goes_on_to_the_next_pr_and_fails_when_one_pr_cannot_be_fetched(
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 112 "
 }
 
+# A sweep calls the merge step inside `||`, where set -e is off, so only an explicit return stops a
+# failed problem check from reading as "no problems".
+merge_step_with_a_failing_problem_check() {
+  release_merge_problems() { return 1; }
+  release_merge_run
+}
+
+test_a_sweep_run_does_not_merge_a_pr_whose_problem_check_fails() {
+  stage_release_pr 111 $SHA_A handoff success
+  TRIGGER='Release Please' run_merge_step merge_step_with_a_failing_problem_check
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_a_run_triggered_by_a_workflow_that_only_contains_release_please_takes_the_single_pr_path() {
+  write_pulls
+  TRIGGER='Release Please Dry Run' BRANCH=$RELEASE_BRANCH CI_TESTED_SHA=$SHA_A \
+    run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_out_has "No open PR from $RELEASE_BRANCH in $REPO. Nothing to merge."
+}
+
 test_a_sweep_run_stays_green_when_the_gate_refuses_a_pr() {
   stage_release_pr 111 $SHA_A handoff success
   edit_pr 111 '.user.login = "mikelane"'
