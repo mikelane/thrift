@@ -32,6 +32,20 @@ export type World = {
   panes: UiPane[]
   isPlacedOnOpen: boolean
   debugLines: string[]
+  hold: (call: UsageCall) => Release
+}
+
+// Lets one held usage call answer. A held call answers with the world as it stood when the call started.
+export type Release = () => void
+
+type Gate = { release: Release; released: Promise<void> }
+
+const gate = (): Gate => {
+  let release: Release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  return { release: () => release(), released }
 }
 
 export const category = (name: string, tokens: number, kind: ContextCategory['kind'] = 'used'): ContextCategory => ({
@@ -80,7 +94,17 @@ export const usageOf = (
 
 export const resetsIn = (minutes: number): string => new Date(START + minutes * MINUTE).toISOString()
 
+type UsageAnswer = { value: SessionUsage } | { deny: string }
+
+const answerFor = (world: World, call: UsageCall): UsageAnswer => {
+  if (call === 'plain') return world.isPlainFailing ? { deny: 'plain reading refused' } : { value: world.usage }
+  if (world.isBreakdownFailing) return { deny: 'count refused' }
+  if (world.omitsBreakdown) return { value: world.usage }
+  return { value: { ...world.usage, context: { ...world.usage.context, breakdown: world.breakdown } } }
+}
+
 export const install = ($: Engine, on: On): World => {
+  const heldGates: Record<UsageCall, Gate[]> = { plain: [], summary: [], full: [] }
   const world: World = {
     clock: mock.clock(on, { now: START }),
     usage: usageOf(142000),
@@ -97,17 +121,23 @@ export const install = ($: Engine, on: On): World => {
     panes: [],
     isPlacedOnOpen: true,
     debugLines: [],
+    hold: call => {
+      const held = gate()
+      heldGates[call].push(held)
+      return held.release
+    },
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.usage', (_$, e) => {
-    world.usageCalls.push(e.breakdown ?? 'plain')
-    if (e.breakdown === undefined && world.isPlainFailing) return { deny: 'plain reading refused' }
-    if (e.breakdown === undefined) return { value: world.usage }
-    if (world.isBreakdownFailing) return { deny: 'count refused' }
-    if (world.omitsBreakdown) return { value: world.usage }
-    return { value: { ...world.usage, context: { ...world.usage.context, breakdown: world.breakdown } } }
+    const call = e.breakdown ?? 'plain'
+    world.usageCalls.push(call)
+    const answer = answerFor(world, call)
+    const held = heldGates[call].shift()
+    // An unheld call answers at once, so its timing matches a call no test holds.
+    if (held === undefined) return answer
+    return held.released.then(() => answer)
   })
   on('command.register', (_$, e) => {
     if (world.isRegisterFailing) return { deny: 'register refused' }

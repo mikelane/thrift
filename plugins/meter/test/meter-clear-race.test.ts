@@ -1,51 +1,15 @@
-import { describe, expect, mock, test } from 'claude-code/testing'
-import type { On, SessionContextBreakdown, SessionUsage, UiPane } from 'claude-code'
+import { describe, expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
 
-import { START, breakdownOf, category, install, measure, mountPane, runMeter, startSession, textsOf, usageOf } from './meter-world'
+import { breakdownOf, category, install, measure, mountPane, runMeter, startSession, textsOf, usageOf } from './meter-world'
 
 // Adversarial QA (Gate 3, run 3): the generation guard across clears.
 
-type Gate = { open: () => void; wait: Promise<void> }
-const gate = (): Gate => {
-  let open: () => void = () => {}
-  const wait = new Promise<void>(resolve => {
-    open = resolve
-  })
-  return { open: () => open(), wait }
-}
-
-// Every call reads the world as it stands when it starts; a call whose kind has a gate set waits for it.
-const gatedWorld = (on: On) => {
-  const clock = mock.clock(on, { now: START })
-  const calls: string[] = []
-  const gates: Partial<Record<'plain' | 'summary' | 'full', Gate>> = {}
-  const registered: string[] = []
-  let panes: UiPane[] = []
-  const world = { usage: usageOf(142000, [], 4.82) as SessionUsage, breakdown: breakdownOf() as SessionContextBreakdown }
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  on('session.measure', (_$, e) => ({ changed: e.changed }))
-  on('command.register', (_$, e) => {
-    registered.push(e.name)
-    return { value: { command: e.name } }
-  })
-  on('ui.log', () => ({ value: undefined }))
-  on('ui.panes', () => ({ value: panes }))
-  on('ui.open', (_$, e) => {
-    panes = [{ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true }]
-    return { value: { isPlaced: true as const } }
-  })
-  on('session.usage', async (_$, e) => {
-    const kind = e.breakdown ?? 'plain'
-    calls.push(kind)
-    const usage = world.usage
-    const breakdown = world.breakdown
-    const held = gates[kind]
-    if (held) await held.wait
-    if (kind === 'plain') return { value: usage }
-    return { value: { ...usage, context: { ...usage.context, breakdown } } }
-  })
-  return { clock, calls, gates, registered, world }
+const installWithCost = ($: Engine, on: On) => {
+  const world = install($, on)
+  world.usage = usageOf(142000, [], 4.82)
+  return world
 }
 
 const clear = (sessionId: string) =>
@@ -53,30 +17,26 @@ const clear = (sessionId: string) =>
 
 describe('reloadOpenMeter: a full count and a summary both in flight across a clear', () => {
   test('It draws only the post-clear breakdown when both pre-clear counts land after the clear', async ($, on) => {
-    const w = gatedWorld(on)
+    const w = installWithCost($, on)
     await startSession($)
     await runMeter($)
     await w.clock.advance(61_000)
-    const summary = gate()
-    const full = gate()
-    w.gates.summary = summary
-    w.gates.full = full
+    const releaseSummary = w.hold('summary')
+    const releaseFull = w.hold('full')
     const measuring = measure($, usageOf(150000), ['context'])
     await w.clock.advance(0)
     const refreshing = runMeter($, 'refresh')
     await w.clock.advance(0)
-    delete w.gates.summary
-    delete w.gates.full
-    w.world.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
-    w.world.usage = usageOf(1000)
+    w.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
+    w.usage = usageOf(1000)
     await $.session.end(clear('s1'))
     await w.clock.settle()
-    summary.open()
-    full.open()
+    releaseSummary()
+    releaseFull()
     await measuring
     await refreshing
     const texts = await textsOf(await mountPane($))
-    expect(w.calls).toEqual(['plain', 'summary', 'summary', 'full', 'plain', 'summary'])
+    expect(w.usageCalls).toEqual(['plain', 'summary', 'summary', 'full', 'plain', 'summary'])
     expect(texts.some(text => /Messages +88k/.test(text))).toBe(false)
     expect(texts.some(text => /System prompt +3k/.test(text))).toBe(true)
     expect(texts.join('\n')).not.toContain('$4.82')
@@ -86,22 +46,20 @@ describe('reloadOpenMeter: a full count and a summary both in flight across a cl
     $,
     on,
   ) => {
-    const w = gatedWorld(on)
+    const w = installWithCost($, on)
     await startSession($)
     await runMeter($)
     await w.clock.advance(61_000)
-    const summary = gate()
-    w.gates.summary = summary
+    const releaseSummary = w.hold('summary')
     const measuring = measure($, usageOf(150000), ['context'])
     await w.clock.advance(0)
-    w.world.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
-    delete w.gates.summary
+    w.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
     await $.session.end(clear('s1'))
     await w.clock.settle()
-    summary.open()
+    releaseSummary()
     await measuring
     const texts = await textsOf(await mountPane($))
-    expect(w.calls.filter(call => call === 'summary')).toHaveLength(3)
+    expect(w.usageCalls.filter(call => call === 'summary')).toHaveLength(3)
     expect(texts.some(text => /Messages +88k/.test(text))).toBe(false)
     expect(texts.some(text => /System prompt +3k/.test(text))).toBe(true)
   })
@@ -112,19 +70,17 @@ describe('reloadOpenMeter: two clears in a row', () => {
     $,
     on,
   ) => {
-    const w = gatedWorld(on)
+    const w = installWithCost($, on)
     await startSession($)
     await runMeter($)
-    const firstReload = gate()
-    w.gates.summary = firstReload
-    w.world.breakdown = breakdownOf({ categories: [category('Skills', 5000)] })
+    const releaseFirstReload = w.hold('summary')
+    w.breakdown = breakdownOf({ categories: [category('Skills', 5000)] })
     await $.session.end(clear('s1'))
     await w.clock.settle()
-    delete w.gates.summary
-    w.world.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
+    w.breakdown = breakdownOf({ categories: [category('System prompt', 3000)] })
     await $.session.end(clear('s2'))
     await w.clock.settle()
-    firstReload.open()
+    releaseFirstReload()
     await w.clock.settle()
     const texts = await textsOf(await mountPane($))
     expect(texts.some(text => /Skills +5k/.test(text))).toBe(false)
