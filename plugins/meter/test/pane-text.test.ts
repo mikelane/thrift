@@ -87,7 +87,7 @@ test('It draws the nerd glyph in contextRowText', () => {
 
 test('It fills to the threshold share and appends the percent in contextGaugeText', () => {
   expect(contextGaugeText(headline(149000, { contextWindow: 1000000 }), 967000)).toEqual({
-    text: `${gauge('████')}  15%`,
+    text: `${gauge('████')}  15% · ok`,
     color: 'success',
   })
 })
@@ -97,12 +97,28 @@ test('It colors the gauge by the context band in contextGaugeText', () => {
 })
 
 test('It keeps one half cell in contextGaugeText for a sliver of context', () => {
-  expect(contextGaugeText(headline(1), undefined)?.text).toBe(`${gauge('▌')}  0%`)
+  expect(contextGaugeText(headline(1), undefined)?.text).toBe(`${gauge('▌')}  0% · ok`)
 })
 
 test('It fills the whole gauge in contextGaugeText over the window', () => {
-  expect(contextGaugeText(headline(210000), undefined)).toEqual({ text: `${'█'.repeat(25)}  105%`, color: 'error' })
+  expect(contextGaugeText(headline(210000), undefined)).toEqual({ text: `${'█'.repeat(25)}  105% · critical`, color: 'error' })
 })
+
+const contextGaugeSuffix = (tokens: number, compactsAt: number | undefined): string | undefined =>
+  contextGaugeText(headline(tokens), compactsAt)?.text.replace(/^\S+\s+/, '')
+
+const contextWordCases = [
+  [69999, '70% · ok'],
+  [70000, '70% · high'],
+  [90000, '90% · high'],
+  [90001, '90% · critical'],
+] as const
+
+for (const [tokens, suffix] of contextWordCases) {
+  test(`It ends contextGaugeText with ${suffix} for ${tokens} tokens against a threshold of 100000`, () => {
+    expect(contextGaugeSuffix(tokens, 100000)).toBe(suffix)
+  })
+}
 
 test('It returns undefined from contextGaugeText when the context has no tokens', () => {
   expect(contextGaugeText(headline(undefined), undefined)).toBeUndefined()
@@ -158,10 +174,29 @@ const paced: WindowView = {
 
 test('It draws header, gauge with the marker and reset line in windowRowTexts', () => {
   expect(windowRowTexts(paced, 'unicode')).toEqual([
-    { text: headerLine('◷ 5-HOUR', '7% · 0.39×'), color: 'success' },
+    { text: headerLine('◷ 5-HOUR', '7% · 0.39× · under'), color: 'success' },
     { text: gauge('██', 5), color: 'success' },
     { text: 'resets Tue 2:10am', dim: true },
   ])
+})
+
+const pacedWith = (paceText: string, color: 'success' | 'warning' | 'error'): WindowView => ({ ...paced, paceText, color })
+
+const paceWordCases = [
+  ['0.89', 'success', 'under'],
+  ['0.90', 'warning', 'even'],
+  ['1.10', 'warning', 'even'],
+  ['1.10', 'error', 'over'],
+] as const
+
+for (const [paceText, color, word] of paceWordCases) {
+  test(`It names the ${color} pace ${paceText} ${word} in the windowRowTexts header`, () => {
+    expect(windowRowTexts(pacedWith(paceText, color), 'unicode')[0]?.text).toEndWith(`${paceText}× · ${word}`)
+  })
+}
+
+test('It prints the same pace word in the windowRowTexts header for the nerd glyph set', () => {
+  expect(windowRowTexts(paced, 'nerd')[0]?.text).toEndWith('0.39× · under')
 })
 
 test('It adds the projection after the reset in windowRowTexts', () => {
