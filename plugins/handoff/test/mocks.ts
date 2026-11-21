@@ -192,7 +192,7 @@ export const installUiMocks = (on: On, world: World) => {
     if (e.to === 'debug') world.debugLines.push(e.text)
     return ok(undefined)
   })
-  // From 2.1.330 a band hook naming no plugin draws the test's own row; naming handoff keeps this beneath handoff's.
+  // Seen on 2.1.330: a band hook naming no plugin draws the test's own row; naming handoff keeps this beneath handoff's.
   on('ui.render', { plugin: 'handoff' }, () => ({ type: 'Text', props: {}, children: ['engine band'] }))
 }
 
