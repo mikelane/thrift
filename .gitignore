@@ -14,6 +14,8 @@ decisions.jsonl
 
 # Compiled output from a bare tsc, and credentials that must never be committed
 plugins/*/hooks/*.js
+plugins/*/checks/*.js
+plugins/*/test/*.js
 .env*
 !.env.example
 *.pem
