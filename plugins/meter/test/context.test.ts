@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cacheHitPercent, contextBand, contextFill, fillPercent } from '../hooks/context'
+import { cacheHitPercent, contextBand, contextBandWord, contextFill, fillPercent } from '../hooks/context'
 
 const bandCases = [
   [69999, 'success'],
@@ -37,6 +37,34 @@ test('It returns 105 from fillPercent for 210000 tokens against a 200000 window'
 
 test('It returns error from contextBand for 210000 tokens against a 200000 window', () => {
   expect(contextBand(contextFill(210000, 200000, undefined))).toBe('error')
+})
+
+const contextWordCases = [
+  ['success', 'ok'],
+  ['warning', 'high'],
+  ['error', 'critical'],
+] as const
+
+for (const [band, word] of contextWordCases) {
+  test(`It returns ${word} from contextBandWord for the ${band} band`, () => {
+    expect(contextBandWord(band)).toBe(word)
+  })
+}
+
+test('It names 69999 tokens ok in contextBandWord though the fill rounds to 70 percent', () => {
+  const fill = contextFill(69999, 200000, 100000)
+  expect(fillPercent(fill)).toBe(70)
+  expect(contextBandWord(contextBand(fill))).toBe('ok')
+})
+
+test('It names 90001 tokens critical in contextBandWord though the fill rounds to 90 percent', () => {
+  const fill = contextFill(90001, 200000, 100000)
+  expect(fillPercent(fill)).toBe(90)
+  expect(contextBandWord(contextBand(fill))).toBe('critical')
+})
+
+test('It names a fill above 100 percent critical in contextBandWord', () => {
+  expect(contextBandWord(contextBand(contextFill(210000, 200000, undefined)))).toBe('critical')
 })
 
 const usage = (input: number, read: number, created: number) => ({

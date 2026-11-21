@@ -8,6 +8,7 @@ import {
   formatPace,
   isTooEarly,
   paceBand,
+  paceBandWord,
   paceOf,
   parseResetsAt,
   projectedExhaustion,
@@ -132,4 +133,25 @@ test('It returns undefined from projectedExhaustion when pace is below 1', () =>
 
 test('It returns undefined from projectedExhaustion when pace is exactly 1', () => {
   expect(projectedExhaustion(NOW, 50, 0.5, FIVE_HOURS_MS)).toBeUndefined()
+})
+
+const paceWordCases = [
+  ['success', 'under'],
+  ['warning', 'even'],
+  ['error', 'over'],
+] as const
+
+for (const [band, word] of paceWordCases) {
+  test(`It returns ${word} from paceBandWord for the ${band} band`, () => {
+    expect(paceBandWord(band)).toBe(word)
+  })
+}
+
+test('It names a pace that rounds to 1.10 over from the unrounded value in paceBandWord', () => {
+  expect(formatPace(1.104)).toBe('1.10')
+  expect(paceBandWord(paceBand(1.104))).toBe('over')
+})
+
+test('It names a pace of 0.9 even in paceBandWord', () => {
+  expect(paceBandWord(paceBand(0.9))).toBe('even')
 })

@@ -13,6 +13,10 @@ export const contextBand = (fill: number): BandColor => {
   return fill <= YELLOW_THROUGH ? 'warning' : 'error'
 }
 
+const CONTEXT_WORDS: Record<BandColor, string> = { success: 'ok', warning: 'high', error: 'critical' }
+
+export const contextBandWord = (band: BandColor): string => CONTEXT_WORDS[band]
+
 export const fillPercent = (fill: number): number => Math.round(fill * 100)
 
 export const cacheHitPercent = (apiUsage: ModelUsage | null | undefined): number | null => {
