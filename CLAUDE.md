@@ -13,7 +13,8 @@ specific to this repo.
   the canary step scripts out of `ci.yml` and runs them, with `scripts/check.sh`, against stub `gh`,
   `claude` and `tsc`. It needs `jq`, `openssl`, `dash` (three live-harness tests run the session
   command under a POSIX `sh`) and `ruby` (the release-merge workflow test parses `release-merge.yml`
-  with Psych and compares the merge job as data; `ubuntu-latest` has Ruby) and runs on bash 3.2 and 5. Pass part of a test function's name (not a
+  with Psych and compares the merge job as data; `ubuntu-latest` has Ruby) and `python3` (the same
+  test builds its workflow variants with it) and runs on bash 3.2 and 5. Pass part of a test function's name (not a
   file name) to run only matching tests: `.github/tests/canary-report.sh [name-fragment]`. A
   fragment that matches no test exits 1. It runs every `.github/tests/*.test.sh`, so a new test file
   needs no wiring; each ends with `run_tests "$@"` so it honors the fragment. The shared code sits

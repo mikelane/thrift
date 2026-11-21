@@ -17,8 +17,9 @@ CHECK_SH=$REPO_ROOT/scripts/check.sh
 [[ -r "$CI_YML" ]] || { echo "Cannot read the workflow $CI_YML, so the harness has no step scripts to test." >&2; exit 2; }
 
 # dash: three live-harness tests run the session command under a POSIX sh. ruby: the release-merge
-# workflow test parses release-merge.yml with Psych.
-for tool in jq openssl dash ruby; do
+# workflow test parses release-merge.yml with Psych. python3: the release-merge workflow test builds
+# its workflow variants with it.
+for tool in jq openssl dash ruby python3; do
   command -v "$tool" > /dev/null || { echo "The harness needs $tool on PATH. Install it, then run the harness again." >&2; exit 2; }
 done
 

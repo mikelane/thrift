@@ -307,6 +307,7 @@ REF='          ref: ${{ github.event.workflow_run.head_sha }}'
 
 # variant_workflow <python-expr>: writes the workflow, edited by the expression over `o`, to VARIANT.
 # CHK, WITH, RUN_HDR, RUN_BODY, REF, PAY, DECOY_CHECKOUT and DECOY_RUN are predefined for it.
+# The <python-expr> comes only from this file's own literals, never from workflow or user input.
 variant_workflow() {
   VARIANT=$TEST_DIR/variant.yml
   python3 - "$WORKFLOW" "$VARIANT" "$1" "$REF" <<'PY'
