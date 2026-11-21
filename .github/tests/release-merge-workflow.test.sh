@@ -86,6 +86,61 @@ test_the_merge_step_is_strict() {
   merge_step_script | grep -qxF 'set -euo pipefail' || fail 'the merge step does not set -euo pipefail'
 }
 
+test_the_merge_step_script_is_exactly_the_expected_block() {
+  local want got
+  want=$(printf '%s\n' \
+    'set -euo pipefail' \
+    '# shellcheck source=.github/tests/release-merge-lib.sh' \
+    'source .github/tests/release-merge-lib.sh' \
+    '# Every temp file lives here, so an early return or a failure still cleans up.' \
+    'work_dir=$(mktemp -d)' \
+    "trap 'rm -rf \"\$work_dir\"' EXIT" \
+    'release_merge_run')
+  got=$(merge_step_script)
+  [[ "$got" == "$want" ]] || fail "the merge step's run block changed: [$got]"
+}
+
+# merge_step_block: the whole merge step (it is the last step), from its name line to the end.
+merge_step_block() {
+  awk '/^      - name: Squash-merge the release PR/{f=1} f' "$REPO_ROOT/.github/workflows/release-merge.yml"
+}
+
+test_the_merge_step_has_no_if_condition() {
+  merge_step_block | grep -qE '^        if:' && fail 'the merge step has an if: that can skip it'
+  return 0
+}
+
+test_the_merge_step_does_not_continue_on_error() {
+  merge_step_block | grep -q 'continue-on-error' && fail 'the merge step sets continue-on-error'
+  return 0
+}
+
+# sparse_checkout_paths: the paths the checkout step fetches, one per line.
+sparse_checkout_paths() {
+  awk '/^          sparse-checkout: \|/{f=1;next} f&&/^            /{sub(/^            /,"");print;next} f{exit}' \
+    "$REPO_ROOT/.github/workflows/release-merge.yml"
+}
+
+test_the_sparse_checkout_fetches_exactly_the_lib_and_the_release_please_config() {
+  local got
+  got=$(sparse_checkout_paths)
+  [[ "$got" == $'.github/tests/release-merge-lib.sh\nrelease-please-config.json' ]] || fail "got [$got]"
+}
+
+test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
+  local sourced
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  [[ -n "$sourced" ]] || fail 'the merge step sources nothing'
+  sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
+}
+
+test_the_job_condition_has_the_ci_path_clause() {
+  local got
+  got=$(tr -d '\n' <"$REPO_ROOT/.github/workflows/release-merge.yml" | tr -s ' ')
+  [[ "$got" == *"( github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'release-please--') )"* ]] \
+    || fail 'the job condition lacks the CI-path clause'
+}
+
 test_the_workflow_never_sets_the_allowlist_config() {
   grep -q 'RELEASE_MERGE_CONFIG' "$REPO_ROOT/.github/workflows/release-merge.yml" \
     && fail 'the workflow sets RELEASE_MERGE_CONFIG'
