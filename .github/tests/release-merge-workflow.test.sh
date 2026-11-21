@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# The lost-race check after a failed merge, and the shape of the merge job in release-merge.yml: the
-# merge command's flags, the triggers, the token use, the concurrency group, the list of steps, the
-# checkout step, and the merge step's script and environment.
-# The workflow is parsed with Ruby (Psych, the YAML 1.1 reader every runner has) and compared as data,
-# so no spelling of a key, quote, flow style, alias or blank line can hide a change from the tests.
+# The lost-race check after a failed merge, the merge command's flags, and the whole of release-merge.yml.
+# The workflow is parsed with Ruby (Psych, the YAML 1.1 reader every runner has) and the WHOLE parsed
+# document is compared with release-merge-workflow.expected.json, so an edit anywhere in the file (a
+# top-level env or defaults, another job, a step, a trigger, a runner) fails a test, however it is spelled.
+# ANY CHANGE TO release-merge.yml MUST UPDATE release-merge-workflow.expected.json IN THE SAME PR. The
+# failing test prints the diff; regenerate the fixture with:
+#   ruby -ryaml -rjson -e 'puts JSON.generate(YAML.safe_load(File.read(".github/workflows/release-merge.yml"), aliases: true))' | jq -S . > .github/tests/release-merge-workflow.expected.json
 # Usage: release-merge-workflow.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
@@ -11,10 +13,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 source "$HARNESS_DIR/release-merge-stubs-lib.sh"
 
 WORKFLOW=$REPO_ROOT/.github/workflows/release-merge.yml
+EXPECTED_WORKFLOW=$HARNESS_DIR/release-merge-workflow.expected.json
 
 # workflow_json [file]: the workflow as one line of JSON. A YAML or Ruby error prints nothing and
 # fails, so every check below fails closed. Psych reads a bare `on` key as boolean true, which JSON
-# spells "true", so read the triggers through workflow_triggers_filter.
+# spells "true"; the fixture keeps that key as Psych emits it.
 workflow_json() {
   ruby -ryaml -rjson -e '
     begin
@@ -25,17 +28,18 @@ workflow_json() {
     end' "${1:-$WORKFLOW}"
 }
 
-# workflow_has <jq-filter> <json> [file]: succeeds when the filter's value equals the JSON exactly.
-workflow_has() {
-  workflow_json "${3:-}" | jq -e --argjson want "$2" "($1) == \$want" >/dev/null
-}
-
 # workflow_text <jq-filter> [file]: the filter's string value, raw.
 workflow_text() {
   workflow_json "${2:-}" | jq -r "$1"
 }
 
-TRIGGERS_FILTER='(.on // .["true"])'
+# workflow_is_pinned [file]: succeeds when the parsed workflow equals the fixture exactly.
+workflow_is_pinned() {
+  local got
+  got=$(workflow_json "${1:-}" | jq -S .) || return 1
+  [[ "$got" == "$(jq -S . "$EXPECTED_WORKFLOW")" ]]
+}
+
 MERGE_JOB='.jobs.merge'
 
 # merge_step_script: the run: string of the merge step.
@@ -48,131 +52,10 @@ sparse_checkout_paths() {
   workflow_text "$MERGE_JOB.steps[1].with[\"sparse-checkout\"]"
 }
 
-# --- What the merge job must be, each as one check that takes an optional workflow file. ---
-
-merge_job_keys_are_expected() {
-  workflow_has "$MERGE_JOB | keys" '["environment","if","permissions","runs-on","steps","timeout-minutes"]' "${1:-}"
-}
-
-merge_job_environment_is_release() {
-  workflow_has "$MERGE_JOB.environment" '"release"' "${1:-}"
-}
-
-merge_job_permissions_are_actions_read_only() {
-  workflow_has "$MERGE_JOB.permissions" '{"actions":"read"}' "${1:-}"
-}
-
-MERGE_JOB_IF='( github.event.workflow_run.conclusion == '\''success'\'' && github.event.workflow_run.event == '\''pull_request'\'' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, '\''release-please--'\'') ) || ( github.event.workflow_run.conclusion == '\''success'\'' && github.event.workflow_run.name == '\''Release Please'\'' && github.event.workflow_run.event == '\''push'\'' && github.event.workflow_run.head_branch == github.event.repository.default_branch )'
-
-merge_job_condition_is_expected() {
-  workflow_has "$MERGE_JOB.if | gsub(\"\\\\s+\"; \" \")" "$(jq -Rn --arg s "$MERGE_JOB_IF" '$s')" "${1:-}"
-}
-
-merge_job_steps_are_expected() {
-  workflow_has "$MERGE_JOB.steps | map({name, uses})" '[
-    {"name":"Mint a short-lived App token","uses":"actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510"},
-    {"name":null,"uses":"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
-    {"name":"Squash-merge the release PR if the gate passes","uses":null}]' "${1:-}"
-}
-
-merge_job_token_step_is_expected() {
-  workflow_has "$MERGE_JOB.steps[0]" '{
-    "name":"Mint a short-lived App token","id":"app-token",
-    "uses":"actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
-    "with":{"client-id":"${{ vars.RELEASE_APP_ID }}","private-key":"${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
-            "permission-contents":"write","permission-pull-requests":"write"}}' "${1:-}"
-}
-
-merge_job_checkout_step_is_expected() {
-  workflow_has "$MERGE_JOB.steps[1]" '{
-    "uses":"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "with":{"token":"${{ steps.app-token.outputs.token }}","persist-credentials":false,
-            "sparse-checkout":".github/tests/release-merge-lib.sh\nrelease-please-config.json\n",
-            "sparse-checkout-cone-mode":false}}' "${1:-}"
-}
-
-# The merge step minus its script: exactly a name and an env, so no shell, if or continue-on-error.
-merge_job_merge_step_is_expected() {
-  workflow_has "$MERGE_JOB.steps[2] | del(.run)" '{
-    "name":"Squash-merge the release PR if the gate passes",
-    "env":{"GH_TOKEN":"${{ steps.app-token.outputs.token }}","RUNS_TOKEN":"${{ github.token }}",
-           "REPO":"${{ github.repository }}","OWNER":"${{ github.repository_owner }}",
-           "BASE":"${{ github.event.repository.default_branch }}",
-           "BOT_LOGIN":"${{ steps.app-token.outputs.app-slug }}[bot]",
-           "TRIGGER":"${{ github.event.workflow_run.name }}","BRANCH":"${{ github.event.workflow_run.head_branch }}",
-           "CI_TESTED_SHA":"${{ github.event.workflow_run.head_sha }}"}}' "${1:-}"
-}
-
-merge_job_script_is_expected() {
-  local want
-  want=$(printf '%s\n' \
-    'set -euo pipefail' \
-    '# shellcheck source=.github/tests/release-merge-lib.sh' \
-    'source .github/tests/release-merge-lib.sh' \
-    '# Every temp file lives here, so an early return or a failure still cleans up.' \
-    'work_dir=$(mktemp -d)' \
-    "trap 'rm -rf \"\$work_dir\"' EXIT" \
-    'release_merge_run' | jq -Rs .)
-  workflow_has "$MERGE_JOB.steps[2].run" "$want" "${1:-}"
-}
-
-# merge_job_is_pinned [file]: every check above.
-merge_job_is_pinned() {
-  merge_job_keys_are_expected "$@" \
-    && merge_job_environment_is_release "$@" \
-    && merge_job_permissions_are_actions_read_only "$@" \
-    && merge_job_condition_is_expected "$@" \
-    && merge_job_steps_are_expected "$@" \
-    && merge_job_token_step_is_expected "$@" \
-    && merge_job_checkout_step_is_expected "$@" \
-    && merge_job_merge_step_is_expected "$@" \
-    && merge_job_script_is_expected "$@"
-}
-
-test_the_merge_job_has_exactly_the_expected_keys() {
-  merge_job_keys_are_expected || fail "keys: $(workflow_text "$MERGE_JOB | keys | join(\",\")")"
-}
-
-test_the_merge_job_does_not_continue_on_error() {
-  workflow_has "$MERGE_JOB | has(\"continue-on-error\")" false || fail 'the merge job sets continue-on-error'
-}
-
-test_the_merge_job_runs_in_the_release_environment() {
-  merge_job_environment_is_release || fail "environment: $(workflow_text "$MERGE_JOB.environment")"
-}
-
-test_the_merge_job_grants_its_token_actions_read_and_nothing_else() {
-  merge_job_permissions_are_actions_read_only || fail "permissions: $(workflow_text "$MERGE_JOB.permissions")"
-}
-
-test_the_workflow_grants_no_permissions_at_the_top_level() {
-  workflow_has '.permissions' '{}' || fail "got [$(workflow_text '.permissions')]"
-}
-
-test_the_job_condition_is_exactly_the_expected_expression() {
-  merge_job_condition_is_expected || fail "got [$(workflow_text "$MERGE_JOB.if")]"
-}
-
-test_the_merge_job_has_exactly_the_three_expected_steps_in_order() {
-  merge_job_steps_are_expected || fail "got [$(workflow_text "$MERGE_JOB.steps | map(.name // .uses) | join(\" | \")")]"
-}
-
-test_the_token_step_asks_for_contents_and_pull_requests_write_only() {
-  merge_job_token_step_is_expected || fail "got [$(workflow_text "$MERGE_JOB.steps[0]")]"
-}
-
-test_the_checkout_step_takes_exactly_the_app_token_no_credentials_and_the_sparse_paths() {
-  merge_job_checkout_step_is_expected || fail "got [$(workflow_text "$MERGE_JOB.steps[1]")]"
-}
-
-# The env also pins CI_TESTED_SHA, RUNS_TOKEN and BOT_LOGIN, and a merge step with no `if`, `shell`
-# or `continue-on-error` key cannot be skipped, swallowed or run through another shell.
-test_the_merge_step_has_exactly_a_name_an_env_and_a_script() {
-  merge_job_merge_step_is_expected || fail "got [$(workflow_text "$MERGE_JOB.steps[2] | del(.run)")]"
-}
-
-test_the_merge_step_script_is_exactly_the_expected_block() {
-  merge_job_script_is_expected || fail "the merge step's run block changed: [$(merge_step_script)]"
+test_the_whole_parsed_workflow_equals_the_expected_fixture() {
+  workflow_is_pinned && return 0
+  diff <(jq -S . "$EXPECTED_WORKFLOW") <(workflow_json | jq -S .) >&2
+  fail 'release-merge.yml differs from release-merge-workflow.expected.json; update the fixture if the change is intended'
 }
 
 test_the_merge_step_calls_release_merge_run() {
@@ -183,31 +66,11 @@ test_the_merge_step_is_strict() {
   merge_step_script | grep -qxF 'set -euo pipefail' || fail 'the merge step does not set -euo pipefail'
 }
 
-test_the_sparse_checkout_fetches_exactly_the_lib_and_the_release_please_config() {
-  local got
-  got=$(sparse_checkout_paths)
-  [[ "$got" == $'.github/tests/release-merge-lib.sh\nrelease-please-config.json' ]] || fail "got [$got]"
-}
-
 test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   local sourced
   sourced=$(merge_step_script | sed -n 's/^source //p')
   [[ -n "$sourced" ]] || fail 'the merge step sources nothing'
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
-}
-
-test_the_workflow_runs_only_when_ci_or_release_please_completes() {
-  workflow_has "$TRIGGERS_FILTER" '{"workflow_run":{"workflows":["CI","Release Please"],"types":["completed"]}}' \
-    || fail "got [$(workflow_text "$TRIGGERS_FILTER")]"
-}
-
-# A run that the job `if` skips still joins the concurrency group, and a newer pending run replaces
-# an older pending one. CI's push to main completes with head_branch main, the branch the sweep
-# also runs for, so a group without the workflow name lets that skipped run cancel a queued sweep.
-test_the_concurrency_group_names_the_workflow_so_a_skipped_ci_push_run_cannot_cancel_a_queued_sweep() {
-  workflow_has '.concurrency' '{
-    "group":"release-merge-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}",
-    "cancel-in-progress":false}' || fail "got [$(workflow_text '.concurrency')]"
 }
 
 # YAML reads a lone CR as a line break, which a text reader of the file would not.
@@ -219,7 +82,7 @@ test_the_workflow_contains_no_carriage_return() {
 
 test_the_workflow_check_fails_closed_on_a_file_that_is_not_yaml() {
   printf 'jobs: [unclosed\n' >"$TEST_DIR/broken.yml"
-  merge_job_is_pinned "$TEST_DIR/broken.yml" && fail 'a file that does not parse passed'
+  workflow_is_pinned "$TEST_DIR/broken.yml" && fail 'a file that does not parse passed'
   return 0
 }
 
@@ -301,7 +164,7 @@ test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
 }
 
 # --- Variants a YAML parser reads as a weaker gate. Each is a copy of the workflow that Psych and
-# actionlint both accept; merge_job_is_pinned must refuse it. ---
+# actionlint both accept; workflow_is_pinned must refuse it. ---
 
 REF='          ref: ${{ github.event.workflow_run.head_sha }}'
 
@@ -328,13 +191,13 @@ PY
 # refuses_variant <python-expr> <what the variant does>: fails the test when the pinned check passes.
 refuses_variant() {
   variant_workflow "$1"
-  merge_job_is_pinned "$VARIANT" && fail "the check passed a workflow where $2"
+  workflow_is_pinned "$VARIANT" && fail "the check passed a workflow where $2"
   return 0
 }
 
 test_the_unedited_workflow_is_what_the_variants_start_from() {
   variant_workflow 'o'
-  merge_job_is_pinned "$VARIANT" || fail 'the unedited workflow failed the check'
+  workflow_is_pinned "$VARIANT" || fail 'the unedited workflow failed the check'
 }
 
 test_the_check_fails_a_checkout_whose_quoted_with_key_fetches_the_pr_head() {
@@ -412,6 +275,25 @@ test_the_check_fails_a_merge_job_with_write_all_permissions() {
 
 test_the_check_fails_a_merge_job_without_its_environment() {
   refuses_variant 'o.replace("    environment: release\n", "", 1)' 'the merge job has no environment'
+}
+
+# AQA run 6: bash expands BASH_ENV (command substitution included) before the script runs, so a
+# workflow-level env can rewrite the sourced lib before the step sources it.
+test_the_check_fails_a_workflow_level_bash_env_that_rewrites_the_gate() {
+  refuses_variant 'o.replace("permissions: {}\n", "permissions: {}\n\nenv:\n  BASH_ENV: \x27$(perl -pi -e \"s/^release_merge_problems\\\\(\\\\) \\\\{/release_merge_problems() { return 0; }\\\\nzz() {/\" .github/tests/release-merge-lib.sh)\x27\n", 1)' \
+    'a workflow-level env sets BASH_ENV to a command that neuters release_merge_problems'
+}
+
+# AQA run 6: the step-level shell is refused, but defaults.run.shell at the workflow level applies too.
+test_the_check_fails_a_workflow_level_default_shell_that_skips_the_script() {
+  refuses_variant 'o.replace("permissions: {}\n", "permissions: {}\n\ndefaults:\n  run:\n    shell: bash -c true {0}\n", 1)' \
+    'a workflow-level defaults.run.shell skips the merge script'
+}
+
+# AQA run 6: only .jobs.merge is pinned, so a second job in the release environment can mint the App token.
+test_the_check_fails_a_second_job_that_mints_the_app_token() {
+  refuses_variant 'o + "\n  also:\n    runs-on: ubuntu-latest\n    environment: release\n    steps:\n      - id: t\n        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510\n        with:\n          client-id: ${{ vars.RELEASE_APP_ID }}\n          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}\n      - run: echo \"$T\"\n        env:\n          T: ${{ steps.t.outputs.token }}\n"' \
+    'a second job mints the App token outside the gated merge job'
 }
 
 run_tests "$@"

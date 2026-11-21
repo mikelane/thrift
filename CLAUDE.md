@@ -37,7 +37,9 @@ specific to this repo.
   (the gate, the sweep and the merge step all live in `.github/tests/release-merge-lib.sh`, and the
   workflow step only sources it and calls `release_merge_run`; the `release-merge-*.test.sh` files, split
   by subject (gate, sweep, step, workflow), run them against the stub `gh` in
-  `release-merge-stubs-lib.sh`). Anything else waits
+  `release-merge-stubs-lib.sh`). The workflow test compares the whole parsed `release-merge.yml` with
+  `.github/tests/release-merge-workflow.expected.json`, so any change to the workflow must update that
+  fixture in the same PR. Anything else waits
   for a person. The workflow has a second trigger, the Release Please workflow completing on a push
   to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current

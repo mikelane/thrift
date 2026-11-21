@@ -1,0 +1,67 @@
+{
+  "concurrency": {
+    "cancel-in-progress": false,
+    "group": "release-merge-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}"
+  },
+  "jobs": {
+    "merge": {
+      "environment": "release",
+      "if": "(\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.event == 'pull_request'\n  && github.event.workflow_run.head_repository.full_name == github.repository\n  && startsWith(github.event.workflow_run.head_branch, 'release-please--')\n) || (\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.name == 'Release Please'\n  && github.event.workflow_run.event == 'push'\n  && github.event.workflow_run.head_branch == github.event.repository.default_branch\n)",
+      "permissions": {
+        "actions": "read"
+      },
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "id": "app-token",
+          "name": "Mint a short-lived App token",
+          "uses": "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
+          "with": {
+            "client-id": "${{ vars.RELEASE_APP_ID }}",
+            "permission-contents": "write",
+            "permission-pull-requests": "write",
+            "private-key": "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"
+          }
+        },
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": false,
+            "sparse-checkout": ".github/tests/release-merge-lib.sh\nrelease-please-config.json\n",
+            "sparse-checkout-cone-mode": false,
+            "token": "${{ steps.app-token.outputs.token }}"
+          }
+        },
+        {
+          "env": {
+            "BASE": "${{ github.event.repository.default_branch }}",
+            "BOT_LOGIN": "${{ steps.app-token.outputs.app-slug }}[bot]",
+            "BRANCH": "${{ github.event.workflow_run.head_branch }}",
+            "CI_TESTED_SHA": "${{ github.event.workflow_run.head_sha }}",
+            "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
+            "OWNER": "${{ github.repository_owner }}",
+            "REPO": "${{ github.repository }}",
+            "RUNS_TOKEN": "${{ github.token }}",
+            "TRIGGER": "${{ github.event.workflow_run.name }}"
+          },
+          "name": "Squash-merge the release PR if the gate passes",
+          "run": "set -euo pipefail\n# shellcheck source=.github/tests/release-merge-lib.sh\nsource .github/tests/release-merge-lib.sh\n# Every temp file lives here, so an early return or a failure still cleans up.\nwork_dir=$(mktemp -d)\ntrap 'rm -rf \"$work_dir\"' EXIT\nrelease_merge_run\n"
+        }
+      ],
+      "timeout-minutes": 10
+    }
+  },
+  "name": "Release Merge",
+  "permissions": {},
+  "true": {
+    "workflow_run": {
+      "types": [
+        "completed"
+      ],
+      "workflows": [
+        "CI",
+        "Release Please"
+      ]
+    }
+  }
+}
