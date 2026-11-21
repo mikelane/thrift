@@ -65,13 +65,23 @@ test_the_merge_step_runs_exactly_one_merge_command() {
   [[ "$got" == 1 ]] || fail "got [$got]"
 }
 
-# merge_step_script: the run: block of the workflow's merge step, without its indentation. The flag
-# tests above read the lib, so these are what check the workflow itself.
+# yaml_block_body <header-regex> <indent>: the lines of the block whose header line matches the
+# regex, read from stdin, without the indent. Blank lines stay in the block; it ends at the first
+# non-blank line indented less than <indent>. POSIX awk, so it runs on BSD awk.
+yaml_block_body() {
+  awk -v header="$1" -v pad="$2" '
+    $0 ~ header {inblock=1;next}
+    inblock&&/^[[:space:]]*$/{blanks=blanks "\n";next}
+    inblock&&index($0,pad)==1{printf "%s",blanks;blanks="";print substr($0,length(pad)+1);next}
+    inblock{exit}'
+}
+
+# merge_step_script: the run: block of the workflow's merge step, without its indentation. Only the
+# exact header `run: |` counts: a `run: |1` or `run: |+` header reads its indent differently, so it
+# yields no block. The flag tests above read the lib, so these are what check the workflow itself.
 merge_step_script() {
-  awk '/^      - name: Squash-merge the release PR/{f=1} f&&/^        run: \|/{r=1;next}
-       r&&/^[[:space:]]*$/{blanks=blanks "\n";next}
-       r&&/^          /{printf "%s", blanks;blanks="";sub(/^          /,"");print;next}
-       r{exit}' "$REPO_ROOT/.github/workflows/release-merge.yml"
+  awk '/^      - name: Squash-merge the release PR/{f=1} f' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    | yaml_block_body '^        run: [|]$' '          '
 }
 
 test_the_workflow_runs_no_merge_command_of_its_own() {
@@ -112,21 +122,21 @@ test_merge_step_script_returns_a_line_that_follows_a_blank_line_in_the_run_block
 }
 
 # checkout_with_block: the `with:` lines of the merge job's actions/checkout step, one per line,
-# continuation lines included. It ends at the step's next blank line.
+# continuation lines and blank lines included, without the block's indentation.
 checkout_with_block() {
-  awk '/^      - uses: actions\/checkout@/{f=1;next} f&&/^        with:/{w=1;next} w&&/^[[:space:]]*$/{exit} w{print}' \
-    "$REPO_ROOT/.github/workflows/release-merge.yml"
+  awk '/^      - uses: actions\/checkout@/{f=1;next} f' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    | yaml_block_body '^        with:$' '          '
 }
 
 test_the_checkout_step_takes_exactly_the_app_token_no_credentials_and_the_sparse_paths() {
   local want got
   want=$(printf '%s\n' \
-    '          token: ${{ steps.app-token.outputs.token }}' \
-    '          persist-credentials: false' \
-    '          sparse-checkout: |' \
-    '            .github/tests/release-merge-lib.sh' \
-    '            release-please-config.json' \
-    '          sparse-checkout-cone-mode: false')
+    'token: ${{ steps.app-token.outputs.token }}' \
+    'persist-credentials: false' \
+    'sparse-checkout: |' \
+    '  .github/tests/release-merge-lib.sh' \
+    '  release-please-config.json' \
+    'sparse-checkout-cone-mode: false')
   got=$(checkout_with_block)
   [[ "$got" == "$want" ]] || fail "the checkout step's with: block changed: [$got]"
 }
@@ -228,6 +238,40 @@ test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
   local got
   got=$(merge_commands)
   [[ "$got" == *' --match-head-commit "$TESTED_SHA"'* ]] || fail "got [$got]"
+}
+
+
+# with_workflow_edited_by <python-expr over o>: writes the workflow, edited, under $TEST_DIR/repo.
+with_workflow_edited_by() {
+  mkdir -p "$TEST_DIR/repo/.github/workflows"
+  python3 - "$REPO_ROOT/.github/workflows/release-merge.yml" "$TEST_DIR/repo/.github/workflows/release-merge.yml" "$1" <<'PY'
+import sys
+o = open(sys.argv[1], newline="").read()
+open(sys.argv[2], "w", newline="").write(eval(sys.argv[3]))
+PY
+}
+
+# A blank line inside `with:` is still inside the mapping, so a `ref:` after it checks out the PR.
+test_checkout_with_block_returns_a_key_that_follows_a_blank_line_in_the_with_block() {
+  local got
+  with_workflow_edited_by 'o.replace("          sparse-checkout-cone-mode: false\n", "          sparse-checkout-cone-mode: false\n\n          ref: ${{ github.event.workflow_run.head_sha }}\n")'
+  got=$(REPO_ROOT=$TEST_DIR/repo checkout_with_block)
+  [[ "$got" == *'ref: ${{ github.event.workflow_run.head_sha }}' ]] || fail "the ref: after a blank line is invisible: [$got]"
+}
+
+# `run: |1` sets the block indent to 9, so YAML reads a 9-space line as part of the script.
+test_merge_step_script_returns_no_block_for_a_run_header_with_an_indentation_indicator() {
+  local got
+  with_workflow_edited_by "o.replace('        run: |\\n', '        run: |1\\n')"
+  got=$(REPO_ROOT=$TEST_DIR/repo merge_step_script)
+  [[ -z "$got" ]] || fail "an odd run: header still yields a block: [$got]"
+}
+
+# YAML reads a lone CR as a line break; awk does not, so a line after one would hide from the helpers.
+test_the_workflow_contains_no_carriage_return() {
+  local got
+  got=$(tr -cd '\r' <"$REPO_ROOT/.github/workflows/release-merge.yml" | wc -c | tr -d ' ')
+  [[ "$got" == 0 ]] || fail "the workflow has $got carriage return(s)"
 }
 
 run_tests "$@"
