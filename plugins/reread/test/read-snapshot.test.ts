@@ -60,8 +60,11 @@ describe('readTool: a file that starts with a byte order mark', () => {
     const world = install($, on)
     const byteOrderMark = new Uint8Array([0xef, 0xbb, 0xbf])
     putFileBytes(world, '/work/bom.ts', new Uint8Array([...byteOrderMark, ...new TextEncoder().encode(SEVEN_LINES)]))
-    await read($, '/work/bom.ts')
+
+    const first = await read($, '/work/bom.ts')
     const second = await read($, '/work/bom.ts')
+
+    expect(isStub(first)).toBe(false)
     expect(isStub(second)).toBe(true)
   })
 })
