@@ -14,7 +14,7 @@ import type {
 export const START = Date.UTC(2026, 9, 20, 9, 0)
 export const MINUTE = 60_000
 
-export type UsageCall = 'plain' | 'summary' | 'full'
+type UsageCall = 'plain' | 'summary' | 'full'
 
 export type World = {
   clock: MockClock
@@ -37,7 +37,7 @@ export type World = {
 }
 
 // Lets one held usage call answer. A held call answers with the world as it stood when the call started.
-export type Release = () => void
+type Release = () => void
 
 type Gate = { release: Release; released: Promise<void> }
 
