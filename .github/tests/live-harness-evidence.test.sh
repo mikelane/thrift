@@ -133,8 +133,7 @@ test_box_is_empty_fails_when_the_screen_shows_no_prompt_box() {
 }
 
 test_box_is_empty_fails_when_the_box_holds_text() {
-  run_live 'source "$LIVE_DIR/handoff/scenarios/held-prompt-box.sh"
-    live_init
+  run_live 'live_init
     pane() { printf "%s\n" "──────" "❯ hello there" "──────" "footer"; }
     check "box empty" "the box holds text" box_is_empty a
     live_verdict s'
