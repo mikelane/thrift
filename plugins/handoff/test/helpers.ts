@@ -195,11 +195,13 @@ export const runCommand = ($: Engine, command: string) =>
     presentation: { isFullscreen: false, columns: 80 },
   })
 
+// agentIn builds a local_agent: per the 2.1.330 declaration, a subagent that ended its turn (idle) is `completed`
+// as a task, and one held on its own work (waiting) is still `running`.
 const TASK_STATUS_OF: Record<AgentStatus, AgentInfo['taskStatus']> = {
   pending: 'pending',
   running: 'running',
   waiting: 'running',
-  idle: 'running',
+  idle: 'completed',
   completed: 'completed',
   failed: 'failed',
   killed: 'killed',
