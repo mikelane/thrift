@@ -18,6 +18,16 @@ pane_count() {
 log_has() { grep -qE -- "$2" "$(debug_log_of "$1")" 2>/dev/null; }
 # grep -c prints nothing when the file does not exist yet, which would break the arithmetic callers.
 log_count() { local count; count=$(grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null) || true; echo "${count:-0}"; }
+# log_baseline <name> <regex>: log_count for a baseline that a later "more than" check is judged
+# against. A log that cannot be read would read 0 and let a line written before the baseline look new,
+# so it ends the run with an ERROR (run by wait_for, check and live_verdict) instead.
+log_baseline() {
+  local count
+  count=$(grep -cE -- "$2" "$(debug_log_of "$1")" 2>/dev/null) || {
+    [[ $? -eq 1 ]] || live_note_error "the debug log $(debug_log_of "$1") could not be read for a baseline count"
+  }
+  echo "${count:-0}"
+}
 log_has_more_than() { (($(log_count "$1" "$2") > $3)); }
 # The timestamp of the first debug-log line matching an extended regex. The pattern travels in the
 # environment because awk -v would eat its backslashes.

@@ -237,6 +237,20 @@ run_case_calls() {
     check done none true; live_verdict s'
 }
 
+test_run_case_raises_an_error_when_the_log_is_unreadable_at_typing() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; source "$LIVE_DIR/handoff/scenarios/clear-resume-during-handoff.sh"
+    live_init
+    mkdir "$(debug_log_of c1)"
+    handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }
+    submit() { :; }; decision_lines() { echo 0; }; wait_for() { :; }
+    judge_case() { echo "JUDGED"; }
+    run_case label c1 compaction /clear cleared_by_handoff 2
+    check done none true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'JUDGED'
+}
+
 test_run_case_waits_for_a_new_note_not_for_any_note_already_in_the_log() {
   run_case_calls compaction
   assert_exit_code 0

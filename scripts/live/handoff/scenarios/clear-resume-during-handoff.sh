@@ -89,7 +89,8 @@ run_case() {
     start_waiting_handoff "$name" b "$SLEEP_TASK" --session-id "$CASE_ID"
   fi
   submit "$name" "$typed"
-  COMPACTION_ENDS_AT_TYPING=$(log_count "$name" "$COMPACTION_ENDED")
+  COMPACTION_ENDS_AT_TYPING=$(log_baseline "$name" "$COMPACTION_ENDED")
+  live_raise_noted_error
   wait_for "the handoff of '$name' to end ($label)" handoff_has_ended
   # Not a wait_for: a command the engine drops would otherwise end the run in an ERROR, not a FAIL.
   settle_until session_ends_reach "$name" "$(ends_expected "$expected_ends")"
