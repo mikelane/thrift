@@ -132,6 +132,25 @@ test_box_is_empty_fails_when_the_screen_shows_no_prompt_box() {
   assert_out_has 'FAIL  box empty'
 }
 
+test_box_is_empty_fails_when_the_box_holds_text() {
+  run_live 'source "$LIVE_DIR/handoff/scenarios/held-prompt-box.sh"
+    live_init
+    pane() { printf "%s\n" "──────" "❯ hello there" "──────" "footer"; }
+    check "box empty" "the box holds text" box_is_empty a
+    live_verdict s'
+  assert_exit_code 1
+  assert_out_has 'FAIL  box empty'
+}
+
+test_box_is_empty_passes_when_the_box_holds_only_whitespace() {
+  run_live 'live_init
+    pane() { printf "%s\n" "──────" "❯ " "──────" "footer"; }
+    check "box empty" "the box holds text" box_is_empty a
+    live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'PASS s (1 checks)'
+}
+
 test_box_text_prints_the_box_between_the_last_two_rules_without_the_glyph() {
   run_live 'live_init
     pane() { printf "%s\n" "──────" "❯ old" "──────" "output" "──────" "❯ hello there" "──────" "footer"; }
