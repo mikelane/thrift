@@ -8,7 +8,7 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 `$.ui.open` pane it uses.
 
 ```
-┌ meter ─────────────────────────────────────────┐
+┌ meter ──────────────────────────────────────────┐
 │ ◔ CONTEXT            149k / 1M                  │  green
 │ ████░░░░░░░░░░░░░░░░░░░░░  15% · ok             │
 │ compacts 967k · cache 100%                      │
