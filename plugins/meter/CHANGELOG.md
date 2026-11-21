@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/mikelane/thrift/compare/meter-v0.3.2...meter-v0.4.0) (2026-11-21)
+
+
+### Features
+
+* **meter:** print the pace and context band as a word ([#145](https://github.com/mikelane/thrift/issues/145)) ([3efbce6](https://github.com/mikelane/thrift/commit/3efbce60ad640a2e8cd5ad3300fb5e86ba8d577c))
+
 ## [0.3.2](https://github.com/mikelane/thrift/compare/meter-v0.3.1...meter-v0.3.2) (2026-10-27)
 
 
