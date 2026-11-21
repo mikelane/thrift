@@ -8,16 +8,16 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 `$.ui.open` pane it uses.
 
 ```
-┌ meter ─────────────────────────────────────────┐
+┌ meter ──────────────────────────────────────────┐
 │ ◔ CONTEXT            149k / 1M                  │  green
-│ ████░░░░░░░░░░░░░░░░░░░░░  15%                  │
+│ ████░░░░░░░░░░░░░░░░░░░░░  15% · ok             │
 │ compacts 967k · cache 100%                      │
 │                                                 │
-│ ◷ 5-HOUR            7% · 0.39×                  │  green
+│ ◷ 5-HOUR            7% · 0.39× · under          │  green
 │ ██░░░│░░░░░░░░░░░░░░░░░░░                       │
 │ resets Tue 2:10am                               │
 │                                                 │
-│ ⧖ WEEKLY           13% · 0.59×                  │  green
+│ ⧖ WEEKLY           13% · 0.59× · under          │  green
 │ ███▌░░│░░░░░░░░░░░░░░░░░░                       │
 │ resets Sun 9:00am                               │
 │                                                 │
@@ -77,7 +77,8 @@ elapsed: a fill that stops short of it is under pace.
 - **Too early**: elapsed share below 0.05. At exactly 0.05 pace is computed. The row shows the
   percent and `too early` in place of pace, and is uncolored.
 - **Pace**: `percentUsed / (100 x elapsed share)`. Colored from the unrounded value: green below
-  0.9, yellow from 0.9 to 1.1 inclusive, red above 1.1. Displayed rounded to two places.
+  0.9, yellow from 0.9 to 1.1 inclusive, red above 1.1. Displayed rounded to two places. The header
+  also prints the band as a word after the pace: `under` (green), `even` (yellow), `over` (red).
 - **Projection**: only when pace is above 1, which is exactly when the limit runs out before the
   reset: `now + (100 - percentUsed) x (elapsedTime / percentUsed)`, drawn as `hits 100% <time>`.
 - **Limit reached**: a `five_hour` or `seven_day` window at `percentUsed` 100 or more is red and
@@ -90,12 +91,15 @@ elapsed: a fill that stops short of it is under pace.
 - **Context color**: fill is `tokens / threshold` when an auto-compact threshold is cached from a
   breakdown, else `tokens / window`. Green below 70%, yellow from 70% to 90% inclusive, red above
   90%. The plain call's `tokens` is compared, never the breakdown's `totalTokens`. The percent is
-  not capped, so a context over the window reads above 100%. Before the first response the row
-  reads `waiting for first response` and is uncolored.
-- **Without color**: every band is computed from a figure the row prints (the context percent, the
-  pace), so the thresholds above give the band in a monochrome terminal or to a screen reader. The
-  band name itself is not printed. A gauge's fill is drawn in the band color, and the percent
-  and pace in the row above print the same figures. The `│` pace marker is a glyph, not a color.
+  not capped, so a context over the window reads above 100%. The percent on the gauge row is
+  followed by the band as a word: `ok` (green), `high` (yellow), `critical` (red). Before the first
+  response the row reads `waiting for first response` and is uncolored.
+- **Without color**: each band is also printed as a word, `under` / `even` / `over` for pace and
+  `ok` / `high` / `critical` for context, taken from the same unrounded value as the color, so the
+  word is the verdict even where the rounded figure looks like the neighboring band (`70% · ok`
+  for 69999 of 100000, `1.10× · over` for a pace of 1.104). The words are the same in the `unicode`
+  and `nerd` glyph sets. A gauge's fill is drawn in the band color. The `│` pace marker is a glyph,
+  not a color.
 - **Cache hit**: `cache_read_input_tokens / (input_tokens + cache_read_input_tokens +
   cache_creation_input_tokens)`, as a whole percent. Shown as `cache —` when `apiUsage` is
   null, no breakdown has been taken, or the denominator is 0.

@@ -1,10 +1,11 @@
 import type { BreakdownReading, HeadlineReading, NamedTokens } from '../types'
 import { mcpServersLine } from './breakdown'
-import { contextBand, contextFill, fillPercent } from './context'
+import { contextBand, contextBandWord, contextFill, fillPercent } from './context'
 import { barFor, formatTokens } from './format'
 import { GAUGE_WIDTH, gaugeFor } from './gauge'
 import { labelled } from './glyphs'
 import type { GlyphSet } from './glyphs'
+import { paceBandWord } from './pace'
 import type { BandColor } from './pace'
 import type { WindowView } from './window-view'
 
@@ -35,9 +36,10 @@ export const contextGaugeText = (headline: HeadlineReading, compactsAt: number |
   const { contextTokens, contextWindow } = headline
   if (!contextTokens) return undefined
   const fill = contextFill(contextTokens, contextWindow, compactsAt)
+  const band = contextBand(fill)
   return {
-    text: `${gaugeFor(fill, { minimumHalfCells: 1 })}${GAUGE_PERCENT_GAP}${fillPercent(fill)}%`,
-    color: contextBand(fill),
+    text: `${gaugeFor(fill, { minimumHalfCells: 1 })}${GAUGE_PERCENT_GAP}${fillPercent(fill)}%${SEPARATOR}${contextBandWord(band)}`,
+    color: band,
   }
 }
 
@@ -53,7 +55,7 @@ export const costRowText = (headline: HeadlineReading, set: GlyphSet): string | 
 type PacedView = Extract<WindowView, { state: 'paced' }>
 
 const headerRight = (view: WindowView): string =>
-  view.state === 'paced' ? `${view.percentText}%${SEPARATOR}${view.paceText}×` : `${view.percentText}%`
+  view.state === 'paced' ? `${view.percentText}%${SEPARATOR}${view.paceText}×${SEPARATOR}${paceBandWord(view.color)}` : `${view.percentText}%`
 
 const gaugeText = (view: WindowView): string => {
   const share = view.percentUsed / PERCENT_SHARE

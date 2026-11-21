@@ -26,7 +26,7 @@ describe('drawMeter', () => {
     const row = await pane.find({ type: 'Text', text: /CONTEXT/ })
     expect(row?.props.color).toBe('warning')
     expect(row?.text).toContain('150k / 200k')
-    expect((await pane.find({ type: 'Text', text: /^█+▌? *░+ +90%$/ }))?.props.color).toBe('warning')
+    expect((await pane.find({ type: 'Text', text: /^█+▌? *░+ +90% · high$/ }))?.props.color).toBe('warning')
     expect(pairs(await textsOf(pane), /compacts 167k/)).toHaveLength(1)
   })
 
@@ -52,7 +52,7 @@ describe('drawMeter', () => {
     const pane = await mountPane($)
     const row = await pane.find({ type: 'Text', text: /CONTEXT/ })
     expect(row?.props.color).toBe('error')
-    expect(pairs(await textsOf(pane), /^█{25} +105%$/)).toHaveLength(1)
+    expect(pairs(await textsOf(pane), /^█{25} +105% · critical$/)).toHaveLength(1)
   })
 
   test('It draws the cache line from the breakdown', async ($, on) => {
@@ -111,7 +111,7 @@ describe('drawMeter', () => {
     await startSession($)
     await runMeter($)
     const texts = await textsOf(await mountPane($))
-    expect(pairs(texts, /48% · 0.77×/)).toHaveLength(1)
+    expect(pairs(texts, /48% · 0.77× · under$/)).toHaveLength(1)
     expect(pairs(texts, /^[█▌░│]{25}$/)).toEqual(['█'.repeat(12) + '░'.repeat(4) + '│' + '░'.repeat(8)])
     expect(pairs(texts, /^resets /)).toHaveLength(1)
   })
