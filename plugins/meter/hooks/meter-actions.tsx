@@ -52,7 +52,7 @@ async function recordFailure($: EngineInterface, failedAction: string, error: un
 async function loadHeadline($: EngineInterface): Promise<void> {
   const generation = readingGeneration
   try {
-    const usage = await $.session.usage()
+    const usage = await withinDeadline($, deadlineFor('plain'), () => $.session.usage())
     if (generation !== readingGeneration) return
     await changeReading($, reading => withHeadline(reading, headlineFrom(usage)))
   } catch (error) {

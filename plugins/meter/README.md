@@ -130,10 +130,13 @@ elapsed: a fill that stops short of it is under pace.
   log as `meter: ...` and marks the TOP CONTEXT header `stale`. The pane keeps its last figures,
   and the turn is never affected. The marker clears on the next successful breakdown.
 - **Deadlines**: `$.session.usage()` takes no signal or timeout, so the meter stops waiting on each
-  breakdown call at a deadline: 30 s for a summary, 180 s for a full count. A call past its
-  deadline is a failed reading, logged as `meter: could not take the <detail> breakdown: Error:
-  timed out after <n>s`. The pane marks `stale`, the hook or command that was waiting carries on,
-  and a later throttled summary can start. A result that arrives after its deadline is dropped.
+  call at a deadline: 30 s for the plain call and for a summary, 180 s for a full count. A call
+  past its deadline is a failed reading, logged as `meter: could not read usage: Error: timed out
+  after 30s` or `meter: could not take the <detail> breakdown: Error: timed out after <n>s`. The
+  header is marked `stale`, the hook or command that was waiting carries on (an open goes on to its
+  breakdown, and `/meter` replies as usual), and a later throttled summary can start. A result that
+  arrives after its deadline is dropped. A call that started before a `/clear` and times out after
+  it is logged but marks nothing.
 
 ## Settings
 
