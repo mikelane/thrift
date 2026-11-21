@@ -83,7 +83,8 @@ test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipef
   rm "$TEST_DIR/files-111.json"
   stub_gh
   mkdir -p "$TEST_DIR/work"
-  (BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_merge_if_gate_passes 111 $SHA_A) >"$OUTPUT" 2>&1
+  # canary-report-lib.sh sets pipefail for every test; turn it off so this runs without it.
+  (set +o pipefail; set -eu; BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_merge_if_gate_passes 111 $SHA_A) >"$OUTPUT" 2>&1
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
