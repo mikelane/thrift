@@ -65,6 +65,33 @@ test_the_merge_step_runs_exactly_one_merge_command() {
   [[ "$got" == 1 ]] || fail "got [$got]"
 }
 
+# merge_step_script: the run: block of the workflow's merge step, without its indentation. The flag
+# tests above read the lib, so these are what check the workflow itself.
+merge_step_script() {
+  awk '/^      - name: Squash-merge the release PR/{f=1} f&&/^        run: \|/{r=1;next}
+       r&&/^          /{sub(/^          /,"");print;next} r{exit}' "$REPO_ROOT/.github/workflows/release-merge.yml"
+}
+
+test_the_workflow_runs_no_merge_command_of_its_own() {
+  local got
+  got=$(grep -cE '^[[:space:]]*[^#]*gh pr merge' "$REPO_ROOT/.github/workflows/release-merge.yml")
+  [[ "$got" == 0 ]] || fail "the workflow has $got gh pr merge line(s) outside the lib"
+}
+
+test_the_merge_step_calls_release_merge_run() {
+  merge_step_script | grep -qxF 'release_merge_run' || fail 'the merge step never calls release_merge_run'
+}
+
+test_the_merge_step_is_strict() {
+  merge_step_script | grep -qxF 'set -euo pipefail' || fail 'the merge step does not set -euo pipefail'
+}
+
+test_the_workflow_never_sets_the_allowlist_config() {
+  grep -q 'RELEASE_MERGE_CONFIG' "$REPO_ROOT/.github/workflows/release-merge.yml" \
+    && fail 'the workflow sets RELEASE_MERGE_CONFIG'
+  return 0
+}
+
 test_the_workflow_also_runs_when_release_please_completes() {
   grep -qE '^    workflows: \[CI, Release Please\]' "$REPO_ROOT/.github/workflows/release-merge.yml" \
     || fail 'the workflow_run trigger does not name Release Please'
