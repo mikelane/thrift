@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, LARGE_FILE, putFile, read, rewriteKeepingStat, SEVEN_LINES, triggerValues } from './world'
+import { install, isStub, LARGE_FILE, putFile, putFileBytes, read, rewriteKeepingStat, SEVEN_LINES, triggerValues } from './world'
 
 const ACT = { options: { readMode: 'act' } }
 
@@ -52,5 +52,16 @@ describe('readTool: what is tracked is what the model read', () => {
     world.beforeFsRead = () => rewriteKeepingStat(world, '/work/a.ts', LARGE_FILE.replace('line 2 of', 'LINE 2 of'))
     await read($, '/work/a.ts', { offset: 1, limit: 30 })
     expect(triggerValues(world).reason).toBe('changed')
+  })
+})
+
+describe('readTool: a file that starts with a byte order mark', () => {
+  test('It tracks a file that starts with a byte order mark, so a repeat read gets a stub', ACT, async ($, on) => {
+    const world = install($, on)
+    const byteOrderMark = new Uint8Array([0xef, 0xbb, 0xbf])
+    putFileBytes(world, '/work/bom.ts', new Uint8Array([...byteOrderMark, ...new TextEncoder().encode(SEVEN_LINES)]))
+    await read($, '/work/bom.ts')
+    const second = await read($, '/work/bom.ts')
+    expect(isStub(second)).toBe(true)
   })
 })
