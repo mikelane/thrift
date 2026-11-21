@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { bash, completeTurn, install, lastRecord, startSession } from './helpers'
+import { agentIn, bash, completeTurn, install, lastRecord, startSession } from './helpers'
 
 describe('isBackgroundBusy', () => {
   test('It returns true for a tracked background task without asking for the agent list', async ($, on) => {
@@ -15,7 +15,7 @@ describe('isBackgroundBusy', () => {
 
   test('It returns true for a running agent', async ($, on) => {
     const world = install($, on)
-    world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+    world.agents = [agentIn('running')]
     await startSession($)
     await completeTurn($)
     expect(lastRecord(world).trigger_values.is_background_busy).toBe(true)
@@ -23,7 +23,7 @@ describe('isBackgroundBusy', () => {
 
   test('It returns false for a completed agent', async ($, on) => {
     const world = install($, on)
-    world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'completed' }]
+    world.agents = [agentIn('completed')]
     await startSession($)
     await completeTurn($)
     expect(lastRecord(world).trigger_values.is_background_busy).toBe(false)

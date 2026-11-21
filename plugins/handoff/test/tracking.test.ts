@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bash, completeTurn, growTo200k, install, lastRecord, notify, startSession, tool } from './helpers'
+import { agentIn, bash, completeTurn, growTo200k, install, lastRecord, notify, startSession, tool } from './helpers'
 
 const finishingCommands = [
   'git commit -m "x"',
@@ -216,7 +216,7 @@ const agentStatuses = [
 for (const [status, expected] of agentStatuses) {
   test(`It marks background work ${expected ? 'busy' : 'idle'} for an agent that is ${status}`, async ($, on) => {
     const world = install($, on)
-    world.agents = [{ id: 'a1', description: 'd', type: 't', status }]
+    world.agents = [agentIn(status)]
     await startSession($)
     await completeTurn($)
     expect(lastRecord(world).trigger_values.is_background_busy).toBe(expected)

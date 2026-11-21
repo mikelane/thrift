@@ -3,7 +3,7 @@ import { describe, expect, test, type Engine } from 'claude-code/testing'
 import { WAITING as WAITING_BAND } from '../hooks/band-text'
 import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
 import type { SettledHandoff } from '../hooks/decision-record'
-import { compacted, completeTurn, lastRecord, mountBand, startTurn, type World } from './helpers'
+import { agentIn, compacted, completeTurn, lastRecord, mountBand, startTurn, type World } from './helpers'
 import {
   ACT,
   BUSY_MESSAGE,
@@ -152,7 +152,7 @@ describe('waitForClearWindow', () => {
 
   test('It refuses to clear over background work that an act-mode handoff finds', ACT, async ($, on) => {
     const { world, finishNote } = await actHandoffWhileWritingTheNote($, on)
-    world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+    world.agents = [agentIn('running')]
     await finishNote()
     await endTurn($, world)
     expect(world.effects).not.toContain('clear')

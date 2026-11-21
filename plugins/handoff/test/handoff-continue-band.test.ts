@@ -1,12 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 
 import { CONTINUE_PROMPT } from '../hooks/continue-decision'
-import { completeTurn, entered, install, lastRecord, runCommand, startSession, startTurn, submitPerson } from './helpers'
+import { agentIn, completeTurn, entered, install, lastRecord, runCommand, startSession, startTurn, submitPerson } from './helpers'
 import { bandAfterFinishedTask, weakBand } from './band-turn-fixtures'
 
 const CONTINUING = { options: { handoffMode: 'ask', continueAfterHandoff: true } } as const
 const CONTINUE_ENTRY = `entered:plugin:${CONTINUE_PROMPT}`
-const RUNNING_AGENT = { id: 'a1', description: 'd', type: 't', status: 'running' } as const
+const RUNNING_AGENT = agentIn('running')
 
 // A band raised by a strong signal (a finished task) that goes through a busy redraw and back comes out weak:
 // offerWithBusyState overwrites offer.signal with 'weak' and never restores it. The press then hands off with

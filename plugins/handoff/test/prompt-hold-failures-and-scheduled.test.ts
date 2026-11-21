@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { answered, bash, completeTurn, dropOf, entered, holdFork, lastRecord, mountBand, submitPerson } from './helpers'
+import { agentIn, answered, bash, completeTurn, dropOf, entered, holdFork, lastRecord, mountBand, submitPerson } from './helpers'
 import { ASK, ACT, NOTE_HEADING, ready } from './prompt-hold-fixtures'
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
@@ -100,7 +100,7 @@ test('It still runs a scheduled prompt when /clear throws', ASK, async ($, on) =
 
 test('It ignores a weak signal for a scheduled prompt', ASK, async ($, on) => {
   const world = await ready($, on)
-  world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+  world.agents = [agentIn('running')]
   const result = await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   expect(result).toMatchObject({ text: 'now ENG-2' })
   await world.clock.settle()

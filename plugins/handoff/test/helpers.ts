@@ -1,5 +1,5 @@
 import { mock, type Engine, type MockClock } from 'claude-code/testing'
-import type { ModelForkResult, On, SessionCompactResult, ToolCallResult, TurnUsage } from 'claude-code'
+import type { AgentInfo, AgentStatus, ModelForkResult, On, SessionCompactResult, ToolCallResult, TurnUsage } from 'claude-code'
 
 import {
   installCommandMocks,
@@ -195,6 +195,33 @@ export const runCommand = ($: Engine, command: string) =>
     presentation: { isFullscreen: false, columns: 80 },
   })
 
+// agentIn builds a local_agent: per the 2.1.330 declaration, a subagent that ended its turn (idle) is `completed`
+// as a task, and one held on its own work (waiting) is still `running`.
+const TASK_STATUS_OF: Record<AgentStatus, AgentInfo['taskStatus']> = {
+  pending: 'pending',
+  running: 'running',
+  waiting: 'running',
+  idle: 'completed',
+  completed: 'completed',
+  failed: 'failed',
+  killed: 'killed',
+}
+
+export const agentIn = (status: AgentStatus): AgentInfo => ({
+  id: 'a1',
+  description: 'd',
+  type: 't',
+  status,
+  kind: 'local_agent',
+  taskStatus: TASK_STATUS_OF[status],
+  label: 'd',
+  startTime: 0,
+  cwd: '/work',
+  tokenCount: 0,
+  tokenSamples: [],
+  hasRow: true,
+})
+
 type BandProps = { hasSurvey?: boolean }
 
 export const mountBand = ($: Engine, { hasSurvey = false }: BandProps = {}) =>
@@ -202,7 +229,7 @@ export const mountBand = ($: Engine, { hasSurvey = false }: BandProps = {}) =>
     plugin: 'handoff',
     surface: 'terminal',
     component: 'AbovePrompt',
-    props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+    props: { hasSurvey, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   })
 
 type PersonPrompt = {

@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  agentIn,
   growTo200k,
   install,
   lastRecord,
@@ -117,7 +118,7 @@ test('It records a none signal when a prompt names new work under the threshold'
 
 test('It records a weak signal when a prompt names new work while background work runs', async ($, on) => {
   const world = await prepared($, on, 'alice/eng-1-start')
-  world.agents = [{ id: 'a1', description: 'd', type: 't', status: 'running' }]
+  world.agents = [agentIn('running')]
   await submitPerson($, 'start on ENG-1')
   await submitPerson($, 'now ENG-2')
   expect(lastRecord(world)).toMatchObject({ trigger_values: { point: 'prompt', signal: 'weak', is_background_busy: true } })
