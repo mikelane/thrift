@@ -33,8 +33,9 @@ specific to this repo.
   `release-please--*` branch in this repo, authored by the App, at the commit CI tested, and change
   only the manifest and each package's changelog, version file and extra-files
   (the gate, the sweep and the merge step all live in `.github/tests/release-merge-lib.sh`, and the
-  workflow step only sources it and calls `release_merge_run`; the `release-merge*.test.sh` files run
-  them against a stub `gh`). Anything else waits
+  workflow step only sources it and calls `release_merge_run`; the `release-merge-*.test.sh` files, split
+  by subject (gate, sweep, step, workflow), run them against the stub `gh` in
+  `release-merge-stubs-lib.sh`). Anything else waits
   for a person. The workflow has a second trigger, the Release Please workflow completing on a push
   to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
