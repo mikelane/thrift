@@ -17,7 +17,7 @@ It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measu
 │ ██░░░│░░░░░░░░░░░░░░░░░░░                       │
 │ resets Tue 2:10am                               │
 │                                                 │
-│ ⧖ WEEKLY           13% · 0.59× · under         │  green
+│ ⧖ WEEKLY           13% · 0.59× · under          │  green
 │ ███▌░░│░░░░░░░░░░░░░░░░░░                       │
 │ resets Sun 9:00am                               │
 │                                                 │
@@ -77,8 +77,8 @@ elapsed: a fill that stops short of it is under pace.
 - **Too early**: elapsed share below 0.05. At exactly 0.05 pace is computed. The row shows the
   percent and `too early` in place of pace, and is uncolored.
 - **Pace**: `percentUsed / (100 x elapsed share)`. Colored from the unrounded value: green below
-  0.9, yellow from 0.9 to 1.1 inclusive, red above 1.1. Displayed rounded to two places. The header also prints the
-  band as a word after the pace: `under` (green), `even` (yellow), `over` (red).
+  0.9, yellow from 0.9 to 1.1 inclusive, red above 1.1. Displayed rounded to two places. The header
+  also prints the band as a word after the pace: `under` (green), `even` (yellow), `over` (red).
 - **Projection**: only when pace is above 1, which is exactly when the limit runs out before the
   reset: `now + (100 - percentUsed) x (elapsedTime / percentUsed)`, drawn as `hits 100% <time>`.
 - **Limit reached**: a `five_hour` or `seven_day` window at `percentUsed` 100 or more is red and
@@ -91,9 +91,9 @@ elapsed: a fill that stops short of it is under pace.
 - **Context color**: fill is `tokens / threshold` when an auto-compact threshold is cached from a
   breakdown, else `tokens / window`. Green below 70%, yellow from 70% to 90% inclusive, red above
   90%. The plain call's `tokens` is compared, never the breakdown's `totalTokens`. The percent is
-  not capped, so a context over the window reads above 100%. The percent on the gauge row is followed by the band as a word: `ok` (green),
-  `high` (yellow), `critical` (red). Before the first response the row
-  reads `waiting for first response` and is uncolored.
+  not capped, so a context over the window reads above 100%. The percent on the gauge row is
+  followed by the band as a word: `ok` (green), `high` (yellow), `critical` (red). Before the first
+  response the row reads `waiting for first response` and is uncolored.
 - **Without color**: each band is also printed as a word, `under` / `even` / `over` for pace and
   `ok` / `high` / `critical` for context, taken from the same unrounded value as the color, so the
   word is the verdict even where the rounded figure looks like the neighboring band (`70% · ok`
