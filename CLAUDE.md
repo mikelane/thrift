@@ -11,8 +11,10 @@ specific to this repo.
   plugin's entry lands in the same PR that adds the plugin, never before.
 - Tests for the repo's own CI live in `.github/tests/`, not under a plugin. `canary-report.sh` pulls
   the canary step scripts out of `ci.yml` and runs them, with `scripts/check.sh`, against stub `gh`,
-  `claude` and `tsc`. It needs `jq`, `openssl` and `dash` (three live-harness tests run the session
-  command under a POSIX `sh`) and runs on bash 3.2 and 5. Pass part of a test function's name (not a
+  `claude` and `tsc`. It needs `jq`, `openssl`, `dash` (three live-harness tests run the session
+  command under a POSIX `sh`) and `ruby` (the release-merge workflow test parses `release-merge.yml`
+  with Psych and compares the merge job as data; `ubuntu-latest` has Ruby) and `python3` (the same
+  test builds its workflow variants with it) and runs on bash 3.2 and 5. Pass part of a test function's name (not a
   file name) to run only matching tests: `.github/tests/canary-report.sh [name-fragment]`. A
   fragment that matches no test exits 1. It runs every `.github/tests/*.test.sh`, so a new test file
   needs no wiring; each ends with `run_tests "$@"` so it honors the fragment. The shared code sits
@@ -32,7 +34,12 @@ specific to this repo.
   squash-merges it once the CI workflow succeeds on it: the PR must be open, from a
   `release-please--*` branch in this repo, authored by the App, at the commit CI tested, and change
   only the manifest and each package's changelog, version file and extra-files
-  (`.github/tests/release-merge-lib.sh`, tested by `release-merge.test.sh`). Anything else waits
+  (the gate, the sweep and the merge step all live in `.github/tests/release-merge-lib.sh`, and the
+  workflow step only sources it and calls `release_merge_run`; the `release-merge-*.test.sh` files, split
+  by subject (gate, sweep, step, workflow), run them against the stub `gh` in
+  `release-merge-stubs-lib.sh`). The workflow test compares the whole parsed `release-merge.yml` with
+  `.github/tests/release-merge-workflow.expected.json`, so any change to the workflow must update that
+  fixture in the same PR. Anything else waits
   for a person. The workflow has a second trigger, the Release Please workflow completing on a push
   to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
