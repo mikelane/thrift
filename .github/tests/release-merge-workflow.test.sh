@@ -100,8 +100,9 @@ test_the_workflow_also_runs_when_release_please_completes() {
 test_the_workflow_runs_the_sweep_only_for_a_successful_release_please_push_to_main() {
   local got
   got=$(tr -d '\n' <"$REPO_ROOT/.github/workflows/release-merge.yml" | tr -s ' ')
-  [[ "$got" == *"github.event.workflow_run.name == 'Release Please' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch"* ]] \
-    || fail 'the job condition does not pin the Release Please trigger to a push to main'
+  # The whole parenthesized clause, so the success check is in it and nothing else is.
+  [[ "$got" == *"|| ( github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.name == 'Release Please' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch )"* ]] \
+    || fail 'the job condition does not pin the Release Please trigger to a successful push to main'
 }
 
 # A run that the job `if` skips still joins the concurrency group, and a newer pending run replaces

@@ -2,15 +2,17 @@
 # Sourced by the release-merge*.test.sh files after canary-report-lib.sh: the release-merge lib, the
 # constants the tests share, a stub `gh`, and the fixtures that fill it (open pull requests, a
 # release PR, its changed files, CI runs).
+# shellcheck disable=SC2034 # file-wide: the constants below are read by the test files that source this
 # shellcheck source=release-merge-lib.sh
 source "$HARNESS_DIR/release-merge-lib.sh"
 
-# shellcheck disable=SC2034 # the constants are read by the test files that source this
 REPO=mikelane/thrift
 BOT='thrift-release[bot]'
 RELEASE_BRANCH=release-please--branches--main--components--handoff
 SHA=0123456789abcdef0123456789abcdef01234567
 CONFIG=$REPO_ROOT/release-please-config.json
+SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 # write_pr <file> [jq filter]: a release PR that passes the gate, edited by the filter.
 write_pr() {
@@ -29,7 +31,7 @@ write_pr() {
 stub_gh() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
-    "dir=$TEST_DIR" \
+    "dir=$(printf '%q' "$TEST_DIR")" \
     'if [[ "$1 $2" == "pr merge" ]]; then' \
     '  echo "$*" >>"$dir/merge-calls"' \
     '  [[ -e "$dir/merge.error" ]] || exit 0' \
@@ -53,10 +55,6 @@ stub_gh() {
   chmod +x "$TEST_DIR/gh"
   PATH="$TEST_DIR:$PATH"
 }
-
-SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 # open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
 open_pr() {

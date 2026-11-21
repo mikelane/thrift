@@ -184,6 +184,19 @@ test_the_pr_lookup_sends_a_get_request_so_gh_does_not_create_a_pull_request() {
   [[ "$got" == 42 ]] || fail "got [$got]"
 }
 
+# The stub `gh` ignores the query, so only this test shows which PR the lookup asks for: one from
+# the owner's own branch (head=<owner>:<branch>, never a fork's), into the base, still open.
+test_the_pr_lookup_asks_for_the_open_pr_from_the_owners_branch_into_the_base() {
+  local dir
+  dir=$TEST_DIR
+  printf '%s\n' '#!/usr/bin/env bash' "printf '%s\n' \"\$@\" >$dir/gh-args" 'echo 42' >"$dir/gh"
+  chmod +x "$dir/gh"
+  PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane "$RELEASE_BRANCH" main >/dev/null
+  grep -qxF "head=mikelane:$RELEASE_BRANCH" "$dir/gh-args" || fail 'the lookup does not pin head to the owner and branch'
+  grep -qxF 'base=main' "$dir/gh-args" || fail 'the lookup does not pin the base'
+  grep -qxF 'state=open' "$dir/gh-args" || fail 'the lookup does not ask for open PRs'
+}
+
 # changed_files <json>: the names release_merge_changed_files prints for the files API's JSON.
 changed_files() { printf '%s' "$1" | release_merge_changed_files; }
 
