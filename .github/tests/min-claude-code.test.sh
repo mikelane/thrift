@@ -14,24 +14,29 @@ pinned_version() {
 }
 
 minimum_claims() {
-  grep -H -o -- "$MINIMUM_CLAIM" "$REPO_ROOT"/plugins/*/README.md
+  grep -H -o -- "$MINIMUM_CLAIM" "$REPO_ROOT"/plugins/*/README.md | sed "s|^$REPO_ROOT/||"
 }
 
 test_ci_pins_one_claude_code_build() {
   local pinned
   pinned=$(pinned_version)
   [[ "$pinned" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-    || fail "ci.yml's pinned version is '${pinned:-<unreadable>}', expected MAJOR.MINOR.PATCH"
+    || fail "the canary matrix entry {\"channel\":\"pinned\",\"version\":...} in .github/workflows/ci.yml" \
+      "gives '${pinned:-<none found>}', expected one MAJOR.MINOR.PATCH version"
 }
 
 test_a_plugin_readme_states_a_minimum() {
-  [[ -n "$(minimum_claims)" ]] || fail "no plugin README says '$MINIMUM_CLAIM'"
+  [[ -n "$(minimum_claims)" ]] \
+    || fail "no plugins/*/README.md says 'needs Claude Code X or newer'; at least one must state the minimum"
 }
 
 test_every_stated_minimum_is_the_pinned_build() {
-  local stale
-  stale=$(minimum_claims | grep -v -F -- "needs Claude Code $(pinned_version) or newer")
-  [[ -z "$stale" ]] || fail "minimums that differ from the pinned $(pinned_version): $stale"
+  local pinned stale
+  pinned=$(pinned_version)
+  stale=$(minimum_claims | grep -v -F -- "needs Claude Code $pinned or newer" | paste -s -d ';' -)
+  [[ -z "$stale" ]] \
+    || fail "README minimums differ from the pin ${pinned:-<none found>} in .github/workflows/ci.yml: $stale." \
+      "Change each to 'needs Claude Code $pinned or newer', or move the pin in the same change"
 }
 
 run_tests "$@"
