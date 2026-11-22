@@ -54,6 +54,7 @@ REREAD_TURN_END='\[remote-bridge\] Sent result success'
 reread_step() {
   local name=$1 turns_before
   turns_before=$(log_baseline "$name" "$REREAD_TURN_END")
+  live_raise_noted_error
   REREAD_BASELINE=$(decision_lines)
   submit "$name" "$2"
   wait_for "the turn of '$name' to finish" \

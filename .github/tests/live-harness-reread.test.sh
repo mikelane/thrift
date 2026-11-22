@@ -84,4 +84,15 @@ test_reread_pane_lacks_fails_when_the_pane_cannot_be_read() {
   assert_status 1
 }
 
+test_reread_step_raises_an_error_when_the_log_is_unreadable_before_the_prompt_is_typed() {
+  run_reread 'live_init
+    mkdir "$(debug_log_of c1)"
+    submit() { echo "TYPED $2"; }; wait_for() { :; }
+    reread_step c1 "read the file"
+    check done none true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'TYPED read the file'
+}
+
 run_tests "$@"
