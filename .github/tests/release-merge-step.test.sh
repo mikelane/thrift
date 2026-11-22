@@ -33,8 +33,27 @@ test_the_merge_step_logs_each_reason_and_returns_success_without_merging_a_pr_th
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "Not merging PR #111:"
+  assert_out_has "Not merging PR #111 at $SHA_B:"
   assert_out_has "- the PR head is $SHA_A but CI tested $SHA_B"
+}
+
+test_the_merge_step_puts_the_tested_commit_in_each_warning_annotation() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
+  assert_out_has "but CI tested $SHA_B (at $SHA_B)"
+}
+
+test_the_merge_step_logs_a_merged_line_after_a_successful_merge() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_out_has "Merged PR #111 at $SHA_A."
+}
+
+test_the_merge_step_does_not_log_a_merged_line_when_the_merge_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_out_lacks "Merged PR"
 }
 
 test_the_merge_step_writes_one_warning_annotation_per_reason() {

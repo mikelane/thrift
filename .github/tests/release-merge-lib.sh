@@ -187,17 +187,20 @@ release_merge_pr_if_gate_passes() {
   # PR-controlled text (branch, author, file paths): each log line starts with "- " so
   # none is read as a workflow command, and % is escaped as the annotation format requires.
   if [[ -n "$problems" ]]; then
-    echo "Not merging PR #$number:"
+    echo "Not merging PR #$number at $tested_sha:"
     while IFS= read -r problem; do
       echo "- $problem"
-      echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
+      echo "::warning title=Release PR #$number not merged::${problem//\%/%25} (at $tested_sha)"
     done <<<"$problems"
     return 0
   fi
 
   echo "Merging PR #$number at $tested_sha."
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null \
-    || release_merge_lost_race "$REPO" "$number" "$tested_sha" \
+  if gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null; then
+    echo "Merged PR #$number at $tested_sha."
+    return 0
+  fi
+  release_merge_lost_race "$REPO" "$number" "$tested_sha" \
     || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit"
 }
 
