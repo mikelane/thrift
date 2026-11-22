@@ -109,6 +109,14 @@ describe('readTool in ask', () => {
     expect(world.transcriptLines[0]).toContain('/work/a.ts')
   })
 
+  test('It leaves the plugin name off the line, because the engine adds it', ASK, async ($, on) => {
+    const world = install($, on)
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    await read($, '/work/a.ts')
+    await read($, '/work/a.ts')
+    expect(world.transcriptLines[0]).toMatch(/^\/work\/a\.ts is unchanged/)
+  })
+
   test('It shows no line for a read it let through', ASK, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
