@@ -45,11 +45,16 @@ specific to this repo.
   on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
   head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
   still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
-  red instead of reading as "no run yet". `ci.yml` runs on `pull_request` only for PRs into `main`
-  (`branches: [main]`, pinned by `ci-trigger.test.sh`), so a PR from a release branch into another
-  base gets no CI run and can't put a run on that head. A run's `pull_requests` lists every open PR
-  at its head, not just the one that triggered it, so the gate still refuses a release PR while
-  another open PR has the same head branch (a second PR into `main` from it). If a PR is still stuck, rerun its last CI run with
+  red instead of reading as "no run yet". `ci.yml` runs on `pull_request` only for PRs into `main` (`branches: [main]`, pinned by
+  `ci-trigger.test.sh`), so an ordinary PR into another base produces no CI run. That is not a
+  guarantee: a run takes its workflow file from the PR's merge commit, so a base branch whose
+  `ci.yml` has no filter can still put a run on a release head. Only someone with write access can
+  create such a base, and the gate's author, SHA and file-allowlist checks still apply; #117 stays
+  open for tying a run to its triggering PR. The cost: PRs into a base other than `main`, including
+  the upper layers of a native stack, get no CI until GitHub retargets them to `main`. A run's
+  `pull_requests` lists every open PR at its head, not just the one that triggered it, so the gate
+  still refuses a release PR while another open PR has the same head branch (for example a PR from
+  the release branch into another base). If a PR is still stuck, rerun its last CI run with
   `gh run rerun <CI run id>`. The sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job
   permission `actions: read`), because the App token has no Actions access; the PR list, the gate
   and the merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`

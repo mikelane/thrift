@@ -18,7 +18,8 @@ name: CI
 # Job `canary-harness` runs .github/tests/canary-report.sh, which pulls the canary step scripts out
 # of this file and runs them, with scripts/check.sh, against stub `gh`, `claude` and `tsc`. It holds
 # `contents: read`, installs no Claude Code, and the harness makes no network calls. Like every job
-# here it has no path filter. It takes seconds, so every pull request runs it.
+# here it has no path filter. It takes seconds, so every pull request into main runs it (the `pull_request` trigger below is
+# limited to `branches: [main]`; see issue #117).
 #
 # A manual run defaults to a dry run: `report` prints the issues it would open instead of opening
 # them, which exercises the canary path without waiting for Monday.

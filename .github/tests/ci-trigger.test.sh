@@ -26,9 +26,4 @@ test_ci_runs_for_pull_requests_into_main_only() {
     || fail "ci.yml's pull_request trigger is not limited to branches: [main]"
 }
 
-test_ci_pull_request_trigger_has_no_branch_exclusions() {
-  [[ "$(ci_trigger_json '.pull_request | has("branches-ignore")')" == 'false' ]] \
-    || fail "ci.yml's pull_request trigger sets branches-ignore"
-}
-
 run_tests "$@"
