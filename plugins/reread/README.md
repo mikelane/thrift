@@ -10,9 +10,9 @@ Success means fewer bytes of repeat file contents entering the context, measured
 `bytes_saved` summed per session in `decisions.jsonl` against the `bytes_would_save` baseline that
 `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.311. One live session has been checked,
-> in `ask` mode on Claude Code 2.1.308 in the Desktop app; see
-> [What has been verified live](#what-has-been-verified-live).
+> **Status:** early. The tests pass against Claude Code 2.1.330, and the plugin is tested through
+> that release. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 in the
+> terminal CLI; see [What has been verified live](#what-has-been-verified-live).
 
 ## Install
 
@@ -161,9 +161,9 @@ first.
 ## Compatibility
 
 The plugin API is early access and changes between Claude Code releases, so an update can break a
-plugin without any error. The plugin was tested through Claude Code 2.1.311. On the first `Read` of a
+plugin without any error. The plugin was tested through Claude Code 2.1.330. On the first `Read` of a
 session it reads `$.session.version()`. If the `base` is missing, is not exactly `MAJOR.MINOR.PATCH`
-(a development build such as `2.1.311-dev`), or names a release newer than 2.1.311, it runs as `off`
+(a development build such as `2.1.330-dev`), or names a release newer than 2.1.330, it runs as `off`
 for the rest of the plugin's life and writes one `untested_engine` record. It says nothing in the
 session. Every record carries `engine_version`, so a change in behavior shows up as a split between
 versions.
