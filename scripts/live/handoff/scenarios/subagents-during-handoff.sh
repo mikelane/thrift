@@ -173,7 +173,8 @@ press_while_a_subagent_runs() {
   handoff_start "$name" --allowedTools "$SUBAGENT_TOOLS" --session-id "$STEP_2_ID"
   say_apple "$name"
   wait_for 'the band to offer a handoff' pane_has "$name" 'h: Hand off and clear'
-  origins_before=$(log_count "$name" 'cc_turn_origin=')
+  origins_before=$(log_baseline "$name" 'cc_turn_origin=')
+  live_raise_noted_error
   submit "$name" "Run \`sleep 8\` in the foreground. Then use the Agent tool with this prompt: $(agent_prompt "$SLEEP_CALLS_STEP_2") After the Agent call returns, reply with the word launched."
   wait_for "the turn to start in '$name'" log_has_more_than "$name" 'cc_turn_origin=' "$origins_before"
   press "$name" C-x Tab

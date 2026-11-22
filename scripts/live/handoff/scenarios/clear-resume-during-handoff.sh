@@ -80,7 +80,8 @@ run_case() {
     say_apple "$name"
     CASE_BASE=$(decision_lines)
     local notes_before
-    notes_before=$(log_count "$name" "$NOTE_WRITTEN")
+    notes_before=$(log_baseline "$name" "$NOTE_WRITTEN")
+    live_raise_noted_error
     submit "$name" '/handoff'
     wait_for "the note of '$name' to be written" log_has_more_than "$name" "$NOTE_WRITTEN" "$notes_before"
     wait_for "the compaction of '$name' to start" log_has "$name" "$COMPACTION_STARTED"
