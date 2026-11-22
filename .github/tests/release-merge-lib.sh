@@ -120,9 +120,10 @@ release_merge_ci_passed() {
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
 # one still running, is left out with a line on stderr saying why: its own CI completion triggers
-# the merge. A PR whose CI lookup fails is left out too, but the sweep goes on with the others and
-# exits non-zero at the end, so a 403 or an outage turns the job red instead of reading as "nothing
-# to merge". The body is a subshell with pipefail, so a failed PR list fails the sweep whatever
+# the merge. A head whose latest CI run failed is left out with a warning annotation. A PR whose CI
+# lookup fails is left out too, but the sweep goes on with the others and exits non-zero at the end,
+# so a 403 or an outage turns the job red instead of reading as "nothing to merge". The body is a
+# subshell with pipefail, so a failed PR list fails the sweep whatever
 # options the caller set.
 release_merge_sweep() (
   set -o pipefail
@@ -136,9 +137,12 @@ release_merge_sweep() (
           release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
           case "$ci_status" in
             0) echo "$number $sha" ;;
-            1) echo "Skipping PR #$number at $sha: no CI run for it alone at that head (none yet, or another open PR shares its branch)." >&2 ;;
-            3) echo "Skipping PR #$number at $sha: CI is still running; its completion triggers the merge." >&2 ;;
-            4) echo "::warning title=Release PR #$number not merged::CI did not succeed at $sha; fix it or rerun CI." >&2 ;;
+            1) echo "Skipping PR #$number at $sha: no CI run for it alone at that head" \
+                 "(none yet, or another open PR shares its branch)." >&2 ;;
+            3) echo "Skipping PR #$number at $sha: CI is still running;" \
+                 "its completion triggers the merge." >&2 ;;
+            4) printf '%s%s\n' "::warning title=Release PR #$number not merged::" \
+                 "CI did not succeed at $sha; fix it or rerun CI." >&2 ;;
             *)
               echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
               lookup_failed=1 ;;
@@ -154,7 +158,9 @@ release_merge_sweep() (
 # Fails for any other cause, so a real merge failure still fails the job.
 release_merge_lost_race() {
   local state_and_head state head merged
-  state_and_head=$(set -o pipefail; gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
+  state_and_head=$(set -o pipefail
+    gh api "repos/$1/pulls/$2" \
+      | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
   read -r state head merged <<<"$state_and_head"
   if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
@@ -168,7 +174,8 @@ release_merge_lost_race() {
 }
 
 # release_merge_fail <number> <reason>: prints an error annotation naming PR <number> and returns 1.
-# Each failing step of release_merge_pr_if_gate_passes ends with it, so the log says which PR failed.
+# Each failing step of release_merge_pr_if_gate_passes ends with it, so the log says which PR
+# failed.
 release_merge_fail() {
   echo "::error title=Release PR #$1 not merged::${2//\%/%25}"
   return 1
@@ -183,13 +190,19 @@ release_merge_fail() {
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 merged=0 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
-  pr=$(mktemp "$work_dir/pr.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
-  files=$(mktemp "$work_dir/files.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
-  raw=$(mktemp "$work_dir/raw.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
-  gh api "repos/$REPO/pulls/$number" >"$pr" || release_merge_fail "$number" "cannot fetch the PR" || return 1
+  pr=$(mktemp "$work_dir/pr.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  files=$(mktemp "$work_dir/files.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  raw=$(mktemp "$work_dir/raw.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  gh api "repos/$REPO/pulls/$number" >"$pr" \
+    || release_merge_fail "$number" "cannot fetch the PR" || return 1
   # Two steps, not a pipe: a failed fetch must not read as "no changed files" without pipefail.
-  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" || release_merge_fail "$number" "cannot fetch the changed files" || return 1
-  release_merge_changed_files <"$raw" >"$files" || release_merge_fail "$number" "cannot read the changed files" || return 1
+  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" \
+    || release_merge_fail "$number" "cannot fetch the changed files" || return 1
+  release_merge_changed_files <"$raw" >"$files" \
+    || release_merge_fail "$number" "cannot read the changed files" || return 1
 
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
     "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") \
@@ -211,7 +224,7 @@ release_merge_pr_if_gate_passes() {
   echo "Merging PR #$number at $tested_sha."
   # One line: the workflow test selects the merge command by its start. `merged` tells a real merge
   # from a lost race, which also leaves the chain successfully.
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && merged=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit" || return 1
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && merged=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit, or its state could not be read" || return 1
   [[ "$merged" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
@@ -225,7 +238,8 @@ release_merge_run() {
     # A failed CI lookup for one PR must not stop the others, but it must fail the job.
     candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
     if [[ "$failed" == 1 ]]; then
-      echo "::error title=Release PR sweep failed::A lookup failed, so a PR may not have been merged."
+      printf '%s%s\n' "::error title=Release PR sweep failed::" \
+        "A lookup failed, so a PR may not have been merged."
     fi
     if [[ -z "$candidates" ]]; then
       [[ "$failed" == 1 ]] || echo "No open release PR has passed CI at its head. Nothing to merge."
@@ -237,8 +251,9 @@ release_merge_run() {
     return "$failed"
   fi
 
+  # BRANCH is the head branch of the triggering run, which a fork controls: % is escaped in the annotation.
   number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE") || {
-    echo "::error title=Release merge failed::cannot look up the open PR from $BRANCH in $REPO"
+    echo "::error title=Release merge failed::cannot look up the open PR from ${BRANCH//\%/%25} in $REPO"
     return 1
   }
   if [[ -z "$number" ]]; then
