@@ -5,7 +5,8 @@
 #
 # Known limits: only the phrase "needs Claude Code <digits and dots> or newer" counts, in that
 # case, so "requires", "Needs", "v2.1.330", "**2.1.330**" and "2.1.330+" go unseen. Only
-# plugins/*/README.md is read. A claim may wrap across lines, also inside a "> " blockquote.
+# plugins/*/README.md is read. A claim may wrap across lines, also inside a "> " blockquote
+# (nested "> > " too) or in a CRLF file.
 # The "states a minimum" test needs one claim across all READMEs, not one per plugin.
 # Usage: min-claude-code.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
@@ -26,8 +27,9 @@ is_one_build() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 
 # minimum_claims [readme ...]: one "path:needs Claude Code X or newer" line per claim. A path under
 # $REPO_ROOT prints repo-relative (plugins/<name>/README.md); any other path, such as a fixture in
-# $TEST_DIR, prints as given. Each file is read as one line, with blockquote markers dropped and
-# whitespace runs made one space, so a claim that a reflowed paragraph wrapped still matches. BSD
+# $TEST_DIR, prints as given. Each file is read as one line, with every leading blockquote marker
+# dropped and whitespace runs (CR included) made one space, so a claim that a reflowed paragraph
+# wrapped still matches. BSD
 # awk has no ENDFILE, so the previous file is flushed when the next one starts.
 minimum_claims() {
   [[ $# -gt 0 ]] || set -- "$REPO_ROOT"/plugins/*/README.md
@@ -36,7 +38,7 @@ minimum_claims() {
     printf '%s\n' "${claim_line#"$REPO_ROOT"/}"
   done < <(awk -v claim="$MINIMUM_CLAIM_PATTERN" '
     function flush(  rest) {
-      gsub(/[ \t]+/, " ", text)
+      gsub(/[ \t\r]+/, " ", text)
       rest = text
       while (match(rest, claim)) {
         print file ":" substr(rest, RSTART, RLENGTH)
@@ -45,7 +47,7 @@ minimum_claims() {
     }
     FNR == 1 && NR > 1 { flush() }
     FNR == 1 { file = FILENAME; text = "" }
-    { line = $0; sub(/^[ \t]*>[ \t]?/, "", line); text = text " " line }
+    { line = $0; sub(/^[ \t]*(>[ \t]?)+/, "", line); text = text " " line }
     END { if (NR > 0) flush() }
   ' "$@")
 }
@@ -118,6 +120,22 @@ test_a_claim_wrapped_inside_a_blockquote_is_read() {
   claims=$(minimum_claims "$TEST_DIR/README.md")
   [[ "$claims" == "$expected" ]] \
     || fail "a claim wrapped in a blockquote came out as '$claims'"
+}
+
+test_a_stale_minimum_wrapped_in_a_crlf_readme_is_reported() {
+  printf 'It needs Claude Code\r\n2.1.302 or newer.\r\n' > "$TEST_DIR/README.md"
+  local stale expected="$TEST_DIR/README.md:needs Claude Code 2.1.302 or newer"
+  stale=$(stale_minimums 2.1.330 "$TEST_DIR/README.md")
+  [[ "$stale" == "$expected" ]] \
+    || fail "a stale claim wrapped in a CRLF README came out as '$stale'"
+}
+
+test_a_stale_minimum_wrapped_in_a_nested_blockquote_is_reported() {
+  printf '%s\n' '> > It needs Claude' '> > Code 2.1.302 or newer.' > "$TEST_DIR/README.md"
+  local stale expected="$TEST_DIR/README.md:needs Claude Code 2.1.302 or newer"
+  stale=$(stale_minimums 2.1.330 "$TEST_DIR/README.md")
+  [[ "$stale" == "$expected" ]] \
+    || fail "a stale claim wrapped in a nested blockquote came out as '$stale'"
 }
 
 test_a_minimum_that_only_starts_with_the_pin_is_stale() {
