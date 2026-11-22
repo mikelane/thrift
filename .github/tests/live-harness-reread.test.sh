@@ -35,11 +35,38 @@ test_reread_make_probe_files_writes_lf_crlf_and_bom_files() {
   run_reread 'reread_make_probe_files "$TMPDIR/probe"
     wc -l < "$TMPDIR/probe/probe.txt"
     grep -c $'"'"'\r$'"'"' "$TMPDIR/probe/crlf.txt"
-    head -c 3 "$TMPDIR/probe/bom.txt" | od -An -tx1 | tr -d " "'
+    head -c 3 "$TMPDIR/probe/bom.txt" | od -An -tx1 | tr -d " "
+    wc -l < "$TMPDIR/probe/bom.txt"'
   assert_exit_code 0
   assert_file_matches "$OUTPUT" '^ *80$'
   assert_file_matches "$OUTPUT" '^30$'
   assert_file_matches "$OUTPUT" '^efbbbf$'
+  assert_file_matches "$OUTPUT" '^ *30$'
+}
+
+test_reread_read_prompt_names_the_path_and_the_reason_for_the_repeat() {
+  run_reread 'reread_read_prompt /work/a.ts ", again after an edit"'
+  assert_exit_code 0
+  assert_file_matches "$OUTPUT" '^Call the Read tool on /work/a\.ts, again after an edit\. Reply with only: done$'
+}
+
+test_reread_show_step_records_prints_none_when_the_step_wrote_no_record() {
+  run_reread 'live_init; : > "$LIVE_DECISIONS"; REREAD_BASELINE=$(decision_lines); show_step_records "empty"; check ok detail true; live_verdict s'
+  assert_exit_code 0
+  assert_out_has 'decision records of the step: empty'
+  assert_out_has '(none)'
+}
+
+test_reread_show_step_records_prints_the_records_after_the_baseline() {
+  run_reread 'live_init; { '"$(declare -f record)"'
+    record active ask 2.1.999 dedupe; } > "$LIVE_DECISIONS"
+    REREAD_BASELINE=$(decision_lines)
+    record active ask 2.1.999 pass >> "$LIVE_DECISIONS"
+    show_step_records "one"; check ok detail true; live_verdict s'
+  assert_exit_code 0
+  assert_out_has '"action":"pass"'
+  assert_out_lacks '"action":"dedupe"'
+  assert_out_lacks '(none)'
 }
 
 test_reread_all_records_are_active_ask_succeeds_for_active_ask_records_of_the_engine() {
@@ -77,6 +104,16 @@ test_reread_step_has_reads_only_the_records_after_the_baseline() {
     '"$(status_of "reread_step_has '.action == \"dedupe\"'")"
   assert_file_matches "$OUTPUT" '^STATUS=0$'
   assert_file_matches "$OUTPUT" '^STATUS=1$'
+}
+
+test_reread_pane_lacks_succeeds_when_the_screen_has_no_match() {
+  run_reread 'pane() { echo "all clear"; }; '"$(status_of 'reread_pane_lacks a "has not been read"')"
+  assert_status 0
+}
+
+test_reread_pane_lacks_fails_when_the_screen_has_a_match() {
+  run_reread 'pane() { echo "File has not been read yet"; }; '"$(status_of 'reread_pane_lacks a "has not been read"')"
+  assert_status 1
 }
 
 test_reread_pane_lacks_fails_when_the_pane_cannot_be_read() {

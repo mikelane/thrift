@@ -56,12 +56,21 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
     await read($, '/work/a.ts')
     expect(world.records.some(record => record.action === 'untested_engine')).toBe(false)
   })
+
+  test('It answers a repeat with a stub on the engine it was tested through', ACT, async ($, on) => {
+    const world = install($, on)
+    world.version = { version: '2.1.330', base: '2.1.330' }
+    putFile(world, '/work/a.ts', SEVEN_LINES)
+    await read($, '/work/a.ts')
+    const second = await read($, '/work/a.ts')
+    expect([isStub(second), world.records.some(record => record.action === 'untested_engine')]).toEqual([true, false])
+  })
 })
 
 describe('engineInfo: the engine version', () => {
   test('It runs as off on a development build', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.311-dev.20260920.t101500.sha1a2b3c4', base: '2.1.311-dev' }
+    world.version = { version: '2.1.330-dev.20260920.t101500.sha1a2b3c4', base: '2.1.330-dev' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect(isStub(await read($, '/work/a.ts'))).toBe(false)
