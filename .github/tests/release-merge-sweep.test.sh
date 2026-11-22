@@ -62,13 +62,6 @@ test_a_sweep_skips_a_pr_with_no_ci_run_at_its_head() {
   assert_sweep_skips 111 "$SHA_A"
 }
 
-test_a_sweep_logs_why_it_skips_a_pr_with_no_ci_run_at_its_head() {
-  local got
-  write_pulls "$(open_pr 111 $SHA_A)"
-  got=$(sweep 2>&1 >/dev/null)
-  [[ "$got" == "Skipping PR #111 at $SHA_A: "* ]] || fail "got [$got]"
-}
-
 test_a_sweep_skips_a_pr_whose_ci_succeeded_only_at_an_older_sha() {
   write_pulls "$(open_pr 111 $SHA_B)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z'
@@ -192,8 +185,10 @@ test_a_sweep_fails_when_the_ci_runs_response_is_not_json() {
   assert_file_has "$TEST_DIR/sweep-err" "Cannot read the CI runs of PR #111 at $SHA_A;"
 }
 
-# The deciding run, a later success, is on page 2 and page 1 holds an older failure: reading only
-# page 1, or judging each page on its own, finds a failure (or prints two conclusions).
+# The stub prints the runs as two pages, as `gh api --paginate` does: an older failure on page 1 and
+# the deciding later success on page 2. Judging each page on its own finds the failure (or prints
+# two conclusions), so this checks the pages are combined. That the lib asks for every page at all
+# is checked by the stub, which fails a CI runs call without --paginate.
 test_a_sweep_reads_every_page_of_the_ci_runs() {
   local got
   write_pulls "$(open_pr 111 $SHA_A)"

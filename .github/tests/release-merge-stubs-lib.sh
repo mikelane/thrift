@@ -25,9 +25,11 @@ write_pr() {
 
 # stub_gh: a `gh` on PATH that answers the pull request list, the CI runs of a head commit and a
 # single pull request from files in $TEST_DIR (pulls.json, runs-<sha>.json, pr-<n>.json). A head
-# commit with no runs-<sha>.json has no CI run. The merge command logs its arguments to merge-calls
-# and fails when merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if
-# that exists (the other trigger got there first).
+# commit with no runs-<sha>.json has no CI run. The list calls (the pull request list with a
+# query, CI runs, a pull request's files) fail unless `--paginate` is given, as a single page
+# would miss results. The merge command logs its arguments to merge-calls and fails when
+# merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if that exists
+# (the other trigger got there first).
 stub_gh() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
@@ -38,17 +40,21 @@ stub_gh() {
     '  [[ -r "$dir/pr-after-failed-merge.json" ]] && cp "$dir/pr-after-failed-merge.json" "$dir/pr-$3.json"' \
     '  echo "merge refused" >&2; exit 1' \
     'fi' \
-    'path= ; for arg in "$@"; do [[ "$arg" == repos/* ]] && path=$arg; done' \
+    'path= paginated=0' \
+    'for arg in "$@"; do [[ "$arg" == repos/* ]] && path=$arg; [[ "$arg" == --paginate ]] && paginated=1; done' \
+    '# A list call without --paginate would read only the first page: fail it, naming the call.' \
+    'require_paginate() { [[ $paginated == 1 ]] || { echo "gh api $path lacks --paginate" >&2; exit 1; }; }' \
     'case "$path" in' \
     '  */actions/runs\?head_sha=*)' \
+    '    require_paginate' \
     '    sha=${path#*head_sha=}; sha=${sha%%&*}' \
     '    [[ "$path" == *event=pull_request* ]] || { echo "no event filter" >&2; exit 1; }' \
     '    echo "$GH_TOKEN" >"$dir/runs-token"' \
     '    [[ -e "$dir/runs-$sha.error" ]] && { echo "HTTP 403" >&2; exit 1; }' \
     '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
     '  */pulls) jq -r ".[0].number // empty" "$dir/pulls.json" ;;' \
-    '  */pulls/*/files) cat "$dir/files-$(basename "$(dirname "$path")").json" ;;' \
-    '  */pulls\?*) [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
+    '  */pulls/*/files) require_paginate; cat "$dir/files-$(basename "$(dirname "$path")").json" ;;' \
+    '  */pulls\?*) require_paginate; [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
     '  */pulls/*) cat "$dir/pr-${path##*/}.json" ;;' \
     '  *) echo "unexpected gh call: $*" >&2; exit 1 ;;' \
     'esac' >"$TEST_DIR/gh"

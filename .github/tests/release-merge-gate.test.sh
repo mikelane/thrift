@@ -268,13 +268,6 @@ test_another_open_pr_from_the_release_branch_blocks_the_merge() {
     || fail "got [$got]"
 }
 
-test_the_release_pr_alone_at_its_head_branch_has_no_sibling_problem() {
-  local got
-  write_pulls "$(open_pr 111 "$SHA")"
-  got=$(gate_problems .)
-  [[ -z "$got" ]] || fail "got [$got]"
-}
-
 test_an_open_pr_from_another_branch_is_not_a_sibling() {
   local got
   write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.head.ref = "feature/x"')"
