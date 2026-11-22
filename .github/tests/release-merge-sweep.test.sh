@@ -45,10 +45,10 @@ assert_sweep_looks_up_no_ci_run() {
   assert_no_file "$TEST_DIR/runs-token"
 }
 
-# ci_status: the code release_merge_ci_passed returns for PR 111 at SHA_A.
+# ci_status: the code release_merge_ci_outcome returns for PR 111 at SHA_A.
 ci_status() {
   stub_gh
-  release_merge_ci_passed "$REPO" "$SHA_A" "$RELEASE_BRANCH" 111 main >/dev/null 2>&1 \
+  release_merge_ci_outcome "$REPO" "$SHA_A" "$RELEASE_BRANCH" 111 main >/dev/null 2>&1 \
     && echo 0 || echo $?
 }
 
@@ -107,7 +107,7 @@ test_a_sweep_selects_a_pr_whose_ci_succeeded_at_its_head() {
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
 
-test_a_sweep_skips_a_pr_whose_ci_failed_at_its_head() {
+test_a_sweep_warns_about_a_pr_whose_ci_failed_at_its_head() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed failure 2026-10-18T10:00:00Z'
   assert_sweep_warns_ci_failed 111 "$SHA_A"

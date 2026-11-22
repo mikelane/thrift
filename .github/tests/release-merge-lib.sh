@@ -82,8 +82,8 @@ release_merge_problems() {
   done <"$files"
 }
 
-# release_merge_ci_passed <repo> <sha> <head-ref> <number> <base>: succeeds only when the latest CI
-# run for the pull request event at <sha> has concluded with success. A run counts only when it is
+# release_merge_ci_outcome <repo> <sha> <head-ref> <number> <base>: reports, as its return code,
+# how the latest CI run for the pull request event at <sha> ended. A run counts only when it is
 # the workflow file .github/workflows/ci.yml (not a workflow that merely has the display name CI),
 # ran for a head in <repo> itself (not a fork that pushed the same commit), on branch <head-ref>,
 # and for pull request <number> into <base>. The runs API lists every open PR at the run's head, "not
@@ -96,7 +96,7 @@ release_merge_problems() {
 # it is not mistaken for "no run yet".
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
-release_merge_ci_passed() {
+release_merge_ci_outcome() {
   local runs conclusion
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
   conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" --argjson number "$4" --arg base "$5" '
@@ -134,7 +134,7 @@ release_merge_sweep() (
     | {
         local lookup_failed=0
         while read -r number sha ref; do
-          release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
+          release_merge_ci_outcome "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
           case "$ci_status" in
             0) echo "$number $sha" ;;
             1) echo "Skipping PR #$number at $sha: no CI run for it alone at that head" \
@@ -157,11 +157,11 @@ release_merge_sweep() (
 # message says whether it was merged or closed without merging (the same PR read gives `merged`).
 # Fails for any other cause, so a real merge failure still fails the job.
 release_merge_lost_race() {
-  local state_and_head state head merged
-  state_and_head=$(set -o pipefail
+  local pr_fields state head merged
+  pr_fields=$(set -o pipefail
     gh api "repos/$1/pulls/$2" \
       | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
-  read -r state head merged <<<"$state_and_head"
+  read -r state head merged <<<"$pr_fields"
   if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
   elif [[ "$state" != open ]]; then
@@ -188,7 +188,7 @@ release_merge_fail() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 merged=0 pr files raw problems problem
+  local number=$1 tested_sha=$2 did_merge=0 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file" || return 1
@@ -222,10 +222,10 @@ release_merge_pr_if_gate_passes() {
   fi
 
   echo "Merging PR #$number at $tested_sha."
-  # One line: the workflow test selects the merge command by its start. `merged` tells a real merge
-  # from a lost race, which also leaves the chain successfully.
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && merged=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit, or its state could not be read" || return 1
-  [[ "$merged" == 0 ]] || echo "Merged PR #$number at $tested_sha."
+  # One line: the workflow test selects the merge command by its start. `did_merge` tells a real
+  # merge from a lost race, which also leaves the chain successfully.
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && did_merge=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit, or its state could not be read" || return 1
+  [[ "$did_merge" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
