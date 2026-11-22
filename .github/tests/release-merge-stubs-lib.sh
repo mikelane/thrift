@@ -25,8 +25,9 @@ write_pr() {
 
 # stub_gh: a `gh` on PATH that answers the pull request list, the CI runs of a head commit and a
 # single pull request from files in $TEST_DIR (pulls.json, runs-<sha>.json, pr-<n>.json). A head
-# commit with no runs-<sha>.json has no CI run. The list calls (the pull request list with a query, CI
-# runs, a pull request's files) fail unless `--paginate` is given, as a single page would miss results. The merge command logs its arguments to merge-calls
+# commit with no runs-<sha>.json has no CI run. The list calls (the pull request list with a query,
+# CI runs, a pull request's files) fail unless `--paginate` is given, as a single page would miss
+# results. The merge command logs its arguments to merge-calls
 # and fails when merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if
 # that exists (the other trigger got there first).
 stub_gh() {

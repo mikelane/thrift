@@ -107,15 +107,16 @@ test_allowlist_names_the_default_version_txt_of_a_simple_package() {
   [[ $'\n'"$got"$'\n' == *$'\nplugins/handoff/version.txt\n'* ]] || fail "got [$got]"
 }
 
-# A top-level release-type applies to every package, as in release-please's mergeReleaserConfig, so a
-# package with no release-type of its own gets the Simple strategy's default version.txt.
+# A top-level release-type applies to every package, as in release-please's mergeReleaserConfig, so
+# a package with no release-type of its own gets the Simple strategy's default version.txt.
 test_allowlist_names_the_default_version_txt_when_only_the_top_level_release_type_is_simple() {
   local got
   got=$(allowlist_for '{"release-type": "simple", "packages": {"plugins/handoff": {}}}')
   [[ $'\n'"$got"$'\n' == *$'\nplugins/handoff/version.txt\n'* ]] || fail "got [$got]"
 }
 
-# A package's own release-type replaces the top-level one: a node package has no default version.txt.
+# A package's own release-type replaces the top-level one: a node package has no default
+# version.txt.
 test_allowlist_lets_a_package_release_type_override_a_simple_top_level_one() {
   local got
   got=$(allowlist_for '{"release-type": "simple", "packages": {"plugins/handoff": {"release-type": "node"}}}')
