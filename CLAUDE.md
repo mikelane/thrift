@@ -11,57 +11,77 @@ specific to this repo.
   plugin's entry lands in the same PR that adds the plugin, never before.
 - Tests for the repo's own CI live in `.github/tests/`, not under a plugin. `canary-report.sh` pulls
   the canary step scripts out of `ci.yml` and runs them, with `scripts/check.sh`, against stub `gh`,
-  `claude` and `tsc`. It needs `jq`, `openssl`, `dash` (three live-harness tests run the session
-  command under a POSIX `sh`) and `ruby` (the release-merge workflow test parses `release-merge.yml`
-  with Psych and compares the merge job as data; `ubuntu-latest` has Ruby) and `python3` (the same
-  test builds its workflow variants with it) and runs on bash 3.2 and 5. Pass part of a test function's name (not a
-  file name) to run only matching tests: `.github/tests/canary-report.sh [name-fragment]`. A
-  fragment that matches no test exits 1. It runs every `.github/tests/*.test.sh`, so a new test file
-  needs no wiring; each ends with `run_tests "$@"` so it honors the fragment. The shared code sits
-  in the `*-lib.sh` and `*.awk` files beside them.
+  `claude` and `tsc`.
+  - It needs these tools:
+    - `jq`
+    - `openssl`
+    - `dash`: three live-harness tests run the session command under a POSIX `sh`.
+    - `ruby`: the release-merge workflow test parses `release-merge.yml` with Psych and compares
+      the merge job as data. `ubuntu-latest` has Ruby.
+    - `python3`: the same test builds its workflow variants with it.
+  - It runs on bash 3.2 and 5.
+  - Pass part of a test function's name (not a file name) to run only matching tests:
+    `.github/tests/canary-report.sh [name-fragment]`. A fragment that matches no test exits 1.
+  - It runs every `.github/tests/*.test.sh`, so a new test file needs no wiring; each ends with
+    `run_tests "$@"` so it honors the fragment. The shared code sits in the `*-lib.sh` and `*.awk`
+    files beside them.
 - Releases come from release-please in manifest mode (`.github/workflows/release-please.yml`, on
-  push to `main`). `release-please-config.json` has one package per plugin
-  (`plugins/<name>`, `release-type: simple`, `component: <name>`, tag `<name>-vX.Y.Z`) and
-  `.release-please-manifest.json` holds each plugin's current version. Release-please keeps a
-  release PR open per plugin with a `feat` or `fix` commit under that plugin's path; the PR writes
-  `plugins/<name>/CHANGELOG.md` and the `version` in `plugin.json`. Never edit either by hand. A
-  commit that touches no plugin path (`scripts/`, `.github/`, root docs) releases nothing. A new
-  plugin gets its config package and manifest entry in the same PR that adds it to
-  `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when the
-  component is not the marketplace name, or when a manifest version differs from `plugin.json`.
-  The release PR is opened with a GitHub App token (`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`),
-  because a PR opened with `GITHUB_TOKEN` runs no CI. `.github/workflows/release-merge.yml`
-  squash-merges it once the CI workflow succeeds on it: the PR must be open, from a
-  `release-please--*` branch in this repo, authored by the App, at the commit CI tested, and change
-  only the manifest and each package's changelog, version file and extra-files
-  (the gate, the sweep and the merge step all live in `.github/tests/release-merge-lib.sh`, and the
-  workflow step only sources it and calls `release_merge_run`; the `release-merge-*.test.sh` files, split
-  by subject (gate, sweep, step, workflow), run them against the stub `gh` in
-  `release-merge-stubs-lib.sh`). The workflow test compares the whole parsed `release-merge.yml` with
-  `.github/tests/release-merge-workflow.expected.json`, so any change to the workflow must update that
-  fixture in the same PR. Anything else waits
-  for a person. The workflow has a second trigger, the Release Please workflow completing on a push
-  to `main`: a commit that touches no plugin path leaves the release PR alone, so CI never reruns
-  on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its current
-  head succeeded and sends each through the same gate and merge. A head with no CI run yet, or one
-  still running, is skipped (its own CI completion merges it). A CI lookup that fails turns the job
-  red instead of reading as "no run yet". A run's `pull_requests` lists every open PR at its head,
-  not just the one that triggered it, so the gate still refuses a release PR while another open PR
-  has the same head branch (for example a PR from the release branch into another base). If a PR is still stuck, rerun its last CI run with
-  `gh run rerun <CI run id>`. The sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job
-  permission `actions: read`), because the App token has no Actions access; the PR list, the gate
-  and the merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
-  environment, limited to `main` (both token-minting jobs set `environment: release`), so a
-  branch workflow cannot mint a token. The App must be a bypass actor (pull requests only) on the
-  "main code-owner review" ruleset, or the merge is refused for want of a code-owner approval. A
-  user-owned repo can't use classic `bypass_pull_request_allowances`, so the bypass has to live in
-  a ruleset. That ruleset holds only the `pull_request` rule, and the required status checks stay
-  in classic branch protection, because a ruleset bypass actor skips every rule in its ruleset. A
-  second ruleset, "release-please branches", restricts creating, updating, deleting and
-  force-pushing `refs/heads/release-please--*`, with the App as the only bypass actor (always).
-  Only the App can write a release branch, so every commit the merge gate sees came from
-  release-please. A gate check on commit authors would not be enough: GitHub takes a commit's
-  author from its email, which anyone can set.
+  push to `main`).
+  - Config: `release-please-config.json` has one package per plugin (`plugins/<name>`,
+    `release-type: simple`, `component: <name>`, tag `<name>-vX.Y.Z`) and
+    `.release-please-manifest.json` holds each plugin's current version.
+  - Release PRs: release-please keeps a release PR open per plugin with a `feat` or `fix` commit
+    under that plugin's path; the PR writes `plugins/<name>/CHANGELOG.md` and the `version` in
+    `plugin.json`. Never edit either by hand. A commit that touches no plugin path (`scripts/`,
+    `.github/`, root docs) releases nothing.
+  - New plugin: it gets its config package and manifest entry in the same PR that adds it to
+    `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
+    the component is not the marketplace name, or when a manifest version differs from
+    `plugin.json`.
+  - Opening the PR: the release PR is opened with a GitHub App token (`RELEASE_APP_ID`,
+    `RELEASE_APP_PRIVATE_KEY`), because a PR opened with `GITHUB_TOKEN` runs no CI.
+  - Merging it: `.github/workflows/release-merge.yml` squash-merges the release PR once the CI
+    workflow succeeds on it, so nobody approves or merges it. GitHub shows "Review required" on it
+    while CI runs (about two minutes); that is expected. An agent never approves or merges a
+    release PR by hand. If one is still open after CI passed, rerun its last CI run with
+    `gh run rerun <CI run id>`.
+  - The merge gate: the PR must be open, from a `release-please--*` branch in this repo, authored
+    by the App, at the commit CI tested, and change only the manifest and each package's changelog,
+    version file and extra-files. Anything else waits for a person.
+  - Where the code lives: the gate, the sweep and the merge step all live in
+    `.github/tests/release-merge-lib.sh`, and the workflow step only sources it and calls
+    `release_merge_run`. The `release-merge-*.test.sh` files are split by subject (gate, sweep,
+    step, workflow, adversarial) and run them against the stub `gh` in
+    `release-merge-stubs-lib.sh`. `release-merge-adversarial.test.sh` holds cases where the gate
+    disagrees with what release-please writes or with the PR the workflow should merge.
+  - The workflow fixture: the workflow test compares the whole parsed `release-merge.yml` with
+    `.github/tests/release-merge-workflow.expected.json`, so any change to the workflow must update
+    that fixture in the same PR. Psych reads the YAML key `on` as `true`, so the fixture has a
+    `"true"` key where the triggers are.
+  - The sweep: the workflow has a second trigger, the Release Please workflow completing on a push
+    to `main`. A commit that touches no plugin path leaves the release PR alone, so CI never
+    reruns on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its
+    current head succeeded and sends each through the same gate and merge. A head with no CI run
+    yet, or one still running, is skipped (its own CI completion merges it). A CI lookup that fails
+    turns the job red instead of reading as "no run yet". A run's `pull_requests` lists every open
+    PR at its head, not just the one that triggered it, so the gate still refuses a release PR
+    while another open PR has the same head branch (for example a PR from the release branch into
+    another base).
+  - Tokens: the sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job permission
+    `actions: read`), because the App token has no Actions access; the PR list, the gate and the
+    merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
+    environment, limited to `main` (both token-minting jobs set `environment: release`), so a
+    branch workflow cannot mint a token.
+  - Rulesets: the App must be a bypass actor (pull requests only) on the "main code-owner review"
+    ruleset, or the merge is refused for want of a code-owner approval. A user-owned repo can't use
+    classic `bypass_pull_request_allowances`, so the bypass has to live in a ruleset. That ruleset
+    holds only the `pull_request` rule, and the required status checks stay in classic branch
+    protection, because a ruleset bypass actor skips every rule in its ruleset. A second ruleset,
+    "release-please branches", restricts creating, updating, deleting and force-pushing
+    `refs/heads/release-please--*`, with the App as the only bypass actor (always). Only the App
+    can write a release branch, so every commit the merge gate sees came from release-please. A
+    gate check on commit authors would not be enough: GitHub takes a commit's author from its
+    email, which anyone can set.
 - `ci.yml` runs on `pull_request` only for PRs into `main` (`branches: [main]`, pinned by
   `ci-trigger.test.sh`), so an ordinary PR into another base produces no CI run. That is not a
   guarantee: a run takes its workflow file from the PR's merge commit, so a base branch whose
