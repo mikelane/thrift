@@ -127,7 +127,8 @@ test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipef
 
 test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() {
   stage_release_pr 111 "$SHA_A" handoff success
-  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
+    >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 0
@@ -168,7 +169,8 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_gate_cannot_be_checked() {
 
 test_the_merge_step_does_not_log_a_merged_line_after_a_lost_race() {
   stage_release_pr 111 "$SHA_A" handoff success
-  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
+    >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_out_lacks "Merged PR"
@@ -177,7 +179,8 @@ test_the_merge_step_does_not_log_a_merged_line_after_a_lost_race() {
 
 test_the_merge_step_stays_green_and_says_so_when_the_pr_was_closed_without_merging() {
   stage_release_pr 111 "$SHA_A" handoff success
-  jq '.state = "closed" | .merged = false' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  jq '.state = "closed" | .merged = false' "$TEST_DIR/pr-111.json" \
+    >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 0
@@ -250,7 +253,8 @@ test_a_ci_triggered_run_escapes_percent_in_the_branch_of_the_lookup_error() {
   rm -f "$TEST_DIR/pulls.json"
   stub_gh
   mkdir -p "$TEST_DIR/work"
-  (BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI BRANCH='release-please--%0A' \
+  (BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI \
+    BRANCH='release-please--%0A' \
     CI_TESTED_SHA="$SHA_A" release_merge_run) >"$OUTPUT" 2>&1 || true
   assert_out_has "cannot look up the open PR from release-please--%250A in"
 }
@@ -261,22 +265,15 @@ test_a_ci_triggered_run_fails_when_the_pr_lookup_fails_even_without_set_e() {
   rm -f "$TEST_DIR/pulls.json"
   stub_gh
   mkdir -p "$TEST_DIR/work"
-  (set +e; BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI BRANCH=$RELEASE_BRANCH \
+  (set +e; BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI \
+    BRANCH=$RELEASE_BRANCH \
     CI_TESTED_SHA="$SHA_A" release_merge_run) >"$OUTPUT" 2>&1
   # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
   EXIT_CODE=$?
   assert_exit_code 1
   assert_out_lacks "Nothing to merge"
-  assert_out_has "::error title=Release merge failed::cannot look up the open PR from $RELEASE_BRANCH"
-}
-
-test_a_failed_pr_lookup_escapes_percent_in_the_branch_it_names_in_the_error_annotation() {
-  rm -f "$TEST_DIR/pulls.json"
-  stub_gh
-  mkdir -p "$TEST_DIR/work"
-  (set +e; BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI BRANCH='x%0A::error::boom' \
-    CI_TESTED_SHA="$SHA_A" release_merge_run) >"$OUTPUT" 2>&1
-  assert_out_has "cannot look up the open PR from x%250A::error::boom in"
+  assert_out_has \
+    "::error title=Release merge failed::cannot look up the open PR from $RELEASE_BRANCH"
 }
 
 test_a_sweep_run_with_no_candidate_says_so_and_succeeds() {

@@ -29,7 +29,8 @@ assert_sweep_warns_ci_failed() {
   status=$?
   [[ -z "$got" ]] || fail "selected [$got]"
   [[ "$status" == 0 ]] || fail "the sweep exited $status"
-  assert_file_has "$TEST_DIR/sweep-err" "::warning title=Release PR #$1 not merged::CI did not succeed at $2"
+  assert_file_has "$TEST_DIR/sweep-err" \
+    "::warning title=Release PR #$1 not merged::CI did not succeed at $2"
   assert_file_lacks "$TEST_DIR/sweep-err" "Skipping PR #$1"
 }
 
@@ -47,7 +48,8 @@ assert_sweep_looks_up_no_ci_run() {
 # ci_status: the code release_merge_ci_passed returns for PR 111 at SHA_A.
 ci_status() {
   stub_gh
-  release_merge_ci_passed "$REPO" "$SHA_A" "$RELEASE_BRANCH" 111 main >/dev/null 2>&1 && echo 0 || echo $?
+  release_merge_ci_passed "$REPO" "$SHA_A" "$RELEASE_BRANCH" 111 main >/dev/null 2>&1 \
+    && echo 0 || echo $?
 }
 
 test_the_ci_lookup_returns_0_when_the_latest_run_succeeded() {
@@ -80,7 +82,8 @@ test_the_ci_lookup_returns_4_when_the_latest_run_was_cancelled() {
 }
 
 test_the_ci_lookup_returns_3_not_4_when_a_new_run_is_going_after_a_failure() {
-  write_runs "$SHA_A" 'CI in_progress null 2026-10-18T11:00:00Z' 'CI completed failure 2026-10-18T10:00:00Z'
+  write_runs "$SHA_A" 'CI in_progress null 2026-10-18T11:00:00Z' \
+    'CI completed failure 2026-10-18T10:00:00Z'
   [[ "$(ci_status)" == 3 ]] || fail "got $(ci_status)"
 }
 
@@ -194,7 +197,8 @@ test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
   write_runs "$SHA_B" 'CI completed failure 2026-10-18T10:00:00Z - - - 112'
   got=$(sweep 2>"$TEST_DIR/sweep-err")
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
-  assert_file_has "$TEST_DIR/sweep-err" "::warning title=Release PR #112 not merged::CI did not succeed at $SHA_B"
+  assert_file_has "$TEST_DIR/sweep-err" \
+    "::warning title=Release PR #112 not merged::CI did not succeed at $SHA_B"
 }
 
 test_the_ci_run_lookup_uses_the_runs_token_not_the_app_token() {

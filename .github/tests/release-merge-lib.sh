@@ -251,9 +251,11 @@ release_merge_run() {
     return "$failed"
   fi
 
-  # BRANCH is the head branch of the triggering run, which a fork controls: % is escaped in the annotation.
+  # BRANCH is the head branch of the triggering run, which a fork controls: % is escaped in the
+  # annotation.
   number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE") || {
-    echo "::error title=Release merge failed::cannot look up the open PR from ${BRANCH//\%/%25} in $REPO"
+    printf '%s%s\n' "::error title=Release merge failed::" \
+      "cannot look up the open PR from ${BRANCH//\%/%25} in $REPO"
     return 1
   }
   if [[ -z "$number" ]]; then
