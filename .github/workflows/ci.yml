@@ -1,8 +1,11 @@
 name: CI
 
 # Every plugin runs `claude plugin validate`, `tsc -p`, and `claude plugin test` against two Claude
-# Code builds. The pinned build is the last one the plugins were tested through (the matrix below
-# names it). The latest build tells us early that an update broke a plugin.
+# Code builds. The pinned build is the oldest build CI checks, and it is the build every plugin's
+# stated minimum points at ("needs Claude Code X or newer" in a plugin README;
+# .github/tests/min-claude-code.test.sh fails when one differs from the pin). Changing the pin
+# means updating those claims in the same change. No job runs below it, so nothing is promised for
+# older builds. The latest build tells us early that an update broke a plugin.
 #
 # Branch protection requires only "check (pinned)". "check (latest)" never blocks a change.
 # None of the three commands needs an API key, so fork pull requests run the full matrix.
