@@ -10,9 +10,9 @@ Success means fewer bytes of repeat file contents entering the context, measured
 `bytes_saved` summed per session in `decisions.jsonl` against the `bytes_would_save` baseline that
 `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.311. One live session has been checked,
-> in `ask` mode on Claude Code 2.1.308 in the Desktop app; see
-> [What has been verified live](#what-has-been-verified-live).
+> **Status:** early. The tests pass against Claude Code 2.1.330, and the plugin is tested through
+> that release. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 in the
+> terminal CLI; see [What has been verified live](#what-has-been-verified-live).
 
 ## Install
 
@@ -161,9 +161,9 @@ first.
 ## Compatibility
 
 The plugin API is early access and changes between Claude Code releases, so an update can break a
-plugin without any error. The plugin was tested through Claude Code 2.1.311. On the first `Read` of a
+plugin without any error. The plugin was tested through Claude Code 2.1.330. On the first `Read` of a
 session it reads `$.session.version()`. If the `base` is missing, is not exactly `MAJOR.MINOR.PATCH`
-(a development build such as `2.1.311-dev`), or names a release newer than 2.1.311, it runs as `off`
+(a development build such as `2.1.330-dev`), or names a release newer than 2.1.330, it runs as `off`
 for the rest of the plugin's life and writes one `untested_engine` record. It says nothing in the
 session. Every record carries `engine_version`, so a change in behavior shows up as a split between
 versions.
@@ -207,8 +207,8 @@ means fewer stubs until the files are read once more.
 ## What has been verified live
 
 The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
-log. The current live check ran on top of them in the Code tab of the Claude Desktop app, with
-`engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
+log. Two live checks ran on top of them: the terminal CLI on 2.1.330 (the current one, below), and
+before it the Code tab of the Claude Desktop app, with `engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
 `readMode` set to `ask`. The main probe file had 80 lines (`Read` showed 81, the last one empty).
 Every step ran in one user turn, and every record had `mode: active` and `effective_mode: ask`.
 
@@ -266,11 +266,42 @@ the fail-safe result. A `Bash` call followed by a separate read logs the `invali
 
 An earlier live check, at `cba0844`, also passed steps A to J, before the content-match fix.
 
+### Terminal CLI, Claude Code 2.1.330
+
+`scripts/live/live.sh reread ask-mode-core-steps` drives one real terminal session in tmux, with
+the plugin loaded from `plugins/reread` at head `7235c63` and `readMode` set to `ask`. Each step is
+its own prompt (so each is its own turn), and the scenario judges the decision records the step
+wrote. It passed (11 checks). Every record has `engine_version` 2.1.330, `mode` active and
+`effective_mode` ask. The file has 80 lines (`Read` shows 81).
+
+| Step | Outcome |
+|---|---|
+| A. Read the whole file | Full: `pass`, `first_read` |
+| B. Read it again | Stub: `dedupe`, `exact_repeat`, `gross_bytes` 5265, `stub_bytes` 367, `bytes_saved` 4898 (`gross_bytes - stub_bytes`) |
+| C. Read it a third time | Full: `override`, `override_after_stub` |
+| E. `Edit` line 40 | Applied, no "has not been read" refusal. `invalidate`, `edit`, 1 dropped |
+| K. A 30-line CRLF file, read twice | Full, then a stub (1935/365/1570), `lines` 31 |
+| L. A 30-line file with a BOM, read twice | Full, then a stub (1905/363/1542), `lines` 31 |
+
+The same run also showed:
+
+- Claude Code's own dedup did not answer any of the repeat reads on 2.1.330 (no `core_dedup`
+  record), so the plugin's stub was what the model got.
+- The `ask`-mode transcript line is drawn: `reread: reread: <path> is unchanged, so the repeat Read
+  got a stub instead of its contents (1542 bytes saved)`. The engine adds the plugin's name to the
+  text the plugin logs, so the name appears twice. The `Read` line above it reads `Read 1 file ·
+  1 failed`, which is how Claude Code renders the `file_unchanged` result.
+
+Before the constant moved, the same scenario on 2.1.330 failed: the plugin wrote one
+`untested_engine` record and then only `mode` shadow, `action` none records with `effective_mode`
+off, so no stub was sent and none of the steps saw its decision.
+
+Not run in this check: steps D, F to J and M, `off` and `act`, and a subagent.
+
 ### Not verified live
 
-- The `ask`-mode transcript line (the model cannot see it, and no person looked).
 - `off` and `act` modes in a live session (only `ask` ran).
-- The terminal CLI (only Desktop ran, on engine 2.1.308).
+- Steps D, F to J and M on the terminal CLI (they ran on Desktop, 2.1.308).
 - Compaction, `/clear` and resume invalidation, and `turns_since_read` above 0 (every step ran in
   one user turn, so every stub says "turn 1").
 - Rewind, and whether `$.session.messages()` reflects it.

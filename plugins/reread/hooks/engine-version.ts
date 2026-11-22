@@ -1,4 +1,4 @@
-const TESTED_PARTS = [2, 1, 311] as const
+const TESTED_PARTS = [2, 1, 330] as const
 
 export const TESTED_THROUGH = TESTED_PARTS.join('.')
 
@@ -14,7 +14,7 @@ const isAfterTested = (release: readonly number[]): boolean => {
   return firstDifference !== -1 && (release[firstDifference] ?? 0) > (TESTED_PARTS[firstDifference] ?? 0)
 }
 
-// A development build (`2.1.311-dev`), a version that is not spelled as a release, and a release newer than the one the
+// A development build (`2.1.330-dev`), a version that is not spelled as a release, and a release newer than the one the
 // plugin was tested through all run as `off`: what Read returns there has not been checked.
 export const isUntestedEngine = (base: string | undefined): boolean => {
   const release = base === undefined ? null : releaseParts(base)
