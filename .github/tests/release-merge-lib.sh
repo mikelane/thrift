@@ -237,7 +237,10 @@ release_merge_run() {
     return "$failed"
   fi
 
-  number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE")
+  number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE") || {
+    echo "::error title=Release merge failed::cannot look up the open PR from $BRANCH in $REPO"
+    return 1
+  }
   if [[ -z "$number" ]]; then
     echo "No open PR from $BRANCH in $REPO. Nothing to merge."
     return 0

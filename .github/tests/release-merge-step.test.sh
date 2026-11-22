@@ -184,6 +184,21 @@ test_a_ci_triggered_run_fails_when_the_gate_cannot_fetch_the_pr() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# Run without set -e, as a caller that does not set it would: only an explicit check on the lookup
+# stops a failed one from reading as "no open PR".
+test_a_ci_triggered_run_fails_when_the_pr_lookup_fails_even_without_set_e() {
+  rm -f "$TEST_DIR/pulls.json"
+  stub_gh
+  mkdir -p "$TEST_DIR/work"
+  (set +e; BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work TRIGGER=CI BRANCH=$RELEASE_BRANCH \
+    CI_TESTED_SHA="$SHA_A" release_merge_run) >"$OUTPUT" 2>&1
+  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
+  EXIT_CODE=$?
+  assert_exit_code 1
+  assert_out_lacks "Nothing to merge"
+  assert_out_has "::error title=Release merge failed::cannot look up the open PR from $RELEASE_BRANCH"
+}
+
 test_a_sweep_run_with_no_candidate_says_so_and_succeeds() {
   write_pulls
   TRIGGER='Release Please' run_merge_step release_merge_run
