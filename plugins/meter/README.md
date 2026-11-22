@@ -4,7 +4,7 @@ A side pane that shows what a session costs while you work: context fill, how fa
 burning the 5-hour and weekly rate-limit windows, the session cost, and the largest parts of the
 context. The pane is drawn outside the model's context, so it adds no tokens to any turn.
 
-It needs Claude Code 2.1.302 or newer, whose `$.session.usage()`, `session.measure` event and
+It needs Claude Code 2.1.330 or newer, whose `$.session.usage()`, `session.measure` event and
 `$.ui.open` pane it uses.
 
 ```
