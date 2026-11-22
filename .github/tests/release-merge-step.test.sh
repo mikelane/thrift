@@ -71,6 +71,20 @@ test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+test_the_merge_step_names_the_pr_in_an_error_when_it_cannot_be_fetched() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  rm "$TEST_DIR/pr-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the PR"
+}
+
+test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_fetched() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  rm "$TEST_DIR/files-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the changed files"
+}
+
 test_the_merge_step_fails_when_the_changed_files_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/files-111.json"
@@ -107,6 +121,13 @@ test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_t
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 1
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+}
+
+test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_out_has "::error title=Release PR #111 not merged::the merge failed at $SHA_A"
 }
 
 test_the_merge_step_leaves_no_temp_files_after_a_merge() {

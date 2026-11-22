@@ -154,6 +154,13 @@ release_merge_lost_race() {
   fi
 }
 
+# release_merge_fail <number> <reason>: prints an error annotation naming PR <number> and returns 1.
+# Each failing step of release_merge_pr_if_gate_passes ends with it, so the log says which PR failed.
+release_merge_fail() {
+  echo "::error title=Release PR #$1 not merged::${2//\%/%25}"
+  return 1
+}
+
 # release_merge_pr_if_gate_passes <number> <tested-sha>: runs the gate on PR <number> against
 # <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. A refusal
 # returns 0, so the job stays green. A failed lookup, or a failed merge that is not a lost race,
@@ -163,16 +170,17 @@ release_merge_lost_race() {
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
-  pr=$(mktemp "$work_dir/pr.XXXXXX") || return 1
-  files=$(mktemp "$work_dir/files.XXXXXX") || return 1
-  raw=$(mktemp "$work_dir/raw.XXXXXX") || return 1
-  gh api "repos/$REPO/pulls/$number" >"$pr" || return 1
+  pr=$(mktemp "$work_dir/pr.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
+  files=$(mktemp "$work_dir/files.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
+  raw=$(mktemp "$work_dir/raw.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
+  gh api "repos/$REPO/pulls/$number" >"$pr" || release_merge_fail "$number" "cannot fetch the PR" || return 1
   # Two steps, not a pipe: a failed fetch must not read as "no changed files" without pipefail.
-  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" || return 1
-  release_merge_changed_files <"$raw" >"$files" || return 1
+  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" || release_merge_fail "$number" "cannot fetch the changed files" || return 1
+  release_merge_changed_files <"$raw" >"$files" || release_merge_fail "$number" "cannot read the changed files" || return 1
 
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") || return 1
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") \
+    || release_merge_fail "$number" "cannot check the gate" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
   # annotation, which shows on the run summary without opening the log. Reasons carry
@@ -188,7 +196,9 @@ release_merge_pr_if_gate_passes() {
   fi
 
   echo "Merging PR #$number at $tested_sha."
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null || release_merge_lost_race "$REPO" "$number" "$tested_sha" || return 1
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null \
+    || release_merge_lost_race "$REPO" "$number" "$tested_sha" \
+    || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit"
 }
 
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
