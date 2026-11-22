@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# ci.yml runs on pull requests into main only, so a run's pull_requests list can never name a PR into
-# another base (issue #117). The workflow is parsed with Ruby (Psych), which reads a bare `on` key as
+# The branches: [main] filter stops an ordinary PR into another base from triggering a CI run. It does not
+# bound a run's pull_requests list, and a base with an unfiltered ci.yml can still trigger one (CLAUDE.md
+# release-merge paragraph; issue #117). The workflow is parsed with Ruby (Psych), which reads a bare `on` key as
 # boolean true, so the trigger table is read under the key "true".
 # Usage: ci-trigger.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
