@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/mikelane/thrift/compare/reread-v1.0.1...reread-v1.0.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* **reread:** drop the plugin name the engine already adds to the ask-mode transcript line ([#171](https://github.com/mikelane/thrift/issues/171)) ([180ab87](https://github.com/mikelane/thrift/commit/180ab874e0cf07572e9016241b685687d3660cd3))
+
 ## [1.0.1](https://github.com/mikelane/thrift/compare/reread-v1.0.0...reread-v1.0.1) (2026-11-22)
 
 
