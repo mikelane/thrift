@@ -52,11 +52,11 @@ REREAD_TURN_END='\[remote-bridge\] Sent result success'
 # reread_step <name> <prompt>: types one prompt, waits for its turn to finish, and remembers how
 # many decision records existed before it, so the judgments below read only what the step wrote.
 reread_step() {
-  local name=$1 turns_before
+  local name=$1 prompt=$2 turns_before
   turns_before=$(log_baseline "$name" "$REREAD_TURN_END")
   live_raise_noted_error
   REREAD_BASELINE=$(decision_lines)
-  submit "$name" "$2"
+  submit "$name" "$prompt"
   wait_for "the turn of '$name' to finish" \
     log_has_more_than "$name" "$REREAD_TURN_END" "$turns_before"
 }
