@@ -200,8 +200,11 @@ release_merge_run() {
   if [[ "$TRIGGER" == "Release Please" ]]; then
     # A failed CI lookup for one PR must not stop the others, but it must fail the job.
     candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
+    if [[ "$failed" == 1 ]]; then
+      echo "::error title=Release PR sweep failed::A lookup failed, so a PR may not have been merged."
+    fi
     if [[ -z "$candidates" ]]; then
-      echo "No open release PR has passed CI at its head. Nothing to merge."
+      [[ "$failed" == 1 ]] || echo "No open release PR has passed CI at its head. Nothing to merge."
       return "$failed"
     fi
     while read -r number sha; do
