@@ -82,20 +82,21 @@ release_merge_problems() {
   done <"$files"
 }
 
-# release_merge_ci_passed <repo> <sha> <head-ref> <number> <base>: succeeds only when the latest CI
-# run for the pull request event at <sha> has concluded with success. A run counts only when it is
+# release_merge_ci_outcome <repo> <sha> <head-ref> <number> <base>: reports, as its return code,
+# how the latest CI run for the pull request event at <sha> ended. A run counts only when it is
 # the workflow file .github/workflows/ci.yml (not a workflow that merely has the display name CI),
 # ran for a head in <repo> itself (not a fork that pushed the same commit), on branch <head-ref>,
 # and for pull request <number> into <base>. The runs API lists every open PR at the run's head, "not
 # necessarily the pull requests that triggered the run", so only a run listing exactly that one PR
 # counts; a run listing none or several counts for none (the gate refuses a PR that shares its
 # head branch with another open PR, so this never strands a lone release PR). Of
-# two runs created in the same second the higher id is the later. No run, a run
-# still going, a failed run, and a success that is older than a later failure return 1. A lookup
-# that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
+# two runs created in the same second the higher id is the later. Returns 0 on success, 1 when no
+# run counts, 3 when the latest run is still going, and 4 when it failed (a success older than a
+# later failure is a failure). A lookup that fails (API error, unreadable response) returns 2, so
+# it is not mistaken for "no run yet".
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
-release_merge_ci_passed() {
+release_merge_ci_outcome() {
   local runs conclusion
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
   conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" --argjson number "$4" --arg base "$5" '
@@ -105,53 +106,79 @@ release_merge_ci_passed() {
               and .head_branch == $ref
               and ((.pull_requests // []) | length == 1
                    and .[0].number == $number and .[0].base.ref == $base))]
-    | sort_by(.created_at, .id) | last | .conclusion // empty' <<<"$runs") || return 2
-  [[ "$conclusion" == success ]]
+    | sort_by(.created_at, .id) | last
+    | if . == null then "none" elif .conclusion == null then "running" else .conclusion end' \
+    <<<"$runs") || return 2
+  case "$conclusion" in
+    success) return 0 ;;
+    none) return 1 ;;
+    running) return 3 ;;
+    *) return 4 ;;
+  esac
 }
 
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
 # one still running, is left out with a line on stderr saying why: its own CI completion triggers
-# the merge. A PR whose CI lookup fails is left out too, but the sweep goes on with the others and
-# exits non-zero at the end, so a 403 or an outage turns the job red instead of reading as "nothing
-# to merge". The body is a subshell with pipefail, so a failed PR list fails the sweep whatever
+# the merge. A head whose latest CI run failed is left out with a warning annotation. A PR whose CI
+# lookup fails is left out too, but the sweep goes on with the others and exits non-zero at the end,
+# so a 403 or an outage turns the job red instead of reading as "nothing to merge". The body is a
+# subshell with pipefail, so a failed PR list fails the sweep whatever
 # options the caller set.
 release_merge_sweep() (
   set -o pipefail
-  local number sha ref
+  local number sha ref ci_status
   gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
     | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
         and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' \
     | {
         local lookup_failed=0
         while read -r number sha ref; do
-          if release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2"; then
-            echo "$number $sha"
-          elif [[ $? == 1 ]]; then
-            echo "Skipping PR #$number at $sha: no successful CI run for it alone at that head (none yet, still running, failed, or another open PR shares its branch)." >&2
-          else
-            echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
-            lookup_failed=1
-          fi
+          release_merge_ci_outcome "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
+          case "$ci_status" in
+            0) echo "$number $sha" ;;
+            1) echo "Skipping PR #$number at $sha: no CI run for it alone at that head" \
+                 "(none yet, or another open PR shares its branch)." >&2 ;;
+            3) echo "Skipping PR #$number at $sha: CI is still running;" \
+                 "its completion triggers the merge." >&2 ;;
+            4) printf '%s%s\n' "::warning title=Release PR #$number not merged::" \
+                 "CI did not succeed at $sha; fix it or rerun CI." >&2 ;;
+            *)
+              echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
+              lookup_failed=1 ;;
+          esac
         done
         return "$lookup_failed"
       }
 )
 
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when
-# the other trigger got there first: the PR is no longer open, or its head moved off <sha>. Fails
-# for any other cause, so a real merge failure still fails the job.
+# the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The
+# message says whether it was merged or closed without merging (the same PR read gives `merged`).
+# Fails for any other cause, so a real merge failure still fails the job.
 release_merge_lost_race() {
-  local state_and_head state head
-  state_and_head=$(set -o pipefail; gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha] | join(" ")') || return 1
-  read -r state head <<<"$state_and_head"
-  if [[ "$state" != open ]]; then
+  local pr_fields state head merged
+  pr_fields=$(set -o pipefail
+    gh api "repos/$1/pulls/$2" \
+      | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
+  read -r state head merged <<<"$pr_fields"
+  if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
+  elif [[ "$state" != open ]]; then
+    echo "PR #$2 was $state without being merged."
   elif [[ "$head" != "$3" ]]; then
     echo "PR #$2 head moved to $head since CI tested $3."
   else
     return 1
   fi
+}
+
+# release_merge_fail <number> <reason>: prints an error annotation naming PR <number> and returns 1.
+# Each failing step of release_merge_pr_if_gate_passes ends with it, so the log says which PR
+# failed.
+release_merge_fail() {
+  echo "::error title=Release PR #$1 not merged::${2//\%/%25}"
+  return 1
 }
 
 # release_merge_pr_if_gate_passes <number> <tested-sha>: runs the gate on PR <number> against
@@ -161,34 +188,44 @@ release_merge_lost_race() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 pr files raw problems problem
+  local number=$1 tested_sha=$2 did_merge=0 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
-  pr=$(mktemp "$work_dir/pr.XXXXXX") || return 1
-  files=$(mktemp "$work_dir/files.XXXXXX") || return 1
-  raw=$(mktemp "$work_dir/raw.XXXXXX") || return 1
-  gh api "repos/$REPO/pulls/$number" >"$pr" || return 1
+  pr=$(mktemp "$work_dir/pr.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  files=$(mktemp "$work_dir/files.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  raw=$(mktemp "$work_dir/raw.XXXXXX") \
+    || release_merge_fail "$number" "cannot create a temp file" || return 1
+  gh api "repos/$REPO/pulls/$number" >"$pr" \
+    || release_merge_fail "$number" "cannot fetch the PR" || return 1
   # Two steps, not a pipe: a failed fetch must not read as "no changed files" without pipefail.
-  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" || return 1
-  release_merge_changed_files <"$raw" >"$files" || return 1
+  gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" \
+    || release_merge_fail "$number" "cannot fetch the changed files" || return 1
+  release_merge_changed_files <"$raw" >"$files" \
+    || release_merge_fail "$number" "cannot read the changed files" || return 1
 
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") || return 1
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") \
+    || release_merge_fail "$number" "cannot check the gate" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
   # annotation, which shows on the run summary without opening the log. Reasons carry
   # PR-controlled text (branch, author, file paths): each log line starts with "- " so
   # none is read as a workflow command, and % is escaped as the annotation format requires.
   if [[ -n "$problems" ]]; then
-    echo "Not merging PR #$number:"
+    echo "Not merging PR #$number at $tested_sha:"
     while IFS= read -r problem; do
       echo "- $problem"
-      echo "::warning title=Release PR #$number not merged::${problem//\%/%25}"
+      echo "::warning title=Release PR #$number not merged::${problem//\%/%25} (at $tested_sha)"
     done <<<"$problems"
     return 0
   fi
 
   echo "Merging PR #$number at $tested_sha."
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null || release_merge_lost_race "$REPO" "$number" "$tested_sha" || return 1
+  # One line: the workflow test selects the merge command by its start. `did_merge` tells a real
+  # merge from a lost race, which also leaves the chain successfully.
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && did_merge=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit, or its state could not be read" || return 1
+  [[ "$did_merge" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
@@ -200,8 +237,12 @@ release_merge_run() {
   if [[ "$TRIGGER" == "Release Please" ]]; then
     # A failed CI lookup for one PR must not stop the others, but it must fail the job.
     candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
+    if [[ "$failed" == 1 ]]; then
+      printf '%s%s\n' "::error title=Release PR sweep failed::" \
+        "A lookup failed, so a PR may not have been merged."
+    fi
     if [[ -z "$candidates" ]]; then
-      echo "No open release PR has passed CI at its head. Nothing to merge."
+      [[ "$failed" == 1 ]] || echo "No open release PR has passed CI at its head. Nothing to merge."
       return "$failed"
     fi
     while read -r number sha; do
@@ -210,7 +251,13 @@ release_merge_run() {
     return "$failed"
   fi
 
-  number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE")
+  # BRANCH is the head branch of the triggering run, which a fork controls: % is escaped in the
+  # annotation.
+  number=$(release_merge_open_pr_number "$REPO" "$OWNER" "$BRANCH" "$BASE") || {
+    printf '%s%s\n' "::error title=Release merge failed::" \
+      "cannot look up the open PR from ${BRANCH//\%/%25} in $REPO"
+    return 1
+  }
   if [[ -z "$number" ]]; then
     echo "No open PR from $BRANCH in $REPO. Nothing to merge."
     return 0
