@@ -47,7 +47,7 @@ minimum_claims() {
     }
     FNR == 1 && NR > 1 { flush() }
     FNR == 1 { file = FILENAME; text = "" }
-    { line = $0; sub(/^[ \t]*(>[ \t]?)+/, "", line); text = text " " line }
+    { line = $0; sub(/^([ \t]*>[ \t]?)+/, "", line); text = text " " line }
     END { if (NR > 0) flush() }
   ' "$@")
 }
@@ -136,6 +136,22 @@ test_a_stale_minimum_wrapped_in_a_nested_blockquote_is_reported() {
   stale=$(stale_minimums 2.1.330 "$TEST_DIR/README.md")
   [[ "$stale" == "$expected" ]] \
     || fail "a stale claim wrapped in a nested blockquote came out as '$stale'"
+}
+
+test_a_stale_minimum_wrapped_in_a_spaced_nested_blockquote_is_reported() {
+  printf '%s\n' '>  > It needs Claude' '>  > Code 2.1.302 or newer.' > "$TEST_DIR/README.md"
+  local stale expected="$TEST_DIR/README.md:needs Claude Code 2.1.302 or newer"
+  stale=$(stale_minimums 2.1.330 "$TEST_DIR/README.md")
+  [[ "$stale" == "$expected" ]] \
+    || fail "a stale claim wrapped in a '>  >' nested blockquote came out as '$stale'"
+}
+
+test_a_stale_minimum_wrapped_in_a_tab_nested_blockquote_is_reported() {
+  printf '> \t> It needs Claude\n> \t> Code 2.1.302 or newer.\n' > "$TEST_DIR/README.md"
+  local stale expected="$TEST_DIR/README.md:needs Claude Code 2.1.302 or newer"
+  stale=$(stale_minimums 2.1.330 "$TEST_DIR/README.md")
+  [[ "$stale" == "$expected" ]] \
+    || fail "a stale claim wrapped in a '> <tab>>' nested blockquote came out as '$stale'"
 }
 
 test_a_minimum_that_only_starts_with_the_pin_is_stale() {
