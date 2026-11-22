@@ -34,7 +34,10 @@ Answer `y` to add the marketplace, then choose a scope.
 Claude Code installs a copy of each plugin and replaces it only when the plugin's `version` changes.
 Each plugin is released on its own: a release PR bumps the `version` in its `plugin.json` and writes
 its `CHANGELOG.md`, and merging that PR tags `<plugin>-vX.Y.Z` and publishes a GitHub release. The
-release PR merges itself once CI passes on it. Until a release lands, an update finds nothing new.
+release PR merges itself once CI passes on it. While CI runs (about two minutes), GitHub shows
+"Review required" on the PR; that is expected and needs no approval. If a release PR is still open
+after CI passed, rerun its last CI run with `gh run rerun <CI run id>`. Until a release lands, an
+update finds nothing new.
 
 To run the release flow in a fork, create a GitHub App with Contents, Pull requests and Issues set
 to read and write. Set `RELEASE_APP_ID` as a repository variable. Store the private key as
