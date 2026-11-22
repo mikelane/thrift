@@ -62,7 +62,7 @@ test_the_merge_step_calls_release_merge_run() {
   merge_step_script | grep -qxF 'release_merge_run' || fail 'the merge step never calls release_merge_run'
 }
 
-test_the_merge_step_is_strict() {
+test_the_merge_step_sets_euo_pipefail() {
   merge_step_script | grep -qxF 'set -euo pipefail' || fail 'the merge step does not set -euo pipefail'
 }
 
@@ -93,9 +93,9 @@ lost_race() {
   release_merge_lost_race "$REPO" 111 "$SHA"
 }
 
-test_a_failed_merge_of_a_pr_that_is_already_merged_is_a_lost_race() {
+test_a_failed_merge_of_a_pr_that_is_closed_is_a_lost_race() {
   local got
-  got=$(lost_race '.state = "closed"') || fail 'treated a merged PR as a real failure'
+  got=$(lost_race '.state = "closed"') || fail 'treated a closed PR as a real failure'
   [[ "$got" == 'PR #111 is closed: another run merged it first.' ]] || fail "got [$got]"
 }
 
@@ -136,7 +136,7 @@ test_the_merge_step_runs_exactly_one_merge_command() {
 test_the_merge_command_treats_a_lost_race_as_success() {
   local got
   got=$(merge_commands)
-  [[ "$got" == *'|| release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" '* ]] || fail "got [$got]"
+  [[ "$got" == *'|| release_merge_lost_race "$REPO" "$number" "$tested_sha" '* ]] || fail "got [$got]"
 }
 
 test_the_merge_command_skips_the_ruleset_review_with_admin() {
@@ -160,7 +160,7 @@ test_the_merge_command_does_not_read_the_sweep_loops_stdin() {
 test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
   local got
   got=$(merge_commands)
-  [[ "$got" == *' --match-head-commit "$TESTED_SHA"'* ]] || fail "got [$got]"
+  [[ "$got" == *' --match-head-commit "$tested_sha"'* ]] || fail "got [$got]"
 }
 
 # --- Variants a YAML parser reads as a weaker gate. Each is a copy of the workflow that Psych and

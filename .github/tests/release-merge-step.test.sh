@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The merge step run against a stub `gh`: release_merge_merge_if_gate_passes (the gate, the warning
+# The merge step run against a stub `gh`: release_merge_pr_if_gate_passes (the gate, the warning
 # annotations, the merge) and release_merge_run (the sweep and single-PR dispatch).
 # Usage: release-merge-step.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
@@ -22,7 +22,7 @@ run_merge_step() {
 
 test_the_merge_step_squash_merges_a_pr_that_passes_the_gate_pinned_to_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 0
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
   assert_out_has "Merging PR #111 at $SHA_A."
@@ -30,7 +30,7 @@ test_the_merge_step_squash_merges_a_pr_that_passes_the_gate_pinned_to_the_tested
 
 test_the_merge_step_logs_each_reason_and_returns_success_without_merging_a_pr_the_gate_refuses() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_B"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "Not merging PR #111:"
@@ -41,7 +41,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
   local count
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.state = "closed" | .draft = true'
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   count=$(grep -c '^::warning title=Release PR #111 not merged::' "$OUTPUT")
   [[ "$count" == 2 ]] || fail "got $count warnings"
 }
@@ -49,7 +49,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
 test_the_merge_step_escapes_percent_in_a_warning_annotation() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "100%25"'
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_out_has "::warning title=Release PR #111 not merged::the PR author is 100%2525, not $BOT"
 }
 
@@ -57,7 +57,7 @@ test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workf
   local command_lines
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "::error::x"'
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   command_lines=$(grep -c '^::error::' "$OUTPUT")
   [[ "$command_lines" == 0 ]] || fail "$command_lines line(s) of output start a workflow command"
   assert_out_has "- the PR author is ::error::x, not $BOT"
@@ -66,7 +66,7 @@ test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workf
 test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -74,7 +74,7 @@ test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
 test_the_merge_step_fails_when_the_changed_files_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/files-111.json"
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -85,7 +85,7 @@ test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipef
   stub_gh
   mkdir -p "$TEST_DIR/work"
   # canary-report-lib.sh sets pipefail for every test; turn it off so this runs without it.
-  (set +o pipefail; set -eu; BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_merge_if_gate_passes 111 "$SHA_A") >"$OUTPUT" 2>&1
+  (set +o pipefail; set -eu; BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_pr_if_gate_passes 111 "$SHA_A") >"$OUTPUT" 2>&1
   # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
   EXIT_CODE=$?
   assert_exit_code 1
@@ -96,7 +96,7 @@ test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() 
   stage_release_pr 111 "$SHA_A" handoff success
   jq '.state = "closed"' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 0
   assert_out_has "PR #111 is closed: another run merged it first."
 }
@@ -104,7 +104,7 @@ test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() 
 test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 1
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
 }
@@ -112,7 +112,7 @@ test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_t
 test_the_merge_step_leaves_no_temp_files_after_a_merge() {
   local left
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_merge_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
   left=$(ls "$TEST_DIR/work")
   [[ -z "$left" ]] || fail "left [$left]"
