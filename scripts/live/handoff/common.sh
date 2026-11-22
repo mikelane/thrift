@@ -76,7 +76,8 @@ held_prompts_flow() {
   local name=$1 held_count=0 word
   say_apple "$name"
   local origins_before
-  origins_before=$(log_count "$name" 'cc_turn_origin=')
+  origins_before=$(log_baseline "$name" 'cc_turn_origin=')
+  live_raise_noted_error
   submit "$name" '/handoff'
   wait_for "the note status line" pane_has "$name" 'Writing a handoff note'
   for word in one two three; do

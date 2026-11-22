@@ -360,4 +360,17 @@ test_the_scenario_allows_the_agent_tool_in_the_foreground_session() {
   assert_out_has 'AFTER=[]'
 }
 
+test_press_while_a_subagent_runs_raises_an_error_when_the_log_is_unreadable_before_the_turn_is_typed() {
+  run_live "$SCENARIO"'
+    live_init
+    mkdir "$(debug_log_of x)"
+    handoff_start() { :; }; say_apple() { :; }; wait_for() { :; }; press() { :; }
+    submit() { echo "TYPED $2"; }
+    press_while_a_subagent_runs x
+    check done none true; live_verdict s'
+  assert_exit_code 2
+  assert_out_has 'could not be read'
+  assert_out_lacks 'TYPED Run'
+}
+
 run_tests "$@"
