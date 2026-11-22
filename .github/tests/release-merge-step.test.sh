@@ -127,7 +127,7 @@ test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipef
 
 test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() {
   stage_release_pr 111 "$SHA_A" handoff success
-  jq '.state = "closed"' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_exit_code 0

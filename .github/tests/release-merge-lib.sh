@@ -139,14 +139,17 @@ release_merge_sweep() (
 )
 
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when
-# the other trigger got there first: the PR is no longer open, or its head moved off <sha>. Fails
-# for any other cause, so a real merge failure still fails the job.
+# the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The
+# message says whether it was merged or closed without merging (the same PR read gives `merged`).
+# Fails for any other cause, so a real merge failure still fails the job.
 release_merge_lost_race() {
-  local state_and_head state head
-  state_and_head=$(set -o pipefail; gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha] | join(" ")') || return 1
-  read -r state head <<<"$state_and_head"
-  if [[ "$state" != open ]]; then
+  local state_and_head state head merged
+  state_and_head=$(set -o pipefail; gh api "repos/$1/pulls/$2" | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
+  read -r state head merged <<<"$state_and_head"
+  if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
+  elif [[ "$state" != open ]]; then
+    echo "PR #$2 was $state without being merged."
   elif [[ "$head" != "$3" ]]; then
     echo "PR #$2 head moved to $head since CI tested $3."
   else
@@ -168,7 +171,7 @@ release_merge_fail() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 pr files raw problems problem
+  local number=$1 tested_sha=$2 merged=0 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
   files=$(mktemp "$work_dir/files.XXXXXX") || release_merge_fail "$number" "cannot create a temp file" || return 1
@@ -196,12 +199,10 @@ release_merge_pr_if_gate_passes() {
   fi
 
   echo "Merging PR #$number at $tested_sha."
-  if gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null; then
-    echo "Merged PR #$number at $tested_sha."
-    return 0
-  fi
-  release_merge_lost_race "$REPO" "$number" "$tested_sha" \
-    || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit"
+  # One line: the workflow test selects the merge command by its start. `merged` tells a real merge
+  # from a lost race, which also leaves the chain successfully.
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && merged=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit" || return 1
+  [[ "$merged" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open

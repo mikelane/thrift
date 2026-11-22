@@ -95,8 +95,14 @@ lost_race() {
 
 test_a_failed_merge_of_a_pr_that_is_closed_is_a_lost_race() {
   local got
-  got=$(lost_race '.state = "closed"') || fail 'treated a closed PR as a real failure'
+  got=$(lost_race '.state = "closed" | .merged = true') || fail 'treated a merged PR as a real failure'
   [[ "$got" == 'PR #111 is closed: another run merged it first.' ]] || fail "got [$got]"
+}
+
+test_a_failed_merge_of_a_pr_closed_without_merging_says_a_person_closed_it() {
+  local got
+  got=$(lost_race '.state = "closed" | .merged = false') || fail 'treated a closed PR as a real failure'
+  [[ "$got" == 'PR #111 was closed without being merged.' ]] || fail "got [$got]"
 }
 
 test_a_failed_merge_of_a_pr_whose_head_moved_is_a_lost_race() {
