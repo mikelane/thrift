@@ -287,9 +287,10 @@ The same run also showed:
 
 - Claude Code's own dedup did not answer any of the repeat reads on 2.1.330 (no `core_dedup`
   record), so the plugin's stub was what the model got.
-- The `ask`-mode transcript line is drawn: `reread: reread: <path> is unchanged, so the repeat Read
-  got a stub instead of its contents (1542 bytes saved)`. The engine adds the plugin's name to the
-  text the plugin logs, so the name appears twice. The `Read` line above it reads `Read 1 file ·
+- The `ask`-mode transcript line was drawn as `reread: reread: <path> is unchanged, so the repeat
+  Read got a stub instead of its contents (1542 bytes saved)`. The engine adds the plugin's name to
+  the text the plugin logs, so the plugin now logs `<path> is unchanged, ...` without its own
+  prefix and the name appears once. The `Read` line above it reads `Read 1 file ·
   1 failed`, which is how Claude Code renders the `file_unchanged` result.
 
 Before the constant moved, the same scenario on 2.1.330 failed: the plugin wrote one

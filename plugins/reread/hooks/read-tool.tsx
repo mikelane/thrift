@@ -185,7 +185,7 @@ async function answerWithStub($: EngineInterface, state: SessionState, attempt: 
   const { subject, call, request } = attempt
   found.tracked.stubbedKeys.add(request.key)
   if (subject.engine.effectiveMode === 'ask') {
-    $.ui.log(`reread: ${call.file_path} is unchanged, so the repeat Read got a stub instead of its contents (${evaluation.savings.grossBytes - evaluation.savings.stubBytes} bytes saved)`)
+    $.ui.log(`${call.file_path} is unchanged, so the repeat Read got a stub instead of its contents (${evaluation.savings.grossBytes - evaluation.savings.stubBytes} bytes saved)`)
   }
   await note($, subject, { ...evaluation, pathHash: await pathHash(state.salt, request.realPath) })
   return { result: stubResult(call.file_path), context: [line] }
