@@ -7,19 +7,19 @@
 # (the effective release-type is the package's, else the top level's, else release-please's node).
 release_merge_allowlist() {
   jq -r '
-    def in_package($dir; $file):
+    def path_in_package($dir; $file):
       ($file | sub("^/"; "")) as $relative
       | if ($file | startswith("/")) or $dir == "." or $dir == "" then $relative else "\($dir)/\($relative)" end;
     . as $config
     | ".release-please-manifest.json",
       (.packages | to_entries[] | .key as $dir | .value as $pkg
         | def setting($key): $pkg[$key] // $config[$key];
-          ($pkg["release-type"] // $config["release-type"] // "node") as $type
-          | in_package($dir; setting("changelog-path") // "CHANGELOG.md"),
-          ((setting("version-file") // (if $type == "simple" then "version.txt" else empty end))
-            | in_package($dir; .)),
+          ($pkg["release-type"] // $config["release-type"] // "node") as $release_type
+          | path_in_package($dir; setting("changelog-path") // "CHANGELOG.md"),
+          ((setting("version-file") // (if $release_type == "simple" then "version.txt" else empty end))
+            | path_in_package($dir; .)),
           (setting("extra-files")[]? | (if type == "string" then . else .path end) // empty
-            | in_package($dir; .)))
+            | path_in_package($dir; .)))
   ' "$1"
 }
 
@@ -154,14 +154,14 @@ release_merge_lost_race() {
   fi
 }
 
-# release_merge_merge_if_gate_passes <number> <tested-sha>: runs the gate on PR <number> against
+# release_merge_pr_if_gate_passes <number> <tested-sha>: runs the gate on PR <number> against
 # <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. A refusal
 # returns 0, so the job stays green. A failed lookup, or a failed merge that is not a lost race,
 # returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
-release_merge_merge_if_gate_passes() {
-  local number=$1 TESTED_SHA=$2 pr files raw problems problem
+release_merge_pr_if_gate_passes() {
+  local number=$1 tested_sha=$2 pr files raw problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") || return 1
   files=$(mktemp "$work_dir/files.XXXXXX") || return 1
@@ -172,7 +172,7 @@ release_merge_merge_if_gate_passes() {
   release_merge_changed_files <"$raw" >"$files" || return 1
 
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$TESTED_SHA") || return 1
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
   # annotation, which shows on the run summary without opening the log. Reasons carry
@@ -187,8 +187,8 @@ release_merge_merge_if_gate_passes() {
     return 0
   fi
 
-  echo "Merging PR #$number at $TESTED_SHA."
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$TESTED_SHA" </dev/null || release_merge_lost_race "$REPO" "$number" "$TESTED_SHA" || return 1
+  echo "Merging PR #$number at $tested_sha."
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null || release_merge_lost_race "$REPO" "$number" "$tested_sha" || return 1
 }
 
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
@@ -205,7 +205,7 @@ release_merge_run() {
       return "$failed"
     fi
     while read -r number sha; do
-      release_merge_merge_if_gate_passes "$number" "$sha" || failed=1
+      release_merge_pr_if_gate_passes "$number" "$sha" || failed=1
     done <<<"$candidates"
     return "$failed"
   fi
@@ -215,5 +215,5 @@ release_merge_run() {
     echo "No open PR from $BRANCH in $REPO. Nothing to merge."
     return 0
   fi
-  release_merge_merge_if_gate_passes "$number" "$CI_TESTED_SHA"
+  release_merge_pr_if_gate_passes "$number" "$CI_TESTED_SHA"
 }
