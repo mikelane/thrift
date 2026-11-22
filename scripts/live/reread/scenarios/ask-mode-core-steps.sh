@@ -15,11 +15,11 @@ REREAD_EDIT_INVALIDATION='.action == "invalidate" and .trigger_values.reason == 
 first_then_stub() {
   local label=$1 path=$2
   reread_step a "$(reread_read_prompt "$path" '')"
-  show_step_records "$label, first read"
+  reread_show_step_records "$label, first read"
   check "$label: the first read passes as first_read" 'no pass/first_read record' \
     reread_step_has "$REREAD_FIRST_READ"
   reread_step a "$(reread_read_prompt "$path" ' again, even though you read it before')"
-  show_step_records "$label, repeat"
+  reread_show_step_records "$label, repeat"
   check "$label: the repeat is stubbed, bytes_saved = gross_bytes - stub_bytes" \
     'no dedupe/exact_repeat record with a consistent bytes_saved' reread_step_has "$REREAD_STUB"
 }
@@ -34,13 +34,13 @@ scenario_run() {
 
   reread_step a "$(reread_read_prompt "$probe_dir/probe.txt" \
     '. The last result said the file is unchanged, but you need its contents again')"
-  show_step_records 'C, third read'
+  reread_show_step_records 'C, third read'
   check 'C: the third read passes as an override' 'no override/override_after_stub record' \
     reread_step_has "$REREAD_OVERRIDE"
 
   reread_step a "Call the Edit tool on $probe_dir/probe.txt to replace 'line 40 of' with \
 'line forty of'. Reply with only: done"
-  show_step_records 'E, Edit'
+  reread_show_step_records 'E, Edit'
   check 'E: the edit invalidates the tracked reads' \
     'no invalidate/edit record that dropped a read' reread_step_has "$REREAD_EDIT_INVALIDATION"
   check 'E: the edit was applied' 'the file does not hold the edited line' \

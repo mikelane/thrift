@@ -51,7 +51,7 @@ test_reread_read_prompt_names_the_path_and_the_reason_for_the_repeat() {
 }
 
 test_reread_show_step_records_prints_none_when_the_step_wrote_no_record() {
-  run_reread 'live_init; : > "$LIVE_DECISIONS"; REREAD_BASELINE=$(decision_lines); show_step_records "empty"; check ok detail true; live_verdict s'
+  run_reread 'live_init; : > "$LIVE_DECISIONS"; REREAD_BASELINE=$(decision_lines); reread_show_step_records "empty"; check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has 'decision records of the step: empty'
   assert_out_has '(none)'
@@ -62,7 +62,7 @@ test_reread_show_step_records_prints_the_records_after_the_baseline() {
     record active ask 2.1.999 dedupe; } > "$LIVE_DECISIONS"
     REREAD_BASELINE=$(decision_lines)
     record active ask 2.1.999 pass >> "$LIVE_DECISIONS"
-    show_step_records "one"; check ok detail true; live_verdict s'
+    reread_show_step_records "one"; check ok detail true; live_verdict s'
   assert_exit_code 0
   assert_out_has '"action":"pass"'
   assert_out_lacks '"action":"dedupe"'

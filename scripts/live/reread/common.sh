@@ -67,7 +67,7 @@ reread_read_prompt() { printf 'Call the Read tool on %s%s. Reply with only: done
 
 reread_step_records() { records_after "$REREAD_BASELINE" "$1"; }
 reread_step_has() { [[ -n "$(reread_step_records "$1")" ]]; }
-show_step_records() {
+reread_show_step_records() {
   section "decision records of the step: $1"
   local records
   records=$(reread_step_records true)
