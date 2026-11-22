@@ -108,6 +108,7 @@ test_live_sh_list_prints_each_plugin_and_scenario() {
   assert_exit_code 0
   assert_out_has 'handoff busy-abandon'
   assert_out_has 'handoff held-prompt-box'
+  assert_out_has 'reread ask-mode-core-steps'
 }
 
 test_live_sh_exits_2_with_usage_for_fewer_than_two_arguments() {

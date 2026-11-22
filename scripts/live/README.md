@@ -178,6 +178,18 @@ no thresholds to lower.
 | `placement` | #121 item 8 | No expected outcome. For asked (`/meter`) and unasked (`meterAutoOpen`) opens, in fullscreen and main-screen sessions, at 109, 110, 143 and 144 columns (asked: 109 and 110), it prints one row per cell: placed or not, `dock` or `inline` (judged from the screen), the reply to a further `/meter` (`closed` for a placed pane; `opened` for a listed pane that was never placed, since #135), and the asked list of `.claude.json` before and after. Every unasked cell except the three below starts from a config without the asked entry: if meter is in the list, a session first opens the pane and closes it by hand (ctrl+x tab, ctrl+x x), which removes it. Three more unasked cells (109, 110, 143) follow a `/meter` open-then-close. A cell passes when it shows a pane in exactly one shape, or none. The scenario itself only reads `.claude.json`, but its sessions change it: opening with `/meter` adds meter to the asked list and closing by hand removes it, in the real config (`CLAUDE_CONFIG_DIR`, else `~/.claude.json`). Run it in a config where meter may be opened and where that list may change. |
 | `unplaced-open` | #135 | With `meterAutoOpen` at 109 columns (fullscreen, config without the asked entry) the pane is not placed. The first `/meter` replies `Meter opened.`, draws the pane, and meter is then in the asked list. A second `/meter` replies `Meter closed.` and the pane is gone. The scenario's sessions change the asked list in the real config, like `placement`. |
 
+### reread
+
+`common.sh` copies the plugin unchanged and sets `readMode` through a per-run settings file. The
+sessions may use `Read` and `Edit` only (`--allowedTools`). Each step is its own prompt, and a step
+waits for its turn to end by the debug log's `Sent result success` line: the screen's
+`✻ ... for 5s` lines scroll off a 40-row pane after a few turns. The probe files are made in the
+run directory.
+
+| Scenario | Tracks | Passes when |
+|---|---|---|
+| `ask-mode-core-steps` | #147 | In `ask` mode, one session runs steps A, B, C, E, K and L of the plugin README's "What has been verified live" table. A: a first read is a `pass` (`first_read`). B: the same read again is a `dedupe` (`exact_repeat`) whose `bytes_saved` is `gross_bytes - stub_bytes`. C: a third read is an `override` (`override_after_stub`). E: an `Edit` is applied, the screen shows no "has not been read" refusal, and an `invalidate` (`edit`) drops at least one read. K and L: a CRLF file and a BOM file are each a `first_read` and then a stub. Every record of the run is `reread`, `mode` active, `effective_mode` ask and carries the installed build's `engine_version`, so a build newer than `TESTED_THROUGH` (which holds the plugin at `off`, `mode` shadow) fails it. |
+
 ## How it works
 
 - `live.sh` parses the arguments, loads `lib.sh` and `<plugin>/common.sh`, then the scenario file,
