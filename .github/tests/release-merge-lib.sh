@@ -90,9 +90,10 @@ release_merge_problems() {
 # necessarily the pull requests that triggered the run", so only a run listing exactly that one PR
 # counts; a run listing none or several counts for none (the gate refuses a PR that shares its
 # head branch with another open PR, so this never strands a lone release PR). Of
-# two runs created in the same second the higher id is the later. No run, a run
-# still going, a failed run, and a success that is older than a later failure return 1. A lookup
-# that fails (API error, unreadable response) returns 2, so it is not mistaken for "no run yet".
+# two runs created in the same second the higher id is the later. Returns 0 on success, 1 when no
+# run counts, 3 when the latest run is still going, and 4 when it failed (a success older than a
+# later failure is a failure). A lookup that fails (API error, unreadable response) returns 2, so
+# it is not mistaken for "no run yet".
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
 release_merge_ci_passed() {
@@ -105,8 +106,15 @@ release_merge_ci_passed() {
               and .head_branch == $ref
               and ((.pull_requests // []) | length == 1
                    and .[0].number == $number and .[0].base.ref == $base))]
-    | sort_by(.created_at, .id) | last | .conclusion // empty' <<<"$runs") || return 2
-  [[ "$conclusion" == success ]]
+    | sort_by(.created_at, .id) | last
+    | if . == null then "none" elif .conclusion == null then "running" else .conclusion end' \
+    <<<"$runs") || return 2
+  case "$conclusion" in
+    success) return 0 ;;
+    none) return 1 ;;
+    running) return 3 ;;
+    *) return 4 ;;
+  esac
 }
 
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
@@ -118,21 +126,23 @@ release_merge_ci_passed() {
 # options the caller set.
 release_merge_sweep() (
   set -o pipefail
-  local number sha ref
+  local number sha ref ci_status
   gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
     | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
         and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' \
     | {
         local lookup_failed=0
         while read -r number sha ref; do
-          if release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2"; then
-            echo "$number $sha"
-          elif [[ $? == 1 ]]; then
-            echo "Skipping PR #$number at $sha: no successful CI run for it alone at that head (none yet, still running, failed, or another open PR shares its branch)." >&2
-          else
-            echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
-            lookup_failed=1
-          fi
+          release_merge_ci_passed "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
+          case "$ci_status" in
+            0) echo "$number $sha" ;;
+            1) echo "Skipping PR #$number at $sha: no CI run for it alone at that head (none yet, or another open PR shares its branch)." >&2 ;;
+            3) echo "Skipping PR #$number at $sha: CI is still running; its completion triggers the merge." >&2 ;;
+            4) echo "::warning title=Release PR #$number not merged::CI did not succeed at $sha; fix it or rerun CI." >&2 ;;
+            *)
+              echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
+              lookup_failed=1 ;;
+          esac
         done
         return "$lookup_failed"
       }
