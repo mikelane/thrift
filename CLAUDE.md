@@ -88,8 +88,10 @@ specific to this repo.
     current head succeeded and sends each through the same gate and merge. A head with no CI run
     yet, or one still running, is skipped (its own CI completion merges it). A CI lookup that fails
     turns the job red instead of reading as "no run yet". "Succeeded" means the latest run whose
-    `pr-record` names the PR into `main`; the CI-completion path checks the triggering run's record
-    the same way (`CI_RUN_ID`). The gate also still refuses a release PR while another open PR has
+    `pr-record` names the PR into `main`. The gate always checks one run's record, a required third
+    argument: the CI-completion path passes the triggering run (`CI_RUN_ID`), and the sweep passes
+    the run it chose (it prints `<number> <sha> <run-id>`), so a swept PR's record is downloaded
+    twice. An empty id is refused. The gate also still refuses a release PR while another open PR has
     the same head branch (for example a PR from the release branch into another base).
   - Tokens: the gate reads CI runs and their `pr-record` artifacts with the workflow's own
     `GITHUB_TOKEN` (job permission `actions: read`), because the App token has no Actions access; the PR list, the gate and the

@@ -22,7 +22,7 @@ run_merge_step() {
 
 test_the_merge_step_squash_merges_a_pr_that_passes_the_gate_pinned_to_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
   assert_out_has "Merging PR #111 at $SHA_A."
@@ -30,7 +30,7 @@ test_the_merge_step_squash_merges_a_pr_that_passes_the_gate_pinned_to_the_tested
 
 test_the_merge_step_logs_each_reason_and_returns_success_without_merging_a_pr_the_gate_refuses() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B" 211
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "Not merging PR #111 at $SHA_B:"
@@ -39,20 +39,20 @@ test_the_merge_step_logs_each_reason_and_returns_success_without_merging_a_pr_th
 
 test_the_merge_step_puts_the_tested_commit_in_each_warning_annotation() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B" 211
   assert_out_has "but CI tested $SHA_B (at $SHA_B)"
 }
 
 test_the_merge_step_logs_a_merged_line_after_a_successful_merge() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "Merged PR #111 at $SHA_A."
 }
 
 test_the_merge_step_does_not_log_a_merged_line_when_the_merge_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_lacks "Merged PR"
 }
 
@@ -60,7 +60,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
   local count
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.state = "closed" | .draft = true'
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   count=$(grep -c '^::warning title=Release PR #111 not merged::' "$OUTPUT")
   [[ "$count" == 2 ]] || fail "got $count warnings"
 }
@@ -68,7 +68,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
 test_the_merge_step_escapes_percent_in_a_warning_annotation() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "100%25"'
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "::warning title=Release PR #111 not merged::the PR author is 100%2525, not $BOT"
 }
 
@@ -76,7 +76,7 @@ test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workf
   local command_lines
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "::error::x"'
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   command_lines=$(grep -c '^::error::' "$OUTPUT")
   [[ "$command_lines" == 0 ]] || fail "$command_lines line(s) of output start a workflow command"
   assert_out_has "- the PR author is ::error::x, not $BOT"
@@ -85,7 +85,7 @@ test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workf
 test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -93,21 +93,21 @@ test_the_merge_step_fails_when_the_pr_cannot_be_fetched() {
 test_the_merge_step_names_the_pr_in_an_error_when_it_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "::error title=Release PR #111 not merged::cannot fetch the PR"
 }
 
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/files-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "::error title=Release PR #111 not merged::cannot fetch the changed files"
 }
 
 test_the_merge_step_fails_when_the_changed_files_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/files-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -118,7 +118,7 @@ test_the_merge_step_does_not_merge_when_the_files_fetch_fails_even_without_pipef
   stub_gh
   mkdir -p "$TEST_DIR/work"
   # canary-report-lib.sh sets pipefail for every test; turn it off so this runs without it.
-  (set +o pipefail; set -eu; BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_pr_if_gate_passes 111 "$SHA_A") >"$OUTPUT" 2>&1
+  (set +o pipefail; set -eu; BASE=main BOT_LOGIN=$BOT work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG release_merge_pr_if_gate_passes 111 "$SHA_A" 211) >"$OUTPUT" 2>&1
   # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
   EXIT_CODE=$?
   assert_exit_code 1
@@ -130,7 +130,7 @@ test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() 
   jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
     >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_out_has "PR #111 is closed: another run merged it first."
 }
@@ -138,7 +138,7 @@ test_the_merge_step_treats_a_failed_merge_of_a_pr_that_is_gone_as_a_lost_race() 
 test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
 }
@@ -146,14 +146,14 @@ test_the_merge_step_fails_when_the_merge_fails_and_the_pr_is_still_open_at_the_t
 test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "::error title=Release PR #111 not merged::the merge failed at $SHA_A"
 }
 
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'not json' >"$TEST_DIR/files-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_out_has "::error title=Release PR #111 not merged::cannot read the changed files"
   assert_no_file "$TEST_DIR/merge-calls"
@@ -179,7 +179,7 @@ with_config() {
 test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/pulls.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
   assert_out_lacks "Not merging PR"
@@ -188,7 +188,7 @@ test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
 
 test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
   assert_out_lacks "Not merging PR"
@@ -200,7 +200,7 @@ test_the_merge_step_does_not_log_a_merged_line_after_a_lost_race() {
   jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
     >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_lacks "Merged PR"
   assert_out_has "PR #111 is closed: another run merged it first."
 }
@@ -210,7 +210,7 @@ test_the_merge_step_stays_green_and_says_so_when_the_pr_was_closed_without_mergi
   jq '.state = "closed" | .merged = false' "$TEST_DIR/pr-111.json" \
     >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_out_has "PR #111 was closed without being merged."
   assert_out_lacks "Merged PR"
@@ -218,13 +218,13 @@ test_the_merge_step_stays_green_and_says_so_when_the_pr_was_closed_without_mergi
 
 test_the_merge_step_does_not_log_an_error_annotation_after_a_successful_merge() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_lacks "::error"
 }
 
 test_the_merge_step_does_not_log_an_error_annotation_when_the_gate_refuses_a_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B" 211
   assert_out_lacks "::error"
 }
 
@@ -237,7 +237,7 @@ test_the_merge_step_escapes_percent_signs_in_an_error_annotation() {
 test_the_merge_step_leaves_no_temp_files_after_a_merge() {
   local left
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
   left=$(ls "$TEST_DIR/work")
   [[ -z "$left" ]] || fail "left [$left]"
@@ -257,7 +257,7 @@ with_failing_mktemp() {
 # its own error, not at a later step reading an empty path.
 assert_temp_file_failure_stops_the_gate() {
   stage_release_pr 111 "$SHA_A" handoff success
-  run_merge_step with_failing_mktemp "$1" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step with_failing_mktemp "$1" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_out_has "::error title=Release PR #111 not merged::cannot create a temp file"
   assert_out_lacks "cannot fetch"
@@ -339,15 +339,32 @@ test_a_ci_triggered_run_reads_the_record_with_the_runs_token_not_the_app_token()
   [[ "$artifacts_token $zip_token" == "runs-tok runs-tok" ]] || fail "got [$artifacts_token $zip_token]"
 }
 
-# The sweep passes no run id: release_merge_ci_outcome already read the chosen run's record, so the
-# gate does not look one up again (a run with no record still merges on this path).
-test_the_merge_step_does_not_check_a_record_when_no_run_id_is_given() {
+# The sweep hands the gate the id of the run release_merge_ci_outcome chose: the newer run (888) has
+# no record and is skipped, the older one (777) is chosen. Passing an empty id or the skipped run's
+# would refuse the PR, so a merge shows the chosen id arrived.
+test_a_sweep_run_passes_the_chosen_runs_id_to_the_gate() {
   stage_release_pr 111 "$SHA_A" handoff success
-  write_record 211 none
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 888 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 777'
+  TRIGGER='Release Please' run_merge_step release_merge_run
   assert_exit_code 0
-  assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"
-  assert_no_file "$TEST_DIR/artifacts-token"
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+}
+
+test_the_merge_step_refuses_a_pr_whose_run_id_is_empty() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" ''
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "- the CI run is unknown (no run id)"
+}
+
+test_the_merge_step_fails_when_it_is_given_no_run_id() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
 }
 
 test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_lookup_fails() {
@@ -398,7 +415,7 @@ test_the_merge_step_says_the_pr_state_could_not_be_read_when_the_lost_race_looku
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'not json' >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_has "or its state could not be read"
 }
 
@@ -494,7 +511,7 @@ merge_step_with_a_failing_problem_check() {
 
 merge_step_with_a_failing_problem_check_for_pr_111() {
   release_merge_problems() { return 1; }
-  release_merge_pr_if_gate_passes 111 "$SHA_A"
+  release_merge_pr_if_gate_passes 111 "$SHA_A" 211
 }
 
 test_a_sweep_run_does_not_merge_a_pr_whose_problem_check_fails() {
@@ -524,7 +541,7 @@ test_a_sweep_run_stays_green_when_the_gate_refuses_a_pr() {
 test_the_merge_step_does_not_merge_a_pr_that_changes_more_files_than_the_files_api_listed() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.changed_files = 3001'
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
@@ -532,7 +549,7 @@ test_the_merge_step_does_not_merge_a_pr_that_changes_files_when_the_files_api_li
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.changed_files = 1'
   echo '[]' >"$TEST_DIR/files-111.json"
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_no_file "$TEST_DIR/merge-calls"
 }
 

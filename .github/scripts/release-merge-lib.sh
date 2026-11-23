@@ -173,11 +173,13 @@ release_merge_run_record_verdict() {
 # it is not mistaken for "no run yet". Sets release_merge_ci_conclusion to what the latest run
 # concluded, for the caller that reports a return of 4. On a return of 2 from a record lookup,
 # release_merge_run_record_detail names it (it is empty when the runs lookup itself failed).
+# Sets release_merge_ci_run_id to the id of the run it chose, which the sweep hands to the gate.
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
 release_merge_ci_outcome() {
   local runs candidate_runs run_id run_conclusion record_status
   release_merge_ci_conclusion=
+  release_merge_ci_run_id=
   release_merge_ci_skip_reasons=
   release_merge_run_record_detail=
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
@@ -198,10 +200,11 @@ release_merge_ci_outcome() {
     # conclusion. A finished successful run with no record is skipped, as one naming another PR is.
     if [[ "$record_status" == 3 && "$run_conclusion" != success ]]; then
       release_merge_ci_conclusion=$run_conclusion
+      release_merge_ci_run_id=$run_id
       break
     fi
     case "$record_status" in
-      0) release_merge_ci_conclusion=$run_conclusion; break ;;
+      0) release_merge_ci_conclusion=$run_conclusion; release_merge_ci_run_id=$run_id; break ;;
       1|3) release_merge_ci_skip_reasons+="run $run_id $release_merge_run_record_detail"$'\n' ;;
       *) release_merge_ci_conclusion=; return 2 ;;
     esac
@@ -214,8 +217,9 @@ release_merge_ci_outcome() {
   esac
 }
 
-# release_merge_sweep <repo> <base>: prints "<number> <head-sha>" for each open release-please PR
-# in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
+# release_merge_sweep <repo> <base>: prints "<number> <head-sha> <ci-run-id>" for each open
+# release-please PR in <repo> that targets <base> and whose head commit has passed CI, with the id of
+# the CI run that decided it. A head with no CI run yet, or
 # one still running, is left out with a line on stderr saying why: its own CI completion triggers
 # the merge. A head whose latest CI run failed is left out with a warning annotation. A PR whose CI
 # lookup fails is left out too, with an error annotation naming the PR, but the sweep goes on with
@@ -236,7 +240,7 @@ release_merge_sweep() (
         while read -r number sha ref; do
           release_merge_ci_outcome "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
           case "$ci_status" in
-            0) echo "$number $sha" ;;
+            0) echo "$number $sha $release_merge_ci_run_id" ;;
             1) echo "Skipping PR #$number at $sha: no CI run at that head whose pr-record names it" \
                  "(none yet, or the run has no record naming this PR into $2)." >&2
                [[ -z "$release_merge_ci_skip_reasons" ]] || sed 's/^/  - /' <<<"${release_merge_ci_skip_reasons%$'\n'}" >&2 ;;
@@ -282,17 +286,30 @@ release_merge_fail() {
   return 1
 }
 
-# release_merge_pr_if_gate_passes <number> <tested-sha> [<ci-run-id>]: runs the gate on PR <number>
-# against <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. With
-# a <ci-run-id> (the CI path, where the triggering run is the evidence) the gate also requires that
-# run's pr-record to name <number> into $BASE; the sweep passes none, because
-# release_merge_ci_outcome has already checked the record of the run it chose. A refusal
-# returns 0, so the job stays green. A failed lookup, or a failed merge that is not a lost race,
-# returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
+# release_merge_record_problem <ci-run-id> <number>: appends to the caller's `problems` the reason
+# the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE, and nothing
+# when it does. A lookup that fails prints an error annotation and returns 1, as a refusal would
+# hide it.
+release_merge_record_problem() {
+  local verdict
+  release_merge_run_record_verdict "$REPO" "$1" "$2" "$BASE" && verdict=0 || verdict=$?
+  case "$verdict" in
+    0) ;;
+    1|3) problems+=${problems:+$'\n'}"the CI run ${1:+$1 }$release_merge_run_record_detail" ;;
+    *) release_merge_fail "$2" "cannot check the gate: $release_merge_run_record_detail" || return 1 ;;
+  esac
+}
+
+# release_merge_pr_if_gate_passes <number> <tested-sha> <ci-run-id>: runs the gate on PR <number>
+# against <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. The
+# gate also requires the pr-record of CI run <ci-run-id> to name <number> into $BASE; an empty id is
+# refused. The CI path passes the triggering run, the sweep the run release_merge_ci_outcome chose
+# (so a swept PR's record is downloaded twice). A refusal returns 0, so the job stays green. A
+# failed lookup, or a failed merge that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 did_merge=0 pr files raw listed problems problem record_status
+  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file" || return 1
@@ -313,14 +330,7 @@ release_merge_pr_if_gate_passes() {
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
     "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
     || release_merge_fail "$number" "cannot check the gate" || return 1
-  if (( $# >= 3 )); then
-    release_merge_run_record_verdict "$REPO" "$3" "$number" "$BASE" && record_status=0 || record_status=$?
-    case "$record_status" in
-      0) ;;
-      1|3) problems+=${problems:+$'\n'}"the CI run ${3:+$3 }$release_merge_run_record_detail" ;;
-      *) release_merge_fail "$number" "cannot check the gate: $release_merge_run_record_detail" || return 1 ;;
-    esac
-  fi
+  release_merge_record_problem "$ci_run_id" "$number" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
   # annotation, which shows on the run summary without opening the log. Reasons carry
@@ -348,7 +358,7 @@ release_merge_pr_if_gate_passes() {
 # Reads REPO, OWNER, BASE, TRIGGER, BRANCH, CI_TESTED_SHA, CI_RUN_ID (the triggering run) and what
 # the function above reads.
 release_merge_run() {
-  local failed=0 candidates number sha
+  local failed=0 candidates number sha run_id
   if [[ "$TRIGGER" == "Release Please" ]]; then
     # A failed CI lookup for one PR must not stop the others, but it must fail the job.
     candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
@@ -360,8 +370,8 @@ release_merge_run() {
       [[ "$failed" == 1 ]] || echo "No open release PR has passed CI at its head. Nothing to merge."
       return "$failed"
     fi
-    while read -r number sha; do
-      release_merge_pr_if_gate_passes "$number" "$sha" || failed=1
+    while read -r number sha run_id; do
+      release_merge_pr_if_gate_passes "$number" "$sha" "$run_id" || failed=1
     done <<<"$candidates"
     return "$failed"
   fi

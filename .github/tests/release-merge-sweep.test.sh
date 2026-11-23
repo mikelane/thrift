@@ -105,7 +105,7 @@ test_a_sweep_selects_a_pr_whose_ci_succeeded_at_its_head() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z'
   got=$(sweep)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1001" ]] || fail "got [$got]"
 }
 
 test_a_sweep_warns_about_a_pr_whose_ci_failed_at_its_head() {
@@ -144,7 +144,7 @@ test_a_sweep_accepts_a_rerun_that_succeeded_after_a_failure() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed failure 2026-10-18T10:00:00Z' 'CI completed success 2026-10-18T11:00:00Z'
   got=$(sweep)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1002" ]] || fail "got [$got]"
 }
 
 test_a_sweep_ignores_runs_of_other_workflows() {
@@ -152,7 +152,7 @@ test_a_sweep_ignores_runs_of_other_workflows() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z' 'Lint completed failure 2026-10-18T11:00:00Z .github/workflows/lint.yml'
   got=$(sweep)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1001" ]] || fail "got [$got]"
 }
 
 test_a_sweep_ignores_a_successful_run_from_a_fork() {
@@ -197,7 +197,7 @@ test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z'
   write_runs "$SHA_B" 'CI completed failure 2026-10-18T10:00:00Z - - - 112'
   got=$(sweep 2>"$TEST_DIR/sweep-err")
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1001" ]] || fail "got [$got]"
   assert_file_has "$TEST_DIR/sweep-err" \
     "::warning title=Release PR #112 not merged::CI concluded failure at $SHA_B"
 }
@@ -258,7 +258,7 @@ test_a_sweep_still_selects_a_pr_when_a_later_pr_lookup_fails() {
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z'
   : >"$TEST_DIR/runs-$SHA_B.error"
   got=$(sweep 2>/dev/null)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1001" ]] || fail "got [$got]"
 }
 
 test_a_sweep_fails_when_a_later_pr_lookup_fails_even_after_selecting_one() {
@@ -289,7 +289,7 @@ test_a_sweep_reads_every_page_of_the_ci_runs() {
   jq -c . "$TEST_DIR/runs-$SHA_A.json" >>"$TEST_DIR/pages"
   mv "$TEST_DIR/pages" "$TEST_DIR/runs-$SHA_A.json"
   got=$(sweep)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1002" ]] || fail "got [$got]"
 }
 
 # ci.yml runs on pull_request with no branch filter, and anyone who can read the repo can open a PR
@@ -378,7 +378,7 @@ test_a_sweep_counts_a_successful_run_whose_record_names_the_pr_even_when_pull_re
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - none 1 111'
   got=$(sweep)
-  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+  [[ "$got" == "111 $SHA_A 1" ]] || fail "got [$got]"
 }
 
 test_the_ci_lookup_skips_a_newer_successful_run_without_a_record_and_counts_the_older_one_that_has_one() {
