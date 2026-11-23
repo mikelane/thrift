@@ -52,6 +52,15 @@ cc_turn_origin=peer'
   assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'
 }
 
+test_start_waiting_handoff_passes_when_only_the_screen_shows_the_sleep() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
+    handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
+    pane_has() { true; }; log_has() { [[ "$2" != *Bash* ]]; }
+    start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
+  assert_exit_code 0
+  assert_out_has 'SETUP_HELD'
+}
+
 test_start_waiting_handoff_skips_the_tool_call_check_when_the_evidence_pattern_is_empty() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
     handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }

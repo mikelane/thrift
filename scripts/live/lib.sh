@@ -136,6 +136,7 @@ live_require() {
 live_init() {
   LIVE_NAMES=()
   [[ "$LIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_TIMEOUT must be a whole number of seconds, not '$LIVE_TIMEOUT'"
+  [[ "$LIVE_SETUP_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_SETUP_TIMEOUT must be a whole number of seconds, not '$LIVE_SETUP_TIMEOUT'"
   [[ "$LIVE_COLUMNS" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_COLUMNS must be a whole number of columns, not '$LIVE_COLUMNS'"
   trap live_cleanup EXIT
   trap 'live_exit_on_signal 129' HUP
