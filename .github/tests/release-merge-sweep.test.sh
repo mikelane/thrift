@@ -748,4 +748,48 @@ test_a_sweep_names_an_unparseable_pr_list_as_the_failed_lookup() {
   assert_file_has "$TEST_DIR/sweep-err" '::error title=Release PR sweep failed::cannot list the open release PRs'
 }
 
+# write_padded_record <artifact> <pad-byte-hex> <total-bytes>: a pr-record.json holding a record that
+# names PR 111 into main, padded with the byte <pad-byte-hex> to <total-bytes> bytes.
+write_padded_record() {
+  python3 -I -c '
+import sys, zipfile
+doc = b"{\"number\":111,\"base\":\"main\"}"
+pad = bytes([int(sys.argv[2], 16)]) * (int(sys.argv[3]) - len(doc))
+with zipfile.ZipFile(sys.argv[1], "w") as z:
+    z.writestr("pr-record.json", doc + pad)
+' "$TEST_DIR/record-$1.zip" "$2" "$3"
+}
+
+test_the_record_check_returns_0_for_a_record_of_exactly_4096_bytes() {
+  write_record 7 111
+  write_padded_record 5007 20 4096
+  assert_record_check 7 '0 '
+}
+
+test_the_record_check_returns_0_for_a_record_of_4096_bytes_ending_in_a_newline() {
+  write_record 7 111
+  write_padded_record 5007 0a 4096
+  assert_record_check 7 '0 '
+}
+
+test_the_record_check_returns_1_for_a_record_of_4097_bytes() {
+  write_record 7 111
+  write_padded_record 5007 20 4097
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_for_a_record_of_4097_newlines() {
+  write_record 7 111
+  write_padded_record 5007 0a 4097
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+# Command substitution drops NUL bytes, so a record padded with NULs past 4096 bytes is measured
+# after they are gone.
+test_the_record_check_returns_1_for_a_record_padded_with_nul_bytes_past_4096() {
+  write_record 7 111
+  write_padded_record 5007 00 5000
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
 run_tests "$@"

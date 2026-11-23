@@ -112,9 +112,10 @@ release_merge_problems() {
 # SAFETY: a base branch's own ci.yml could write any record it likes. Only someone with write
 # access can create that branch, and the gate's author, SHA and file-allowlist checks still apply.
 release_merge_run_record_verdict() {
-  local artifact_id record zip_path read_status=0
+  local artifact_id record record_path zip_path byte_count nul_free_count read_status=0
   release_merge_run_record_detail=
   release_merge_run_record_named=
+  record=
   if [[ -z "$2" ]]; then
     release_merge_run_record_detail="is unknown (no run id)"
     return 1
@@ -140,18 +141,27 @@ release_merge_run_record_verdict() {
     release_merge_run_record_detail="cannot download the pr-record (artifact $artifact_id) of CI run $2"
     return 2
   }
+  record_path=$(mktemp "${work_dir:-${TMPDIR:-/tmp}}/pr-record.XXXXXX") || {
+    rm -f "$zip_path"
+    release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"
+    return 2
+  }
   # pipefail here, whatever the caller set: a failed unzip must not hide behind head's success.
-  # One byte past the limit tells a record that fits from one that was cut. The trailing x keeps
-  # command substitution from stripping a final newline that counts toward the length.
-  record=$(set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4097 && printf x) || read_status=1
+  # One byte past the limit tells a record that fits from one that was cut. The bytes go to a file
+  # and are counted there: a bash string would drop NUL bytes and under-measure the record.
+  (set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4097 >"$record_path") || read_status=1
   rm -f "$zip_path"
-  record=${record%x}
-  (( $(printf %s "$record" | LC_ALL=C wc -c) <= 4096 )) || read_status=1
+  if (( read_status == 0 )); then
+    byte_count=$(LC_ALL=C wc -c <"$record_path") || read_status=1
+    nul_free_count=$(LC_ALL=C tr -d '\000' <"$record_path" | LC_ALL=C wc -c) || read_status=1
+    (( byte_count <= 4096 && byte_count == nul_free_count )) || read_status=1
+  fi
   if (( read_status == 0 )); then
     record=$(jq -sc 'if length == 1 then .[0] else error("not a record") end
                      | if type == "object" and (.number | type) == "number" and (.base | type) == "string"
-                       then {number, base} else error("not a record") end' <<<"$record" 2>/dev/null) || read_status=1
+                       then {number, base} else error("not a record") end' "$record_path" 2>/dev/null) || read_status=1
   fi
+  rm -f "$record_path"
   # jq given only whitespace prints nothing and exits 0, so an empty record is unreadable too.
   [[ -n "$record" ]] || read_status=1
   if (( read_status != 0 )); then

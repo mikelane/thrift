@@ -289,7 +289,7 @@ test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tes
 # (a decoy from another base, issue #117) merges nothing. The CI path reaches the gate only for a run
 # release_merge_triggering_run_is_latest accepts, so these call the gate directly.
 run_ci_path() {
-  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 run_merge_step release_merge_run
+  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=${1:-211} run_merge_step release_merge_run
 }
 
 # The CI path merges the run that triggered it only when that run is the latest qualifying CI run
@@ -615,6 +615,76 @@ test_the_merge_step_does_not_merge_a_pr_that_changes_files_when_the_files_api_li
   echo '[]' >"$TEST_DIR/files-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_a_ci_triggered_run_merges_when_a_newer_successful_decoy_names_another_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 300 999@old-feature' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+}
+
+test_a_ci_triggered_run_merges_when_a_newer_failed_decoy_names_another_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 300 999@old-feature' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
+}
+
+test_a_ci_triggered_run_merges_over_a_failed_run_created_in_the_same_second_with_a_lower_id() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T10:00:00Z - - - 111 210' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111"
+}
+
+test_a_ci_triggered_run_refuses_a_failed_run_created_in_the_same_second_with_a_higher_id() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T10:00:00Z - - - 111 212' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "(latest: run 212)"
+}
+
+test_a_ci_triggered_run_refuses_an_older_success_when_a_newer_success_exists() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 300' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "(latest: run 300)"
+}
+
+test_a_ci_triggered_run_refuses_a_run_id_written_with_a_leading_zero() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_ci_path 0211
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_a_ci_triggered_run_holds_for_a_newer_running_run_with_an_unreadable_record() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI in_progress null 2026-10-18T11:00:00Z - - - 111 300 corrupt' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "(latest: run 300)"
 }
 
 run_tests "$@"
