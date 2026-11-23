@@ -215,6 +215,40 @@ test_the_merge_step_leaves_no_temp_files_after_a_merge() {
   [[ -z "$left" ]] || fail "left [$left]"
 }
 
+# with_failing_mktemp <prefix> <command>...: runs the command with a mktemp that fails for the
+# template <prefix>.XXXXXX and makes every other temp file as usual. run_merge_step runs it in a
+# subshell, so the stub does not outlive the test.
+with_failing_mktemp() {
+  FAILING_MKTEMP_PREFIX=$1
+  shift
+  mktemp() { [[ "$1" != */"$FAILING_MKTEMP_PREFIX".* ]] && command mktemp "$@"; }
+  "$@"
+}
+
+# assert_temp_file_failure_stops_the_gate <prefix>: the gate stops at the mktemp for <prefix> with
+# its own error, not at a later step reading an empty path.
+assert_temp_file_failure_stops_the_gate() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_failing_mktemp "$1" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot create a temp file"
+  assert_out_lacks "cannot fetch"
+  assert_out_lacks "cannot read the changed files"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_pr_temp_file() {
+  assert_temp_file_failure_stops_the_gate pr
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_files_temp_file() {
+  assert_temp_file_failure_stops_the_gate files
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_raw_temp_file() {
+  assert_temp_file_failure_stops_the_gate raw
+}
+
 test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
   TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" \

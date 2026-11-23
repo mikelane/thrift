@@ -73,6 +73,15 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
+# The tests source the lib by their own path; this ties that path to the one the workflow sources,
+# so a move that updates one side only (the tests, or the workflow and its fixture) fails here.
+test_the_file_the_merge_step_sources_is_the_lib_the_tests_exercise() {
+  local sourced
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  [[ "$REPO_ROOT/$sourced" -ef "$HARNESS_DIR/../scripts/release-merge-lib.sh" ]] \
+    || fail "the merge step sources $sourced, which is not the lib the tests source"
+}
+
 # YAML reads a lone CR as a line break, which a text reader of the file would not.
 test_the_workflow_contains_no_carriage_return() {
   local got
