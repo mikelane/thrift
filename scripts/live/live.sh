@@ -9,7 +9,8 @@
 #
 # Exit status: 0 PASS, 1 FAIL (the plugin misbehaved), 2 ERROR (the harness could not reach the
 # state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, a usage
-# error, or any harness command that failed before a verdict).
+# error, or any harness command that failed before a verdict), 3 SETUP (a setup step did not hold,
+# so nothing was judged).
 set -euo pipefail
 unset CDPATH
 

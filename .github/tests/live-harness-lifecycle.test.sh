@@ -74,10 +74,48 @@ test_a_wait_that_never_succeeds_ends_in_an_error() {
   assert_out_has '(condition: false)'
 }
 
+test_a_setup_that_did_not_hold_ends_as_setup_with_status_3_not_an_error() {
+  run_live 'live_init; live_setup_abort "the sleep never started"'
+  assert_exit_code 3
+  assert_out_has 'SETUP: the sleep never started'
+  assert_out_lacks 'ERROR'
+}
+
+test_a_setup_wait_that_never_succeeds_names_the_step_and_ends_as_setup() {
+  run_live 'LIVE_TIMEOUT=1; live_init; wait_for_setup "the turn to run sleep" 1 false'
+  assert_exit_code 3
+  assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the turn to run sleep'
+}
+
+test_a_setup_wait_that_succeeds_returns_quietly() {
+  run_live 'live_init; wait_for_setup "a thing" 5 true; LIVE_VERDICT_REACHED=1; echo DONE'
+  assert_exit_code 0
+  assert_out_has 'DONE'
+}
+
+test_a_setup_that_did_not_hold_keeps_the_run_directory_and_status_3() {
+  run_live 'live_init; live_setup_abort "the sleep never started"'
+  assert_exit_code 3
+  assert_out_has 'run directory kept'
+}
+
+test_a_setup_wait_ends_in_an_error_when_a_helper_noted_a_problem() {
+  run_live 'live_init; live_note_error "the log is unreadable"; wait_for_setup "a thing" 5 false'
+  assert_exit_code 2
+  assert_out_has 'the log is unreadable'
+  assert_out_lacks 'SETUP:'
+}
+
 test_a_timeout_that_is_not_a_whole_number_is_an_error() {
   run_live 'LIVE_TIMEOUT=soon; live_init'
   assert_exit_code 2
   assert_out_has 'LIVE_TIMEOUT must be a whole number'
+}
+
+test_a_setup_timeout_that_is_not_a_whole_number_is_an_error() {
+  run_live 'LIVE_SETUP_TIMEOUT=soon; live_init'
+  assert_exit_code 2
+  assert_out_has 'LIVE_SETUP_TIMEOUT must be a whole number'
 }
 
 test_a_kept_run_directory_stays_inside_the_test_tmpdir() {

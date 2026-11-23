@@ -14,6 +14,8 @@ LIVE_POLL=0.25
 # The box shows a typed text wrapped, so only its first characters are matched.
 LIVE_BOX_MATCH_CHARS=40
 LIVE_TIMEOUT=${LIVE_TIMEOUT:-90}
+# How long a setup step gets to show its evidence before the run ends as SETUP.
+LIVE_SETUP_TIMEOUT=${LIVE_SETUP_TIMEOUT:-30}
 # The width of every session's terminal, in columns. A scenario sets it to test a width-dependent layout.
 LIVE_COLUMNS=${LIVE_COLUMNS:-120}
 
@@ -134,6 +136,7 @@ live_require() {
 live_init() {
   LIVE_NAMES=()
   [[ "$LIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_TIMEOUT must be a whole number of seconds, not '$LIVE_TIMEOUT'"
+  [[ "$LIVE_SETUP_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_SETUP_TIMEOUT must be a whole number of seconds, not '$LIVE_SETUP_TIMEOUT'"
   [[ "$LIVE_COLUMNS" =~ ^[1-9][0-9]*$ ]] || live_abort "LIVE_COLUMNS must be a whole number of columns, not '$LIVE_COLUMNS'"
   trap live_cleanup EXIT
   trap 'live_exit_on_signal 129' HUP
@@ -164,19 +167,45 @@ live_raise_noted_error() {
 
 # --- waiting -------------------------------------------------------------------------------------
 
-# wait_for <description> <command...>: polls the command until it succeeds. A timeout is an ERROR
-# (the harness could not reach the state), not a FAIL (the plugin misbehaved).
-wait_for() {
-  local description=$1
-  shift
-  local deadline=$((SECONDS + LIVE_TIMEOUT))
+# live_poll <seconds> <abort_function> <description> <command...>: polls the command until it succeeds.
+# Past the bound it calls <abort_function> <seconds> <description> <what the harness was waiting for>.
+live_poll() {
+  local seconds=$1 abort_function=$2 description=$3
+  shift 3
+  local deadline=$((SECONDS + seconds))
   LIVE_WAITING="$description (condition: $*)"
   until live_raise_noted_error; "$@"; do
     live_raise_noted_error
-    ((SECONDS < deadline)) || live_abort "timed out after ${LIVE_TIMEOUT}s waiting for $LIVE_WAITING"
+    ((SECONDS < deadline)) || "$abort_function" "$seconds" "$description" "$LIVE_WAITING"
     sleep "$LIVE_POLL"
   done
   LIVE_WAITING=''
+}
+
+live_timeout_error() { live_abort "timed out after ${1}s waiting for $3"; }
+
+# wait_for <description> <command...>: polls the command until it succeeds. A timeout is an ERROR
+# (the harness could not reach the state), not a FAIL (the plugin misbehaved).
+wait_for() { live_poll "$LIVE_TIMEOUT" live_timeout_error "$@"; }
+
+# live_setup_abort <message>: the run could not set up the state it needs to judge the plugin (a model
+# skipped a tool call the setup depends on). SETUP, exit status 3, is not a FAIL (the plugin misbehaved)
+# and not an ERROR (the harness broke): nothing was judged.
+live_setup_abort() {
+  live_say "SETUP: $*"
+  live_say "$(live_pane_report 'at the setup')"
+  LIVE_ABORTED=1
+  exit 3
+}
+
+live_setup_timeout_abort() { live_setup_abort "the setup step did not hold: timed out after ${1}s waiting for $2"; }
+
+# wait_for_setup <description> <seconds> <command...>: wait_for with its own bound, for a setup step whose
+# failure is not the plugin's and not a harness fault. A timeout ends the run as SETUP.
+wait_for_setup() {
+  local description=$1 seconds=$2
+  shift 2
+  live_poll "$seconds" live_setup_timeout_abort "$description" "$@"
 }
 
 # --- verdicts ------------------------------------------------------------------------------------

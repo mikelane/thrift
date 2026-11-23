@@ -115,9 +115,37 @@ start_waiting_handoff() {
   press "$name" C-x Tab
   press "$name" h
   wait_for 'the band to press hand off' log_has "$name" 'ui\.press handoff/handoff'
+  local tool_calls_before
+  tool_calls_before=$(tool_call_baseline "$name")
   press "$peer" Enter
-  wait_for "the peer turn to start in '$name'" log_has "$name" 'cc_turn_origin=peer'
+  wait_for_setup "the peer turn to start in '$name'" "$LIVE_SETUP_TIMEOUT" log_has "$name" 'cc_turn_origin=peer'
+  require_waiting_turn_tool_call "$name" "$tool_calls_before"
   wait_for 'the handoff to wait for the running turn' pane_has "$name" 'continues when the current turn ends'
+}
+
+# The tool call the peer's task depends on. The model sometimes answers without making it (#178), and
+# then the turn ends before the note does and the handoff never waits. WAITING_HANDOFF_TOOL_CALL_CHECK=off
+# skips the check.
+#
+# The two sources show the call in different forms. The debug log has one line per tool dispatch and never
+# names the command, so it can only say that a Bash call started (`tool_dispatch_start tool=Bash`, checked on
+# Claude Code 2.1.330). The screen shows the command, `Bash(sleep 14)`.
+WAITING_HANDOFF_TOOL_CALL_LOG_PATTERN_DEFAULT='tool_dispatch_start tool=Bash'
+WAITING_HANDOFF_TOOL_CALL_PANE_PATTERN_DEFAULT='Bash\(sleep'
+waiting_tool_call_log_pattern() { echo "${WAITING_HANDOFF_TOOL_CALL_LOG_PATTERN-$WAITING_HANDOFF_TOOL_CALL_LOG_PATTERN_DEFAULT}"; }
+waiting_tool_call_pane_pattern() { echo "${WAITING_HANDOFF_TOOL_CALL_PANE_PATTERN-$WAITING_HANDOFF_TOOL_CALL_PANE_PATTERN_DEFAULT}"; }
+# tool_call_baseline <name>: the debug-log lines that already match the log pattern before the peer's Enter.
+# Only lines written after this count: a Bash call earlier in the same session matches the pattern too. A log
+# that does not exist yet counts 0.
+tool_call_baseline() { log_count "$1" "$(waiting_tool_call_log_pattern)"; }
+# turn_has_tool_call <name> <log-pattern> <baseline> <pane-pattern>: the call shows in the debug log past the
+# baseline or on the screen.
+turn_has_tool_call() { log_has_more_than "$1" "$2" "$3" || pane_has "$1" "$4"; }
+# require_waiting_turn_tool_call <name> <baseline>: ends the run as SETUP when the peer turn shows no tool call in time.
+require_waiting_turn_tool_call() {
+  [[ "${WAITING_HANDOFF_TOOL_CALL_CHECK:-on}" != off ]] || return 0
+  wait_for_setup "the peer turn in '$1' to run its sleep (no /$(waiting_tool_call_log_pattern)/ line past the baseline in the debug log, and no /$(waiting_tool_call_pane_pattern)/ on the screen)" "$LIVE_SETUP_TIMEOUT" \
+    turn_has_tool_call "$1" "$(waiting_tool_call_log_pattern)" "$2" "$(waiting_tool_call_pane_pattern)"
 }
 
 # The abandon of a handoff that waits for a turn: a `none` record with reason background_busy. The reason
