@@ -9,8 +9,9 @@ name: Release Merge
 #     it and the first trigger never fires; this one catches that case. A head with no CI run yet,
 #     or CI still running, is skipped, because its own CI completion fires the first trigger.
 # Both paths run the same gate and the same merge, and a PR the other path already merged, or whose
-# head moved, is logged and skipped. If a PR is stuck anyway, rerun its last CI run by hand:
-# `gh run rerun <CI run id>` (the id is in `gh run list --branch <release branch> --workflow CI`).
+# head moved, is logged and skipped. If a PR is stuck anyway, close and reopen it: that starts a fresh CI run
+# with a pr-record. A rerun of an old run reuses its original workflow file, so a run made before the
+# pr-record job existed never gets a record.
 #
 # Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
 # so a successful CI run means the PR met them. The PR needs one code-owner approval and the App
@@ -26,6 +27,8 @@ name: Release Merge
 #   - the PR is open, targets main, and its head branch is release-please--* in this repository
 #   - the PR author is this release App (the bot login comes from the token step's app-slug)
 #   - the PR head is the commit CI tested, and the merge is pinned to it (--match-head-commit)
+#   - the CI run's own pr-record artifact (written by ci.yml from its pull_request event) names this
+#     PR into the default branch; a run with no record, or one naming another PR, does not count
 #   - the PR changes only files release-please writes (see release_merge_allowlist)
 # Anything else is logged and skipped, and the PR waits for a person.
 #
@@ -58,6 +61,7 @@ jobs:
         && github.event.workflow_run.event == 'pull_request'
         && github.event.workflow_run.head_repository.full_name == github.repository
         && startsWith(github.event.workflow_run.head_branch, 'release-please--')
+        && github.event.workflow_run.path == '.github/workflows/ci.yml'
       ) || (
         github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.name == 'Release Please'
@@ -65,7 +69,8 @@ jobs:
         && github.event.workflow_run.head_branch == github.event.repository.default_branch
       )
     runs-on: ubuntu-latest
-    # The sweep reads CI runs with the workflow's own token (RUNS_TOKEN below); that is all it gets.
+    # The gate reads CI runs and their pr-record artifacts with the workflow's own token (RUNS_TOKEN
+    # below); that is all it gets.
     permissions:
       actions: read
     # The App key lives in this environment, which only main may deploy to (see release-please.yml).
@@ -104,6 +109,7 @@ jobs:
           TRIGGER: ${{ github.event.workflow_run.name }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           CI_TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           # shellcheck source=.github/scripts/release-merge-lib.sh

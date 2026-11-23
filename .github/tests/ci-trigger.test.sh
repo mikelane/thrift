@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The branches: [main] filter stops an ordinary PR into another base from triggering a CI run. It
-# does not bound a run's pull_requests list, and a base with an unfiltered ci.yml can still trigger
-# one (CLAUDE.md, "ci.yml runs only for PRs into main"; issue #117). The workflow is parsed with
+# does not bound which runs exist: a base with an unfiltered ci.yml can still trigger one, which is why
+# the release gate reads each run's pr-record instead (CLAUDE.md, "The CI run record"; issue #117). The workflow is parsed with
 # Ruby (Psych), which reads a bare `on` key as boolean true, so the table is read under that key.
 # Usage: ci-trigger.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh

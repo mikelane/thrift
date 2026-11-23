@@ -58,6 +58,20 @@ test_the_whole_parsed_workflow_equals_the_expected_fixture() {
   fail 'release-merge.yml differs from release-merge-workflow.expected.json; update the fixture if the change is intended'
 }
 
+# The sweep reads only runs of .github/workflows/ci.yml, so the CI path must too: a workflow named
+# CI in another file would otherwise start the merge job.
+test_the_ci_completion_trigger_is_pinned_to_the_ci_workflow_file() {
+  local condition
+  condition=$(workflow_text "$MERGE_JOB.if")
+  [[ "$condition" == *"github.event.workflow_run.path == '.github/workflows/ci.yml'"* ]] \
+    || fail "the job condition never checks the CI workflow file path: $condition"
+}
+
+test_a_workflow_without_the_ci_path_check_is_refused_by_the_fixture_check() {
+  refuses_variant 'o.replace("\n        && github.event.workflow_run.path == '"'"'.github/workflows/ci.yml'"'"'", "", 1)' \
+    'the CI path check is gone'
+}
+
 test_the_merge_step_calls_release_merge_run() {
   merge_step_script | grep -qxF 'release_merge_run' || fail 'the merge step never calls release_merge_run'
 }

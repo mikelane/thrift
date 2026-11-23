@@ -6,7 +6,7 @@
   "jobs": {
     "merge": {
       "environment": "release",
-      "if": "(\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.event == 'pull_request'\n  && github.event.workflow_run.head_repository.full_name == github.repository\n  && startsWith(github.event.workflow_run.head_branch, 'release-please--')\n) || (\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.name == 'Release Please'\n  && github.event.workflow_run.event == 'push'\n  && github.event.workflow_run.head_branch == github.event.repository.default_branch\n)",
+      "if": "(\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.event == 'pull_request'\n  && github.event.workflow_run.head_repository.full_name == github.repository\n  && startsWith(github.event.workflow_run.head_branch, 'release-please--')\n  && github.event.workflow_run.path == '.github/workflows/ci.yml'\n) || (\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.name == 'Release Please'\n  && github.event.workflow_run.event == 'push'\n  && github.event.workflow_run.head_branch == github.event.repository.default_branch\n)",
       "permissions": {
         "actions": "read"
       },
@@ -37,6 +37,7 @@
             "BASE": "${{ github.event.repository.default_branch }}",
             "BOT_LOGIN": "${{ steps.app-token.outputs.app-slug }}[bot]",
             "BRANCH": "${{ github.event.workflow_run.head_branch }}",
+            "CI_RUN_ID": "${{ github.event.workflow_run.id }}",
             "CI_TESTED_SHA": "${{ github.event.workflow_run.head_sha }}",
             "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
             "OWNER": "${{ github.repository_owner }}",

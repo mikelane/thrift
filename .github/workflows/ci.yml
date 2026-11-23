@@ -121,6 +121,35 @@ jobs:
       - name: Run the canary report harness against the real report script
         run: .github/tests/canary-report.sh
 
+  # The release-merge gate counts a CI run only when this record names the release PR and its base
+  # (issue #117). A run takes its workflow file from the PR's merge commit, so its own pull_requests
+  # list cannot say which PR triggered it; this job writes the number and base from the event itself.
+  # The values reach the script through env, never through an expression in `run`.
+  pr-record:
+    name: record the pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Write the pull request number and base
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pr-record"
+          jq -n --argjson number "$PR_NUMBER" --arg base "$PR_BASE" '{number: $number, base: $base}' \
+            > "$RUNNER_TEMP/pr-record/pr-record.json"
+
+      - name: Upload the pr-record artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-record
+          path: ${{ runner.temp }}/pr-record/pr-record.json
+          retention-days: 30
+          if-no-files-found: error
+
   report:
     name: open canary issues
     needs: check
