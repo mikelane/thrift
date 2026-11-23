@@ -48,12 +48,34 @@ test_the_pr_record_job_uploads_an_artifact_named_pr_record() {
     'the uploaded artifact names' '["pr-record"]'
 }
 
-test_the_pr_record_file_holds_the_number_and_base_as_json() {
+# The upload path must be the file the script writes, or every release PR is refused for want of a
+# record; if-no-files-found: error turns that mistake into a red CI run instead.
+test_the_pr_record_job_uploads_the_file_the_script_writes_and_fails_when_it_is_missing() {
+  assert_record_job '[.steps[] | select(.uses? // "" | startswith("actions/upload-artifact@")) | .with]' \
+    'the upload settings' \
+    '[{"name":"pr-record","path":"${{ runner.temp }}/pr-record/pr-record.json","retention-days":30,"if-no-files-found":"error"}]'
+}
+
+# run_record_script <number> <base>: runs the record step's script as Actions runs a step with no
+# `shell:` (bash -e), with $TEST_DIR as RUNNER_TEMP.
+run_record_script() {
   local script
   script=$(record_job_json '.steps[] | select(.env.PR_NUMBER?) | .run' | jq -r .) || fail "cannot read the script"
-  RUNNER_TEMP=$TEST_DIR PR_NUMBER=42 PR_BASE=main bash -c "$script"
+  RUNNER_TEMP=$TEST_DIR PR_NUMBER=$1 PR_BASE=$2 bash -e -c "$script"
+}
+
+test_the_pr_record_file_holds_the_number_and_base_as_json() {
+  run_record_script 42 main
   [[ "$(jq -c . "$TEST_DIR/pr-record/pr-record.json")" == '{"number":42,"base":"main"}' ]] \
     || fail "the record is [$(cat "$TEST_DIR/pr-record/pr-record.json")]"
+}
+
+# A base ref is chosen by whoever opens the PR: quotes and $( ) must land in the record as text.
+test_the_pr_record_file_holds_a_base_with_quotes_and_a_command_substitution_verbatim() {
+  run_record_script 42 'x"$(touch pwned)'
+  [[ "$(jq -r .base "$TEST_DIR/pr-record/pr-record.json")" == 'x"$(touch pwned)' ]] \
+    || fail "the record is [$(cat "$TEST_DIR/pr-record/pr-record.json")]"
+  assert_no_file "$PWD/pwned"
 }
 
 run_tests "$@"

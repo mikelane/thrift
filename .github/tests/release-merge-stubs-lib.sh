@@ -29,7 +29,9 @@ write_pr() {
 # query, CI runs, a pull request's files) fail unless `--paginate` is given, as a single page
 # would miss results. The merge command logs its arguments to merge-calls and fails when
 # merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if that exists
-# (the other trigger got there first).
+# (the other trigger got there first). Each Actions route (the CI runs, a run's artifact list, an
+# artifact's zip) records the GH_TOKEN it was called with in its own file (runs-token,
+# artifacts-token, zip-token), so a test can check every one of them used the runs token.
 stub_gh() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
@@ -55,12 +57,12 @@ stub_gh() {
     '  */actions/runs/*/artifacts\?*)' \
     '    require_paginate' \
     '    run=${path#*/actions/runs/}; run=${run%%/*}' \
-    '    echo "$GH_TOKEN" >"$dir/runs-token"' \
+    '    echo "$GH_TOKEN" >"$dir/artifacts-token"' \
     '    [[ -e "$dir/artifacts-$run.error" ]] && { echo "HTTP 500" >&2; exit 1; }' \
     '    if [[ -r "$dir/artifacts-$run.json" ]]; then cat "$dir/artifacts-$run.json"; else echo "{\"artifacts\":[]}"; fi ;;' \
     '  */actions/artifacts/*/zip)' \
     '    artifact=${path#*/actions/artifacts/}; artifact=${artifact%%/*}' \
-    '    echo "$GH_TOKEN" >"$dir/runs-token"' \
+    '    echo "$GH_TOKEN" >"$dir/zip-token"' \
     '    [[ -e "$dir/record-$artifact.error" ]] && { echo "HTTP 500" >&2; exit 1; }' \
     '    cat "$dir/record-$artifact.zip" ;;' \
     '  */pulls) jq -r ".[0].number // empty" "$dir/pulls.json" ;;' \
@@ -145,6 +147,29 @@ with zipfile.ZipFile(sys.argv[1], "w") as z:
     z.writestr("pr-record.json", json.dumps({"number": int(number), "base": base or "main"}))
 ' "$TEST_DIR/record-$artifact.zip" "$spec"
   fi
+}
+
+# write_artifact_pages <run-id> <page>...: the artifact listing the stub serves for a run, each
+# <page> a JSON object as one page of `gh api --paginate` prints it, pages concatenated.
+write_artifact_pages() {
+  local run=$1
+  shift
+  printf '%s\n' "$@" >"$TEST_DIR/artifacts-$run.json"
+}
+
+# artifact_entry <id> [name] [expired]: one entry of an artifact listing (default pr-record, false).
+artifact_entry() {
+  printf '{"id":%s,"name":"%s","expired":%s}' "$1" "${2:-pr-record}" "${3:-false}"
+}
+
+# write_raw_record <artifact-id> <content> [member]: the zip the stub serves for an artifact, holding
+# <content> verbatim in <member> (default pr-record.json), for records ci.yml would never write.
+write_raw_record() {
+  python3 -I -c '
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "w") as z:
+    z.writestr(sys.argv[3], sys.argv[2])
+' "$TEST_DIR/record-$1.zip" "$2" "${3:-pr-record.json}"
 }
 
 # stage_release_pr <number> <sha> <component> <ci-conclusion>: a release PR that passes the gate,

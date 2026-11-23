@@ -297,7 +297,7 @@ test_a_ci_triggered_run_refuses_a_run_whose_record_names_another_pr() {
   run_ci_path
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has a pr-record naming"
+  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has a pr-record naming {\"number\":999,\"base\":\"old-feature\"} (at $SHA_A)"
 }
 
 test_a_ci_triggered_run_refuses_a_run_with_no_record() {
@@ -306,7 +306,7 @@ test_a_ci_triggered_run_refuses_a_run_with_no_record() {
   run_ci_path
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "the CI run 211 has no pr-record artifact"
+  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has no pr-record artifact (at $SHA_A)"
 }
 
 test_a_ci_triggered_run_refuses_a_run_with_an_unreadable_record() {
@@ -315,7 +315,39 @@ test_a_ci_triggered_run_refuses_a_run_with_an_unreadable_record() {
   run_ci_path
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "the CI run 211 has an unreadable pr-record"
+  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has an unreadable pr-record (at $SHA_A)"
+}
+
+# The record problem joins the gate's own problems rather than replacing them.
+test_a_ci_triggered_run_lists_both_a_gate_problem_and_a_record_problem() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.user.login = "someone"'
+  write_record 211 none
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "- the CI run 211 has no pr-record artifact"
+  assert_out_has "- the PR author is someone, not $BOT"
+}
+
+test_a_ci_triggered_run_reads_the_record_with_the_runs_token_not_the_app_token() {
+  local artifacts_token zip_token
+  stage_release_pr 111 "$SHA_A" handoff success
+  GH_TOKEN=app-token RUNS_TOKEN=runs-tok run_ci_path
+  artifacts_token=$(<"$TEST_DIR/artifacts-token")
+  zip_token=$(<"$TEST_DIR/zip-token")
+  [[ "$artifacts_token $zip_token" == "runs-tok runs-tok" ]] || fail "got [$artifacts_token $zip_token]"
+}
+
+# The sweep passes no run id: release_merge_ci_outcome already read the chosen run's record, so the
+# gate does not look one up again (a run with no record still merges on this path).
+test_the_merge_step_does_not_check_a_record_when_no_run_id_is_given() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_record 211 none
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"
+  assert_no_file "$TEST_DIR/artifacts-token"
 }
 
 test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_lookup_fails() {
@@ -324,7 +356,7 @@ test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_lookup_fails()
   run_ci_path
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot list the artifacts of CI run 211"
 }
 
 test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_download_fails() {
@@ -333,12 +365,12 @@ test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_download_fails
   run_ci_path
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot download the pr-record (artifact 5211) of CI run 211"
 }
 
 test_a_ci_triggered_run_refuses_when_the_triggering_run_id_is_unknown() {
   stage_release_pr 111 "$SHA_A" handoff success
-  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID= run_merge_step release_merge_run
+  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID='' run_merge_step release_merge_run
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "the CI run is unknown"

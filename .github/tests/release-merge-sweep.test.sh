@@ -314,13 +314,6 @@ test_a_sweep_counts_the_newer_of_two_ci_runs_created_in_the_same_second() {
   assert_sweep_warns_ci_failed 111 "$SHA_A"
 }
 
-# A run with an empty pull_requests array names no pull request, so it cannot be tied to this one.
-test_a_sweep_ignores_a_successful_run_with_no_pull_requests() {
-  write_pulls "$(open_pr 111 $SHA_A)"
-  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - none'
-  assert_sweep_skips 111 "$SHA_A"
-}
-
 test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 999'
@@ -330,14 +323,15 @@ test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
 # The runs API documents pull_requests as "Pull requests that are open with a head_sha or
 # head_branch that matches the workflow run. The returned pull requests do not necessarily indicate
 # pull requests that triggered the run." So while PR 999 (same release branch, into old-feature) is
-# open, every run at that head lists both PRs, the run PR 999 triggered included. Its success must
-# not stand in for the release PR's own CI run, which failed.
+# open, every run at that head lists both PRs, the run PR 999 triggered included. The lib reads only
+# each run's pr-record: PR 999's run records 999, so its success must not stand in for the release
+# PR's own CI run, whose record names 111 and which failed.
 test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" \
-    'CI completed success 2026-10-18T11:00:00Z - - - 999@old-feature,111 2' \
-    'CI completed failure 2026-10-18T10:00:00Z - - - 999@old-feature,111 1'
-  assert_sweep_skips 111 "$SHA_A"
+    'CI completed success 2026-10-18T11:00:00Z - - - 999@old-feature,111 2 999@old-feature' \
+    'CI completed failure 2026-10-18T10:00:00Z - - - 999@old-feature,111 1 111'
+  assert_sweep_warns_ci_failed 111 "$SHA_A"
 }
 
 # issue #117, the closed decoy: PR 999 (this release branch into a base whose ci.yml has no branch
@@ -394,6 +388,23 @@ test_the_ci_lookup_skips_a_newer_run_without_a_record_and_counts_the_older_one_t
   [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
 }
 
+# A running run uploads its record partway through, so a newer run with none yet may still be this
+# PR's: the lookup waits for it instead of counting an older success.
+test_the_ci_lookup_returns_3_when_a_newer_run_is_still_running_with_no_record_yet() {
+  write_runs "$SHA_A" \
+    'CI in_progress null 2026-10-18T11:00:00Z - - - 111 2 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 3 ]] || fail "got $(ci_status)"
+}
+
+# A running run whose record names another PR is not this PR's, so it does not hold the PR back.
+test_the_ci_lookup_skips_a_newer_running_run_whose_record_names_another_pr() {
+  write_runs "$SHA_A" \
+    'CI in_progress null 2026-10-18T11:00:00Z - - - 111 2 999@old-feature' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
+}
+
 test_the_ci_lookup_returns_2_when_the_artifact_list_cannot_be_read() {
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
   : >"$TEST_DIR/artifacts-1.error"
@@ -414,13 +425,187 @@ test_a_sweep_fails_and_names_the_pr_when_a_record_cannot_be_read() {
   sweep >"$TEST_DIR/sweep-out" 2>"$TEST_DIR/sweep-err"
   status=$?
   [[ "$status" != 0 ]] || fail "the sweep succeeded"
-  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A (cannot list the artifacts of CI run 1)"
 }
 
-test_the_ci_lookup_reads_records_with_the_runs_token() {
+test_the_ci_lookup_lists_a_runs_artifacts_with_the_runs_token_not_the_app_token() {
+  local got
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
-  RUNS_TOKEN=runs-tok ci_status >/dev/null
-  [[ "$(cat "$TEST_DIR/runs-token")" == runs-tok ]] || fail "got $(cat "$TEST_DIR/runs-token")"
+  GH_TOKEN=app-token RUNS_TOKEN=runs-tok ci_status >/dev/null
+  got=$(<"$TEST_DIR/artifacts-token")
+  [[ "$got" == runs-tok ]] || fail "got [$got]"
+}
+
+test_the_ci_lookup_downloads_the_record_with_the_runs_token_not_the_app_token() {
+  local got
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  GH_TOKEN=app-token RUNS_TOKEN=runs-tok ci_status >/dev/null
+  got=$(<"$TEST_DIR/zip-token")
+  [[ "$got" == runs-tok ]] || fail "got [$got]"
+}
+
+# A lookup that fails on the newest run must not fall through to an older run that would count.
+test_the_ci_lookup_returns_2_when_the_newest_runs_record_lookup_fails_ahead_of_an_older_good_run() {
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 2' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  : >"$TEST_DIR/artifacts-2.error"
+  [[ "$(ci_status)" == 2 ]] || fail "got $(ci_status)"
+}
+
+# record_check <run-id>: "<code> <reason>" from release_merge_run_record_status for PR 111 into
+# main, run with pipefail as the workflow step runs it. The reason is read in the same shell.
+record_check() {
+  stub_gh
+  (
+    set -o pipefail
+    release_merge_run_record_status "$REPO" "$1" 111 main && code=0 || code=$?
+    echo "$code $release_merge_record_reason"
+  )
+}
+
+# assert_record_check <run-id> <expected "<code> <reason>">
+assert_record_check() {
+  local got
+  got=$(record_check "$1" 2>"$TEST_DIR/record-err")
+  [[ "$got" == "$2" ]] || fail "got [$got], expected [$2]"
+}
+
+test_the_record_check_returns_0_when_the_record_names_the_pr_into_main() {
+  write_record 7 111
+  assert_record_check 7 '0 '
+}
+
+test_the_record_check_returns_1_with_no_run_id() {
+  assert_record_check '' '1 is unknown (no run id)'
+}
+
+test_the_record_check_returns_3_when_the_run_has_no_artifacts() {
+  write_record 7 none
+  assert_record_check 7 '3 has no pr-record artifact'
+}
+
+# The zip would name the PR, so only the expired flag keeps the artifact from counting.
+test_the_record_check_returns_3_when_the_only_pr_record_has_expired() {
+  write_record 7 111
+  write_artifact_pages 7 "{\"artifacts\":[$(artifact_entry 5007 pr-record true)]}"
+  assert_record_check 7 '3 has no pr-record artifact'
+}
+
+# The expired artifact has the higher id and names another PR: reading it would refuse the PR.
+test_the_record_check_returns_0_from_the_unexpired_record_when_a_newer_one_has_expired() {
+  write_record 7 111
+  write_raw_record 5008 '{"number":999,"base":"main"}'
+  write_artifact_pages 7 "{\"artifacts\":[$(artifact_entry 5007),$(artifact_entry 5008 pr-record true)]}"
+  assert_record_check 7 '0 '
+}
+
+# Listed highest id first, so taking the last entry as listed would read the other PR's record.
+test_the_record_check_returns_0_from_the_highest_id_of_two_unexpired_records() {
+  write_record 7 111
+  write_raw_record 5006 '{"number":999,"base":"main"}'
+  write_artifact_pages 7 "{\"artifacts\":[$(artifact_entry 5007),$(artifact_entry 5006)]}"
+  assert_record_check 7 '0 '
+}
+
+# The zip would name the PR, so only the name check keeps the artifact from counting.
+test_the_record_check_returns_3_when_the_only_artifact_has_another_name() {
+  write_record 7 111
+  write_artifact_pages 7 "{\"artifacts\":[$(artifact_entry 5007 coverage)]}"
+  assert_record_check 7 '3 has no pr-record artifact'
+}
+
+# `gh api --paginate` prints one JSON object per page; the record is only on page 2.
+test_the_record_check_returns_0_when_the_record_is_on_the_second_page_of_artifacts() {
+  write_record 7 111
+  write_artifact_pages 7 \
+    "{\"total_count\":2,\"artifacts\":[$(artifact_entry 5006 coverage)]}" \
+    "{\"total_count\":2,\"artifacts\":[$(artifact_entry 5007)]}"
+  assert_record_check 7 '0 '
+}
+
+test_the_record_check_returns_2_when_the_artifact_list_is_not_json() {
+  write_artifact_pages 7 'not json'
+  assert_record_check 7 '2 cannot list the artifacts of CI run 7'
+}
+
+test_the_record_check_returns_2_when_the_artifact_list_cannot_be_fetched() {
+  write_record 7 111
+  : >"$TEST_DIR/artifacts-7.error"
+  assert_record_check 7 '2 cannot list the artifacts of CI run 7'
+}
+
+test_the_record_check_returns_2_when_the_record_cannot_be_downloaded() {
+  write_record 7 111
+  : >"$TEST_DIR/record-5007.error"
+  assert_record_check 7 '2 cannot download the pr-record (artifact 5007) of CI run 7'
+}
+
+# An empty PATH also hides gh and jq, so the message is what shows the unzip check fired.
+test_the_record_check_returns_2_and_names_unzip_when_unzip_is_missing() {
+  local got
+  write_record 7 111
+  mkdir "$TEST_DIR/empty-path"
+  # shellcheck disable=SC2123 # an empty PATH is the point: unzip must not be found
+  got=$(stub_gh; PATH=$TEST_DIR/empty-path
+    release_merge_run_record_status "$REPO" 7 111 main 2>"$TEST_DIR/record-err" && echo 0 || echo $?)
+  [[ "$got" == 2 ]] || fail "got [$got]"
+  assert_file_has "$TEST_DIR/record-err" "unzip is not installed, so the pr-record of CI run 7 cannot be read"
+}
+
+test_the_record_check_returns_1_when_the_zip_holds_no_pr_record_json() {
+  write_record 7 111
+  write_raw_record 5007 '{"number":111,"base":"main"}' other.json
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_the_record_is_empty() {
+  write_record 7 111
+  write_raw_record 5007 ''
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_the_record_number_is_a_string() {
+  write_record 7 111
+  write_raw_record 5007 '{"number":"111","base":"main"}'
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_the_record_has_no_base() {
+  write_record 7 111
+  write_raw_record 5007 '{"number":111}'
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_the_record_is_not_an_object() {
+  write_record 7 111
+  write_raw_record 5007 '[111,"main"]'
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_the_record_is_not_json() {
+  write_record 7 111
+  write_raw_record 5007 '{"number":111,"base":"main"} trailing'
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+# Only the first 4096 bytes are read, so a longer record is cut mid-string and does not parse.
+test_the_record_check_returns_1_when_the_record_is_longer_than_4096_bytes() {
+  local padding
+  padding=$(printf '%5000s' '' | tr ' ' x)
+  write_record 7 111
+  write_raw_record 5007 "{\"number\":111,\"base\":\"main\",\"pad\":\"$padding\"}"
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_and_names_the_record_when_it_names_another_base() {
+  write_record 7 111@old-feature
+  assert_record_check 7 '1 has a pr-record naming {"number":111,"base":"old-feature"}'
+}
+
+test_the_record_check_returns_1_and_names_the_record_when_it_names_another_pr() {
+  write_record 7 999
+  assert_record_check 7 '1 has a pr-record naming {"number":999,"base":"main"}'
 }
 
 # gh exits 0 but the open-PR list is not JSON: the sweep names the failed lookup and fails.
