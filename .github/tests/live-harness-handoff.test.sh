@@ -125,6 +125,23 @@ test_clear_resume_passes_one_person_clear_that_names_the_session_and_the_mode() 
   assert_out_has 'PASS s (7 checks)'
 }
 
+test_clear_resume_accepts_a_person_clear_that_ran_ahead_of_the_handoffs_during_the_compaction() {
+  run_judge cleared_by_first_clear 2 '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"person","compacted_before_clear":true,"effective_mode":"ask"}}'
+  assert_exit_code 0
+  assert_out_has 'PASS  case: the compaction ran and the clear that ran first is named (cleared_by person)'
+}
+
+test_clear_resume_accepts_a_skipped_clear_as_an_end_with_no_note() {
+  qa_judge show_ending_path 2 1 none yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"person_command","effective_mode":"ask"}}'
+  assert_exit_code 0
+}
+
+test_clear_resume_fails_a_skipped_clear_whose_note_reached_a_transcript() {
+  qa_judge show_ending_path 2 1 fresh yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"person_command","effective_mode":"ask"}}'
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the handoff note'
+}
+
 test_clear_resume_prints_the_path_a_resume_took_without_judging_it() {
   qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
   assert_exit_code 0
@@ -233,7 +250,7 @@ run_case_calls() {
     decision_lines() { echo 0; }; settle_until() { :; }; show_case() { :; }
     judge_case() { echo "ENDS AT TYPING $COMPACTION_ENDS_AT_TYPING"; }
     wait_for() { echo "CALL wait $*"; WAITED="$WAITED|$1"; }
-    run_case label c1 '"$1"' /clear cleared_by_handoff 2
+    run_case label c1 '"$1"' /clear cleared_by_first_clear 2
     check done none true; live_verdict s'
 }
 
@@ -244,7 +261,7 @@ test_run_case_raises_an_error_when_the_log_is_unreadable_at_typing() {
     handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }
     submit() { :; }; decision_lines() { echo 0; }; wait_for() { :; }
     judge_case() { echo "JUDGED"; }
-    run_case label c1 compaction /clear cleared_by_handoff 2
+    run_case label c1 compaction /clear cleared_by_first_clear 2
     check done none true; live_verdict s'
   assert_exit_code 2
   assert_out_has 'could not be read'
@@ -257,7 +274,7 @@ test_run_case_raises_an_error_when_the_log_is_unreadable_before_the_handoff_is_t
     mkdir "$(debug_log_of c1)"
     handoff_start() { :; }; say_apple() { :; }; decision_lines() { echo 0; }
     submit() { echo "TYPED $2"; }; wait_for() { :; }
-    run_case label c1 compaction /clear cleared_by_handoff 2
+    run_case label c1 compaction /clear cleared_by_first_clear 2
     check done none true; live_verdict s'
   assert_exit_code 2
   assert_out_has 'could not be read'
