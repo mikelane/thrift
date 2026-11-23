@@ -9,9 +9,25 @@ const MID_FLIGHT: ContinueInput = {
   noteDelivery: 'appended',
   hasHeldPromptStartedTurn: false,
   isSameSession: true,
+  clearedBy: 'handoff',
 }
 
 describe('decideContinue', () => {
+  test('It skips with cleared_by_person when the person cleared first', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
+  })
+
+  test('It logs off rather than cleared_by_person when the setting is off', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', isEnabled: false })).toEqual({ submit: false, fields: { continued: 'off' } })
+  })
+
+  test('It keeps strong_signal ahead of cleared_by_person', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', signal: 'strong' })).toMatchObject({ fields: { continue_skip: 'strong_signal' } })
+  })
+
   test('It submits after a weak-signal handoff whose note was appended', () => {
     expect(decideContinue(MID_FLIGHT)).toEqual({ submit: true })
   })

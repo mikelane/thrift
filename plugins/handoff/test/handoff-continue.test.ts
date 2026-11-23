@@ -90,6 +90,21 @@ describe('continuing after a handoff', () => {
     expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'held_prompt_sent' })
   })
 
+  test('It submits nothing and logs cleared_by_person when the person cleared during the wait', CONTINUING, async ($, on) => {
+    const world = install($, on)
+    const fork = holdFork(world)
+    await startSession($)
+    const band = await weakBand($, world)
+    await band.press({ key: 'handoff' })
+    await world.clock.settle()
+    await runCommand($, 'clear')
+    await world.clock.settle()
+    fork.release(answered('The handoff note.'))
+    await world.clock.settle()
+    expect(entered(world)).toEqual([])
+    expect(lastRecord(world).trigger_values).toMatchObject({ cleared_by: 'person', continued: 'skipped', continue_skip: 'cleared_by_person' })
+  })
+
   test('It submits nothing and logs session_moved when the person moved to another session', CONTINUING, async ($, on) => {
     const world = install($, on)
     world.onCommandRegistered = async () => {

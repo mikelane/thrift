@@ -237,13 +237,18 @@ function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
   })
 }
 
-type ContinueContext = { freshSessionId: string | undefined; noteDelivery: NoteDelivery; hasHeldPromptStartedTurn: boolean }
+type ContinueContext = {
+  freshSessionId: string | undefined
+  noteDelivery: NoteDelivery
+  hasHeldPromptStartedTurn: boolean
+  clearedBy: ClearedBy
+}
 
 async function submitContinuePrompt(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
-  { freshSessionId, noteDelivery, hasHeldPromptStartedTurn }: ContinueContext,
+  { freshSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy }: ContinueContext,
 ): Promise<ContinueFields> {
   const decide = (isSameSession: boolean, hasTurnStarted: boolean) =>
     decideContinue({
@@ -253,6 +258,7 @@ async function submitContinuePrompt(
       noteDelivery,
       hasHeldPromptStartedTurn: hasTurnStarted,
       isSameSession,
+      clearedBy,
     })
   const beforeTick = decide(true, hasHeldPromptStartedTurn)
   if (!beforeTick.submit) return beforeTick.fields
@@ -294,7 +300,7 @@ export async function continueInFreshSession(
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
   const late = await sendLateArrivals($, state, holdBackPerson)
   const hasHeldPromptStartedTurn = [...deliveries, ...late.deliveries].includes('submitted')
-  const continueFields = await submitContinuePrompt($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn })
+  const continueFields = await submitContinuePrompt($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy })
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
