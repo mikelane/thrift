@@ -27,7 +27,7 @@
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
             "persist-credentials": false,
-            "sparse-checkout": ".github/tests/release-merge-lib.sh\nrelease-please-config.json\n",
+            "sparse-checkout": ".github/scripts/release-merge-lib.sh\nrelease-please-config.json\n",
             "sparse-checkout-cone-mode": false,
             "token": "${{ steps.app-token.outputs.token }}"
           }
@@ -45,7 +45,7 @@
             "TRIGGER": "${{ github.event.workflow_run.name }}"
           },
           "name": "Squash-merge the release PR if the gate passes",
-          "run": "set -euo pipefail\n# shellcheck source=.github/tests/release-merge-lib.sh\nsource .github/tests/release-merge-lib.sh\n# Every temp file lives here, so an early return or a failure still cleans up.\nwork_dir=$(mktemp -d)\ntrap 'rm -rf \"$work_dir\"' EXIT\nrelease_merge_run\n"
+          "run": "set -euo pipefail\n# shellcheck source=.github/scripts/release-merge-lib.sh\nsource .github/scripts/release-merge-lib.sh\n# Every temp file lives here, so an early return or a failure still cleans up.\nwork_dir=$(mktemp -d)\ntrap 'rm -rf \"$work_dir\"' EXIT\nrelease_merge_run\n"
         }
       ],
       "timeout-minutes": 10

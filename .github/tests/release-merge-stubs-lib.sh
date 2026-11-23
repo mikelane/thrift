@@ -3,8 +3,8 @@
 # constants the tests share, a stub `gh`, and the fixtures that fill it (open pull requests, a
 # release PR, its changed files, CI runs).
 # shellcheck disable=SC2034 # file-wide: the constants below are read by the test files that source this
-# shellcheck source=release-merge-lib.sh
-source "$HARNESS_DIR/release-merge-lib.sh"
+# shellcheck source=../scripts/release-merge-lib.sh
+source "$HARNESS_DIR/../scripts/release-merge-lib.sh"
 
 REPO=mikelane/thrift
 BOT='thrift-release[bot]'

@@ -49,7 +49,8 @@ specific to this repo.
     by the App, at the commit CI tested, and change only the manifest and each package's changelog,
     version file and extra-files. Anything else waits for a person.
   - Where the code lives: the gate, the sweep and the merge step all live in
-    `.github/tests/release-merge-lib.sh`, and the workflow step only sources it and calls
+    `.github/scripts/release-merge-lib.sh` (production code, so not under `.github/tests/`), and the
+    workflow step only sources it and calls
     `release_merge_run`. The `release-merge-*.test.sh` files are split by subject (gate, sweep,
     step, workflow, adversarial) and run them against the stub `gh` in
     `release-merge-stubs-lib.sh`. `release-merge-adversarial.test.sh` holds cases where the gate
