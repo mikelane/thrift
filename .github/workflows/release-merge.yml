@@ -9,8 +9,9 @@ name: Release Merge
 #     it and the first trigger never fires; this one catches that case. A head with no CI run yet,
 #     or CI still running, is skipped, because its own CI completion fires the first trigger.
 # Both paths run the same gate and the same merge, and a PR the other path already merged, or whose
-# head moved, is logged and skipped. If a PR is stuck anyway, rerun its last CI run by hand:
-# `gh run rerun <CI run id>` (the id is in `gh run list --branch <release branch> --workflow CI`).
+# head moved, is logged and skipped. If a PR is stuck anyway, close and reopen it: that starts a fresh CI run
+# with a pr-record. A rerun of an old run reuses its original workflow file, so a run made before the
+# pr-record job existed never gets a record.
 #
 # Both required checks, "check (pinned)" and "canary report harness", are jobs of the CI workflow,
 # so a successful CI run means the PR met them. The PR needs one code-owner approval and the App

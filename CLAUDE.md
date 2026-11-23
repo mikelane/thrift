@@ -46,8 +46,10 @@ specific to this repo.
   - Merging it: `.github/workflows/release-merge.yml` squash-merges the release PR once the CI
     workflow succeeds on it, so nobody approves or merges it. GitHub shows "Review required" on it
     while CI runs (about two minutes); that is expected. An agent never approves or merges a
-    release PR by hand. If one is still open after CI passed, rerun its last CI run with
-    `gh run rerun <CI run id>`.
+    release PR by hand. If one is still open after CI passed, close and reopen it: that
+    starts a fresh CI run, with a `pr-record`. Don't rerun an old run with `gh run rerun`: GitHub
+    allows that only within 30 days of the first run, and a rerun reuses the run's original workflow
+    file, so a run made before the `pr-record` job existed never gets a record.
   - The merge gate: the PR must be open, from a `release-please--*` branch in this repo, authored
     by the App, at the commit CI tested, and change only the manifest and each package's changelog,
     version file and extra-files, and the files API must have listed every file the PR changes
@@ -67,8 +69,10 @@ specific to this repo.
     in for it. A running one holds the PR the same way. Only a record that names another PR is skipped. Such a decoy run can hold a release PR for a person; that is fail-closed.
     It would come from a base whose `ci.yml` lacks the `pr-record` job, and only someone with write
     access can create one. A failed artifact lookup or download turns the job red ("cannot
-    check the gate"); it never reads as a refusal. Records live 30 days, so a release PR whose CI is
-    older than that needs a CI rerun. The remaining limit: a base branch whose `ci.yml` was edited
+    check the gate"); it never reads as a refusal. Records live 30 days. A release PR whose CI is older than that, or
+    whose CI ran before the `pr-record` job existed, has no usable record, and a rerun does not help
+    (GitHub allows one only within 30 days, and it reuses the run's original workflow file): close and
+    reopen the PR, which starts a fresh CI run with a record. The remaining limit: a base branch whose `ci.yml` was edited
     by someone with write access can write any record it likes. The author, SHA and allowlist
     checks still apply.
   - Where the code lives: the gate, the sweep and the merge step all live in
@@ -92,7 +96,10 @@ specific to this repo.
     turns the job red instead of reading as "no run yet". "Succeeded" means the latest run whose
     `pr-record` names the PR into `main`. The gate always checks one run's record, a required third
     argument: the CI-completion path (which the job `if` limits to a run of
-    `.github/workflows/ci.yml`, as the sweep's lookup does) passes the triggering run (`CI_RUN_ID`), and the sweep passes
+    `.github/workflows/ci.yml`, as the sweep's lookup does) passes the triggering run (`CI_RUN_ID`) once `release_merge_ci_outcome` for the PR (number, tested
+    SHA, head ref, base `main`) returns 0 with that same run id as the latest qualifying run (a manual
+    rerun of an older success after a newer failure is refused with a warning naming both run ids; a
+    failed lookup turns the job red), and the sweep passes
     the run it chose (it prints `<number> <sha> <run-id>`), so a swept PR's record is downloaded
     twice. An empty id is refused. The gate also still refuses a release PR while another open PR has
     the same head branch (for example a PR from the release branch into another base).

@@ -285,45 +285,97 @@ test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tes
   assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"
 }
 
-# The CI path merges at the commit CI tested, so it checks the triggering run's own pr-record: a run
-# whose record does not name this PR into main (a decoy from another base, issue #117) merges nothing.
+# The gate checks the chosen run's own pr-record: a run whose record does not name this PR into main
+# (a decoy from another base, issue #117) merges nothing. The CI path reaches the gate only for a run
+# release_merge_triggering_run_is_latest accepts, so these call the gate directly.
 run_ci_path() {
   TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 run_merge_step release_merge_run
 }
 
-test_a_ci_triggered_run_refuses_a_run_whose_record_names_another_pr() {
+# The CI path merges the run that triggered it only when that run is the latest qualifying CI run
+# at the head: a manual rerun of an older success after a newer failure must not merge, as the sweep
+# would not.
+test_a_ci_triggered_run_refuses_an_older_success_rerun_after_a_newer_failure() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 300' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 that triggered this merge is not the latest CI run at $SHA_A for this PR (latest: run 300)"
+}
+
+test_a_ci_triggered_run_refuses_when_a_newer_run_is_still_going() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI in_progress null 2026-10-18T11:00:00Z - - - 111 300' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 211'
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "(latest: run 300)"
+}
+
+test_a_ci_triggered_run_names_both_run_ids_when_no_run_counts() {
   stage_release_pr 111 "$SHA_A" handoff success
   write_record 211 999@old-feature
   run_ci_path
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "the CI run 211 that triggered this merge is not the latest CI run at $SHA_A for this PR (latest: none)"
+}
+
+test_a_ci_triggered_run_fails_when_the_ci_runs_cannot_be_listed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/runs-$SHA_A.error"
+  run_ci_path
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
+}
+
+test_a_ci_triggered_run_fails_when_the_latest_runs_record_cannot_be_downloaded() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/record-5211.error"
+  run_ci_path
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "cannot read the CI runs at $SHA_A (cannot download the pr-record (artifact 5211) of CI run 211)"
+}
+
+test_the_gate_refuses_a_run_whose_record_names_another_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_record 211 999@old-feature
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has a pr-record naming {\"number\":999,\"base\":\"old-feature\"} (at $SHA_A)"
 }
 
-test_a_ci_triggered_run_refuses_a_run_with_no_record() {
+test_the_gate_refuses_a_run_with_no_record() {
   stage_release_pr 111 "$SHA_A" handoff success
   write_record 211 none
-  run_ci_path
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has no pr-record artifact (at $SHA_A)"
 }
 
-test_a_ci_triggered_run_refuses_a_run_with_an_unreadable_record() {
+test_the_gate_refuses_a_run_with_an_unreadable_record() {
   stage_release_pr 111 "$SHA_A" handoff success
   write_record 211 corrupt
-  run_ci_path
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has an unreadable pr-record (at $SHA_A)"
 }
 
 # The record problem joins the gate's own problems rather than replacing them.
-test_a_ci_triggered_run_lists_both_a_gate_problem_and_a_record_problem() {
+test_the_gate_lists_both_a_gate_problem_and_a_record_problem() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "someone"'
   write_record 211 none
-  run_ci_path
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "- the CI run 211 has no pr-record artifact"
@@ -379,19 +431,19 @@ test_the_merge_step_fails_when_it_is_given_no_run_id() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
-test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_lookup_fails() {
+test_the_gate_fails_instead_of_refusing_when_the_record_lookup_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/artifacts-211.error"
-  run_ci_path
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot list the artifacts of CI run 211"
 }
 
-test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_download_fails() {
+test_the_gate_fails_instead_of_refusing_when_the_record_download_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/record-5211.error"
-  run_ci_path
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
   assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot download the pr-record (artifact 5211) of CI run 211"
@@ -402,7 +454,7 @@ test_a_ci_triggered_run_refuses_when_the_triggering_run_id_is_unknown() {
   TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID='' run_merge_step release_merge_run
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "the CI run is unknown"
+  assert_out_has "the CI run (unknown) that triggered this merge is not the latest CI run at $SHA_A for this PR (latest: run 211)"
 }
 
 test_a_ci_triggered_run_with_no_open_pr_from_the_branch_merges_nothing_and_succeeds() {

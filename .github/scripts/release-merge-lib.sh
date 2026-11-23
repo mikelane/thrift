@@ -378,13 +378,34 @@ release_merge_pr_if_gate_passes() {
   [[ "$did_merge" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
+# release_merge_triggering_run_is_latest <number> <tested-sha> <head-ref> <ci-run-id>: succeeds when
+# the CI run that triggered the merge is the run release_merge_ci_outcome chooses for PR <number> at
+# <tested-sha>, the one the sweep would hand the gate. A manual rerun of an older success after a
+# newer failure is not, and gets a warning annotation naming both run ids. Returns 1 for that
+# refusal and 2 when the lookup fails (after an error annotation), which turns the job red. It only
+# picks the run: the gate still checks that run's record at its own site.
+# shellcheck disable=SC2154 # BASE comes from the caller
+release_merge_triggering_run_is_latest() {
+  local outcome latest
+  release_merge_ci_outcome "$REPO" "$2" "$3" "$1" "$BASE" && outcome=0 || outcome=$?
+  if [[ "$outcome" == 2 ]]; then
+    release_merge_fail "$1" "cannot read the CI runs at $2${release_merge_run_record_detail:+ ($release_merge_run_record_detail)}" || return 2
+  fi
+  if [[ "$outcome" == 0 && "$release_merge_ci_run_id" == "$4" ]]; then
+    return 0
+  fi
+  latest=${release_merge_ci_run_id:+run $release_merge_ci_run_id}
+  echo "::warning title=Release PR #$1 not merged::the CI run ${4:-(unknown)} that triggered this merge is not the latest CI run at $2 for this PR (latest: ${latest:-none})"
+  return 1
+}
+
 # release_merge_run: what the merge step does. When TRIGGER is "Release Please", sweeps every open
 # release PR whose CI passed at its head; otherwise merges the open PR from BRANCH at
 # CI_TESTED_SHA. Returns 1 when any lookup or merge failed, and goes on to the other PRs first.
 # Reads REPO, OWNER, BASE, TRIGGER, BRANCH, CI_TESTED_SHA, CI_RUN_ID (the triggering run) and what
 # the function above reads.
 release_merge_run() {
-  local failed=0 candidates number sha run_id
+  local failed=0 candidates number sha run_id latest_status
   if [[ "$TRIGGER" == "Release Please" ]]; then
     # A failed CI lookup for one PR must not stop the others, but it must fail the job.
     candidates=$(release_merge_sweep "$REPO" "$BASE") || failed=1
@@ -413,5 +434,11 @@ release_merge_run() {
     echo "No open PR from $BRANCH in $REPO. Nothing to merge."
     return 0
   fi
+  release_merge_triggering_run_is_latest "$number" "$CI_TESTED_SHA" "$BRANCH" "${CI_RUN_ID-}" && latest_status=0 || latest_status=$?
+  case "$latest_status" in
+    0) ;;
+    1) return 0 ;;
+    *) return 1 ;;
+  esac
   release_merge_pr_if_gate_passes "$number" "$CI_TESTED_SHA" "${CI_RUN_ID-}"
 }
