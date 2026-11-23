@@ -613,6 +613,34 @@ test_the_record_check_returns_2_and_names_unzip_when_unzip_is_missing() {
   assert_file_has "$TEST_DIR/record-err" "unzip is not installed, so the pr-record of CI run 7 cannot be read"
 }
 
+# record_check_mktemp_template <work_dir>: the template the record check passes to mktemp ("" leaves
+# work_dir unset).
+record_check_mktemp_template() {
+  write_record 7 111
+  mkdir -p "$TEST_DIR/work"
+  (
+    stub_gh
+    mktemp() { echo "$1" >"$TEST_DIR/mktemp-template"; command mktemp "$@"; }
+    if [[ -n "$1" ]]; then work_dir=$1; else unset work_dir; fi
+    TMPDIR=$TEST_DIR/tmpdir
+    release_merge_run_record_verdict "$REPO" 7 111 main
+  ) >/dev/null 2>&1
+  echo "$(<"$TEST_DIR/mktemp-template")"
+}
+
+test_the_record_check_makes_its_zip_temp_file_under_work_dir_when_it_is_set() {
+  local got
+  got=$(record_check_mktemp_template "$TEST_DIR/work")
+  [[ "$got" == "$TEST_DIR/work/pr-record."* ]] || fail "got [$got]"
+}
+
+test_the_record_check_makes_its_zip_temp_file_under_tmpdir_when_work_dir_is_unset() {
+  local got
+  mkdir -p "$TEST_DIR/tmpdir"
+  got=$(record_check_mktemp_template '')
+  [[ "$got" == "$TEST_DIR/tmpdir/pr-record."* ]] || fail "got [$got]"
+}
+
 test_the_record_check_returns_1_when_the_zip_holds_no_pr_record_json() {
   write_record 7 111
   write_raw_record 5007 '{"number":111,"base":"main"}' other.json

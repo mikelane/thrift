@@ -43,7 +43,8 @@ release_merge_changed_files() {
 # release_merge_sibling_problem <repo> <head-ref> <number>: prints a reason when an open PR other than
 # <number> has <head-ref> as its head in <repo> (head=<owner>:<branch> matches only this repository,
 # and the jq filter checks again). A run's pull_requests cannot say which PR triggered it, so with a
-# sibling no CI run can be tied to one PR. A lookup that fails returns 1 with its reason on stderr,
+# sibling no CI run could be tied to one PR by that list. This is defence in depth now that each
+# run's pr-record ties it to one PR (see release_merge_run_record_verdict). A lookup that fails returns 1 with its reason on stderr,
 # not a reason on stdout: a refusal is a policy decision, and a failed lookup is not one.
 release_merge_sibling_problem() {
   local siblings
@@ -133,7 +134,7 @@ release_merge_run_record_verdict() {
     release_merge_run_record_detail="has no pr-record artifact"
     return 3
   fi
-  zip_path=$(mktemp) || { release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"; return 2; }
+  zip_path=$(mktemp "${work_dir:-${TMPDIR:-/tmp}}/pr-record.XXXXXX") || { release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"; return 2; }
   GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$artifact_id/zip" >"$zip_path" || {
     rm -f "$zip_path"
     release_merge_run_record_detail="cannot download the pr-record (artifact $artifact_id) of CI run $2"
