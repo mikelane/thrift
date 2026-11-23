@@ -152,6 +152,7 @@ async function runHandoff(
     if (!isCleared) {
       return await abandonAfterWait(abandon, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
+    if (state.didForeignClearFinishFirst) debug($, 'a clear this plugin did not issue finished first, so the clear is credited to the person')
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, {
       hasTurnAfterNote,
       clearedBy: clearedByFor(state, outcome),

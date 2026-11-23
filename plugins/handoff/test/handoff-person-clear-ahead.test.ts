@@ -142,6 +142,21 @@ describe('a person clear queued ahead of the handoff clear', () => {
   })
 })
 
+describe('a foreign clear that finished before the handoff clear', () => {
+  test('It writes a debug line saying the clear is credited to the person', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(world.debugLines).toContain('handoff: a clear this plugin did not issue finished first, so the clear is credited to the person')
+  })
+
+  test('It writes no such debug line when the handoff clear ran alone', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await finishNote()
+    expect(world.debugLines.filter(line => line.includes('did not issue'))).toEqual([])
+  })
+})
+
 describe('second_clear', () => {
   test('It records second_clear true when the person clear ran first and the handoff clear ran too', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)

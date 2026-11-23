@@ -146,7 +146,7 @@ describe('continuing after a handoff', () => {
     expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'held_prompt_sent' })
   })
 
-  test('It logs session_moved when the session id cannot be read', CONTINUING, async ($, on) => {
+  test('It logs session_unknown when the session id cannot be read', CONTINUING, async ($, on) => {
     const world = install($, on)
     await startSession($)
     const band = await weakBand($, world)
@@ -156,10 +156,10 @@ describe('continuing after a handoff', () => {
     await band.press({ key: 'handoff' })
     await world.clock.settle()
     expect(entered(world)).toEqual([])
-    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
+    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_unknown' })
   })
 
-  test('It submits nothing and logs session_moved when the fresh session id cannot be read after the clear', CONTINUING, async ($, on) => {
+  test('It submits nothing and logs session_unknown when the fresh session id cannot be read after the clear', CONTINUING, async ($, on) => {
     const world = install($, on)
     world.onClearEnded = async () => {
       world.sessionIdDenials = 1
@@ -168,7 +168,7 @@ describe('continuing after a handoff', () => {
     await handedOffFromWeakBand($, world)
     expect(world.sessionIdDenials).toBe(0)
     expect(entered(world)).toEqual([])
-    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
+    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_unknown' })
   })
 
   test('It submits no continue prompt and logs held_prompt_sent when a prompt that arrived after the clear was sent', CONTINUING, async ($, on) => {

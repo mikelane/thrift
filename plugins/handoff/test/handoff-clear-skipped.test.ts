@@ -20,6 +20,12 @@ const compactionPreemptedByATurn = async ($: Parameters<typeof install>[0], on: 
   return world
 }
 
+test('It words CLEAR_SKIPPED_MESSAGE as the final copy', () => {
+  expect(CLEAR_SKIPPED_MESSAGE).toBe(
+    'The handoff stopped before clearing: a turn started while it was compacting this session. This session is unchanged, and no note was carried over. Type /handoff to try again.',
+  )
+})
+
 describe('a compaction that failed because a turn took the session', () => {
   test('It skips the handoff clear', COMPACTING, async ($, on) => {
     const world = await compactionPreemptedByATurn($, on)
@@ -43,6 +49,11 @@ describe('a compaction that failed because a turn took the session', () => {
     const world = await compactionPreemptedByATurn($, on)
     const failed = world.records.filter(record => record.trigger_values.reason === 'compaction_failed')
     expect(failed.map(record => record.trigger_values.clear_skipped)).toEqual(['turn_running'])
+  })
+
+  test('It writes a debug line saying a running turn preempted the compaction', COMPACTING, async ($, on) => {
+    const world = await compactionPreemptedByATurn($, on)
+    expect(world.debugLines).toContain('handoff: the compaction was preempted by a running turn, so the handoff skips the clear')
   })
 
   test('It says the handoff did not clear', COMPACTING, async ($, on) => {

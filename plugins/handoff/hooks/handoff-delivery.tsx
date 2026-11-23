@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
 import { announce } from './announcement'
-import { CONTINUE_PROMPT, decideContinue, type ContinueFields } from './continue-decision'
+import { CONTINUE_PROMPT, decideContinue, type ContinueFields, type SessionCheck } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
 import {
@@ -208,11 +208,13 @@ function sendLateArrivals($: EngineInterface, state: SessionState, holdBackPerso
   })
 }
 
-async function readSessionId($: EngineInterface): Promise<string | undefined> {
+type SessionIdRead = 'delivery' | 'move check' | 'continue check'
+
+async function readSessionId($: EngineInterface, purpose: SessionIdRead): Promise<string | undefined> {
   try {
     return await $.session.id()
   } catch (error) {
-    debug($, `could not read the session id: ${String(error)}`)
+    debug($, `could not read the session id for the ${purpose}: ${String(error)}`)
     return undefined
   }
 }
@@ -221,8 +223,10 @@ async function readSessionId($: EngineInterface): Promise<string | undefined> {
 // session. An id that cannot be read on either side is not taken for a move.
 async function hasSessionMovedFrom($: EngineInterface, noteSessionId: string | undefined): Promise<boolean> {
   if (noteSessionId === undefined) return false
-  const currentSessionId = await readSessionId($)
-  return currentSessionId !== undefined && currentSessionId !== noteSessionId
+  const currentSessionId = await readSessionId($, 'move check')
+  if (currentSessionId === undefined || currentSessionId === noteSessionId) return false
+  debug($, `session moved: the note went to ${noteSessionId}, and the person is now in ${currentSessionId}`)
+  return true
 }
 
 // The submit runs in a clock tick, since the engine refuses one from a hook the turn may be waiting on.
@@ -234,6 +238,13 @@ function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
       run().then(resolve, reject)
     })
   })
+}
+
+async function checkSession($: EngineInterface, noteSessionId: string | undefined): Promise<SessionCheck> {
+  if (noteSessionId === undefined) return 'unknown'
+  const currentSessionId = await readSessionId($, 'continue check')
+  if (currentSessionId === undefined) return 'unknown'
+  return currentSessionId === noteSessionId ? 'same' : 'moved'
 }
 
 type ContinueContext = {
@@ -249,23 +260,22 @@ async function submitContinuePrompt(
   settledHandoff: SettledHandoff,
   { noteSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy }: ContinueContext,
 ): Promise<ContinueFields> {
-  const decide = (isSameSession: boolean, hasTurnStarted: boolean) =>
+  const decide = (sessionCheck: SessionCheck, hasTurnStarted: boolean) =>
     decideContinue({
       isEnabled: state.continueAfterHandoff,
       effectiveMode: settledHandoff.trigger.effectiveMode,
       signal: settledHandoff.trigger.signal,
       noteDelivery,
       hasHeldPromptStartedTurn: hasTurnStarted,
-      isSameSession,
+      sessionCheck,
       clearedBy,
     })
-  const beforeTick = decide(true, hasHeldPromptStartedTurn)
+  const beforeTick = decide('same', hasHeldPromptStartedTurn)
   if (!beforeTick.submit) return beforeTick.fields
   // The session and turn checks run inside the tick, straight before the submit: the hold on prompts has ended, so a
   // /resume, /clear, or prompt the person sends before the tick is seen here rather than overtaken by the submit.
   return afterTick($, async () => {
-    const isSameSession = noteSessionId !== undefined && (await readSessionId($)) === noteSessionId
-    const decision = decide(isSameSession, hasHeldPromptStartedTurn || state.isTurnRunning)
+    const decision = decide(await checkSession($, noteSessionId), hasHeldPromptStartedTurn || state.isTurnRunning)
     if (!decision.submit) return decision.fields
     const { isUnattended } = settledHandoff
     const prompt: HeldPrompt = { text: CONTINUE_PROMPT, isUnattended, origin: noteOrigin(isUnattended), author: 'plugin' }
@@ -289,7 +299,7 @@ export async function continueInFreshSession(
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
   // The session the note is delivered to, read straight after the clear; the continue prompt and the handed-off line compare against it.
-  const noteSessionId = await readSessionId($)
+  const noteSessionId = await readSessionId($, 'delivery')
   await registerHandoffCommand($)
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn

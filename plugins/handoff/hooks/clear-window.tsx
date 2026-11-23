@@ -118,6 +118,7 @@ export async function waitForClearWindow(
     if (!state.isTurnRunning) break
   }
   const outcome = preClearOutcome(state.sessionEndBeforeClear, isBusy, isCompactionPreempted)
+  if (outcome === 'abandon_compaction_preempted') debug($, 'the compaction was preempted by a running turn, so the handoff skips the clear')
   const clearWindow = { outcome, hasCompactedBeforeClear, hasTurnAfterNote: state.hasTurnAfterNote }
   if (outcome !== 'clear') return { ...clearWindow, clearing: null }
   beginOwnClear(state)

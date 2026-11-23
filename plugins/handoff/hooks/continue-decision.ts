@@ -2,7 +2,7 @@ import type { ClearedBy } from './decision-record'
 import type { NoteDelivery } from './handoff-note'
 import type { Mode, Signal } from './signals'
 
-export type ContinueSkip = 'strong_signal' | 'note_not_appended' | 'held_prompt_sent' | 'session_moved' | 'cleared_by_person' | 'submit_failed'
+export type ContinueSkip = 'strong_signal' | 'note_not_appended' | 'held_prompt_sent' | 'session_moved' | 'session_unknown' | 'cleared_by_person' | 'submit_failed'
 
 export type ContinueFields =
   | { continued: 'off' }
@@ -11,13 +11,16 @@ export type ContinueFields =
 
 type ContinueDecision = { submit: true } | { submit: false; fields: ContinueFields }
 
+// Whether the session the continue prompt would go to is still the one the note went to; unknown when an id could not be read.
+export type SessionCheck = 'same' | 'moved' | 'unknown'
+
 export type ContinueInput = {
   isEnabled: boolean
   effectiveMode: Mode
   signal: Signal
   noteDelivery: NoteDelivery
   hasHeldPromptStartedTurn: boolean
-  isSameSession: boolean
+  sessionCheck: SessionCheck
   clearedBy: ClearedBy
 }
 
@@ -33,7 +36,7 @@ export const decideContinue = ({
   signal,
   noteDelivery,
   hasHeldPromptStartedTurn,
-  isSameSession,
+  sessionCheck,
   clearedBy,
 }: ContinueInput): ContinueDecision => {
   if (!isEnabled || effectiveMode === 'off') return { submit: false, fields: { continued: 'off' } }
@@ -42,6 +45,7 @@ export const decideContinue = ({
   // A person who typed /clear did not ask for the continue prompt to land in the session they made.
   if (clearedBy === 'person') return skipped('cleared_by_person')
   if (hasHeldPromptStartedTurn) return skipped('held_prompt_sent')
-  if (!isSameSession) return skipped('session_moved')
+  if (sessionCheck === 'unknown') return skipped('session_unknown')
+  if (sessionCheck === 'moved') return skipped('session_moved')
   return { submit: true }
 }

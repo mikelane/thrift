@@ -51,7 +51,7 @@ test('It submits no continue prompt after a strong-signal band that an interrupt
 })
 
 // Mutation-gap probe: both id reads fail. Passes on the code; fails if the noteSessionId !== undefined guard is removed.
-test('It logs session_moved when neither session id read succeeds', CONTINUING, async ($, on) => {
+test('It logs session_unknown when neither session id read succeeds', CONTINUING, async ($, on) => {
   const world = install($, on)
   world.onClearEnded = async () => {
     world.sessionIdDenials = 2
@@ -62,7 +62,7 @@ test('It logs session_moved when neither session id read succeeds', CONTINUING, 
   await world.clock.settle()
   expect(world.sessionIdDenials).toBe(1)
   expect(entered(world)).not.toContain(CONTINUE_ENTRY)
-  expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
+  expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_unknown' })
 })
 
 // Coverage probe: act mode with a typed /handoff continues (README: only plugin-started handoffs are always strong).
