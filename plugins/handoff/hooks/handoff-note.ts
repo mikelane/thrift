@@ -51,7 +51,7 @@ export const busyRefusalMessage = (hasCompacted: boolean): string =>
 
 // The compaction failed because a turn took the session (the person's command), so a clear would only drop uncompacted history.
 export const CLEAR_SKIPPED_MESSAGE =
-  'A command you typed took the session while the handoff compacted it, so the handoff did not clear. This session is unchanged. Type /handoff to try again.'
+  'The handoff stopped before clearing: a turn started while it was compacting this session. This session is unchanged, and no note was carried over. Type /handoff to try again.'
 
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 
@@ -66,7 +66,7 @@ export const noteNotCarriedMessage = (oldSessionId: string): string =>
 
 // Shown instead of the handed-off line when a /resume moved the person off the session the note was delivered to.
 export const noteElsewhereMessage = (deliverySessionId: string): string =>
-  `Handoff note is in session ${deliverySessionId}; it was not delivered here.`
+  `The handoff note went to session ${deliverySessionId}, not this one. To open it: ${resumeCommand(deliverySessionId)}`
 
 export const FINAL_MESSAGES: Record<NoteDelivery, (oldSessionId: string) => string> = {
   appended: handedOffMessage,

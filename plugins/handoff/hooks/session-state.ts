@@ -51,7 +51,7 @@ const assertNever = (value: never): never => {
 
 // A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons. A compaction that
 // a turn preempted comes last: it only keeps the handoff from clearing when nothing else decided the outcome.
-export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean, isCompactionPreempted = false): PreClearOutcome => {
+export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean, isCompactionPreempted: boolean): PreClearOutcome => {
   switch (sessionEnd) {
     case 'other':
       return 'abandon_session_ended'

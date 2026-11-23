@@ -65,6 +65,24 @@ describe('a compaction that failed with no turn in flight', () => {
   })
 })
 
+describe('a compaction that a hook vetoed while a turn took the session, for compactBeforeClearing', () => {
+  test('It clears once the turn ends because only a failed compaction counts as preempted', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.compact = async () => {
+      await startTurn($, 'the command the person typed')
+      return { skip: 'a hook vetoed it' }
+    }
+    await startSession($)
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    await completeTurn($)
+    await world.clock.settle()
+    expect(world.effects).toContain('clear')
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+    expect(lastRecord(world).trigger_values.clear_skipped).toBeUndefined()
+  })
+})
+
 describe('a compaction that failed against a turn while the person also cleared', () => {
   test('It delivers to the person clear and leaves clear_skipped off', COMPACTING, async ($, on) => {
     const world = install($, on)

@@ -2,7 +2,8 @@ import { describe, expect, test, type Engine } from 'claude-code/testing'
 
 import { WAITING as WAITING_BAND } from '../hooks/band-text'
 import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
-import type { SettledHandoff } from '../hooks/decision-record'
+import type { ClearSkipped, SettledHandoff } from '../hooks/decision-record'
+import { CLEAR_SKIPPED_MESSAGE } from '../hooks/handoff-note'
 import { agentIn, compacted, completeTurn, lastRecord, mountBand, startTurn, type World } from './helpers'
 import {
   ACT,
@@ -40,9 +41,9 @@ const settledHandoff: SettledHandoff = {
 }
 
 const abandoning = (cause: AbandonCause) => {
-  const calls: Array<{ settled: SettledHandoff; reason: string; message: string; sessionId: string }> = []
-  const abandon = async (settled: SettledHandoff, reason: string, message: string, sessionId: string) => {
-    calls.push({ settled, reason, message, sessionId })
+  const calls: Array<{ settled: SettledHandoff; reason: string; message: string; sessionId: string; clearSkipped: ClearSkipped | undefined }> = []
+  const abandon = async (settled: SettledHandoff, reason: string, message: string, sessionId: string, clearSkipped?: ClearSkipped) => {
+    calls.push({ settled, reason, message, sessionId, clearSkipped })
   }
   return { calls, done: abandonAfterWait(abandon, settledHandoff, cause, false, 'old-session') }
 }
@@ -176,5 +177,31 @@ describe('abandonAfterWait', () => {
     const { calls, done } = abandoning('clear_failed')
     await done
     expect(calls).toMatchObject([{ reason: 'clear_failed', settled: { trigger: settledHandoff.trigger } }])
+  })
+
+  test('It abandons with compaction_failed, the clear-skipped message, and clear_skipped person_command', async () => {
+    const { calls, done } = abandoning('clear_skipped')
+    await done
+    expect(calls).toEqual([
+      { settled: settledHandoff, reason: 'compaction_failed', message: CLEAR_SKIPPED_MESSAGE, sessionId: 'old-session', clearSkipped: 'person_command' },
+    ])
+  })
+
+  test('It passes no clear_skipped when the session ended', async () => {
+    const { calls, done } = abandoning('session_ended')
+    await done
+    expect(calls.map(call => call.clearSkipped)).toEqual([undefined])
+  })
+
+  test('It passes no clear_skipped when background work was busy', async () => {
+    const { calls, done } = abandoning('busy')
+    await done
+    expect(calls.map(call => call.clearSkipped)).toEqual([undefined])
+  })
+
+  test('It passes no clear_skipped when the clear failed', async () => {
+    const { calls, done } = abandoning('clear_failed')
+    await done
+    expect(calls.map(call => call.clearSkipped)).toEqual([undefined])
   })
 })

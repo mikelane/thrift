@@ -42,7 +42,8 @@ export async function showWaitingStatus($: EngineInterface, state: SessionState,
   $.ui.toast(WAITING_STATUS)
 }
 
-type CompactionResult = { isCompacted: boolean; isPreempted: boolean }
+// Only a compaction that did not happen can have been preempted.
+type CompactionResult = { isCompacted: true; isPreempted: false } | { isCompacted: false; isPreempted: boolean }
 
 // Whether the session was compacted: a vetoed or failed compaction leaves it as it was. A compaction that failed while a turn
 // was running was preempted by that turn: the engine refuses a compaction against a turn in flight (seen on 2.1.302 when a

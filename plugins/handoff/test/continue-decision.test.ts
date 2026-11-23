@@ -25,7 +25,31 @@ describe('decideContinue', () => {
   })
 
   test('It keeps strong_signal ahead of cleared_by_person', () => {
-    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', signal: 'strong' })).toMatchObject({ fields: { continue_skip: 'strong_signal' } })
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', signal: 'strong' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'strong_signal' },
+    })
+  })
+
+  test('It reports note_not_appended before cleared_by_person when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', noteDelivery: 'in_box' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'note_not_appended' },
+    })
+  })
+
+  test('It reports cleared_by_person before held_prompt_sent when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', hasHeldPromptStartedTurn: true })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
+  })
+
+  test('It reports cleared_by_person before session_moved when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', isSameSession: false })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
   })
 
   test('It submits after a weak-signal handoff whose note was appended', () => {

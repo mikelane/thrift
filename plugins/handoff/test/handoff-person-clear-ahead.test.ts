@@ -154,11 +154,14 @@ describe('a person clear in flight when the handoff clear is queued, ending firs
 describe('a person clear that ran after the handoff clear', () => {
   test('It records cleared_by handoff because the handoff clear ran first', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
-    world.onClearEnded = async () => {
-      world.onClearEnded = undefined
-      void world.clock.sleep(0).then(() => runCommand($, 'clear'))
+    // The delivery registers /handoff after the handoff clear returned and before the record is written, so the person's
+    // clear runs and returns inside the handoff, behind the handoff clear.
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      await runCommand($, 'clear')
     }
     await finishNote()
+    expect(world.clearOrigins).toHaveLength(2)
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
   })
 })
