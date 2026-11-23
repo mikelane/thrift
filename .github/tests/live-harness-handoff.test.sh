@@ -27,26 +27,35 @@ test_start_waiting_handoff_allows_the_tools_a_scenario_names_instead_of_the_defa
   assert_out_lacks 'CALL start a --allowedTools Bash(sleep *) '
 }
 
-# run_waiting_setup <debug-log-lines>: start_waiting_handoff with the sessions stubbed and the debug
-# log of 'a' fixed.
+# run_waiting_setup <debug-log-lines> [peer-turn-lines]: start_waiting_handoff with the sessions stubbed and the
+# debug log of 'a' fixed. The peer-turn lines are appended when the peer is sent Enter, as the turn's own log.
 run_waiting_setup() {
   printf '%s\n' "$1" > "$TEST_DIR/debug-a.log"
+  printf '%s\n' "${2:-}" > "$TEST_DIR/peer-turn.log"
   run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init; LIVE_SETUP_TIMEOUT=1
-    handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
+    handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; session_of() { echo s; }
+    press() { [[ "$2" != Enter ]] || cat '"$TEST_DIR"'/peer-turn.log >> '"$TEST_DIR"'/debug-a.log; }
     pane_has() { [[ "$2" != *Bash* ]]; }; log_has() { grep -qE -- "$2" '"$TEST_DIR"'/debug-a.log; }
+    log_count() { grep -cE -- "$2" '"$TEST_DIR"'/debug-a.log || true; }
     start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
 }
 
 test_start_waiting_handoff_passes_when_the_turn_runs_the_sleep() {
-  run_waiting_setup 'ui.press handoff/handoff
-cc_turn_origin=peer
+  run_waiting_setup 'ui.press handoff/handoff' 'cc_turn_origin=peer
 Bash(sleep 14)'
   assert_exit_code 0
   assert_out_has 'SETUP_HELD'
 }
 
 test_start_waiting_handoff_ends_as_setup_when_the_turn_never_runs_the_sleep() {
+  run_waiting_setup 'ui.press handoff/handoff' 'cc_turn_origin=peer'
+  assert_exit_code 3
+  assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'
+}
+
+test_start_waiting_handoff_ends_as_setup_when_the_debug_log_only_had_the_permission_rule_before_the_turn() {
   run_waiting_setup 'ui.press handoff/handoff
+Bash(sleep *)
 cc_turn_origin=peer'
   assert_exit_code 3
   assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'

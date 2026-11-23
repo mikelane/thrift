@@ -115,22 +115,35 @@ start_waiting_handoff() {
   press "$name" C-x Tab
   press "$name" h
   wait_for 'the band to press hand off' log_has "$name" 'ui\.press handoff/handoff'
+  local tool_calls_before
+  tool_calls_before=$(tool_call_baseline "$name")
   press "$peer" Enter
   wait_for_setup "the peer turn to start in '$name'" "$LIVE_SETUP_TIMEOUT" log_has "$name" 'cc_turn_origin=peer'
-  require_waiting_turn_tool_call "$name"
+  require_waiting_turn_tool_call "$name" "$tool_calls_before"
   wait_for 'the handoff to wait for the running turn' pane_has "$name" 'continues when the current turn ends'
 }
 
 # The tool call the peer's task depends on. The model sometimes answers without making it (#178), and
 # then the turn ends before the note does and the handoff never waits. An empty value skips the check.
 WAITING_HANDOFF_TOOL_CALL_PATTERN_DEFAULT='Bash\(sleep'
-# turn_has_tool_call <name> <pattern>: the call shows in the debug log or on the screen.
-turn_has_tool_call() { log_has "$1" "$2" || pane_has "$1" "$2"; }
-# require_waiting_turn_tool_call <name>: ends the run as SETUP when the peer turn shows no tool call in time.
+waiting_tool_call_pattern() { echo "${WAITING_HANDOFF_TOOL_CALL_PATTERN-$WAITING_HANDOFF_TOOL_CALL_PATTERN_DEFAULT}"; }
+# tool_call_baseline <name>: the debug-log lines that already match the pattern before the peer's Enter. The
+# permission rule the session starts with can match too, so only lines written after this count (a log
+# that does not exist yet counts 0; an empty pattern counts nothing).
+tool_call_baseline() {
+  local pattern
+  pattern=$(waiting_tool_call_pattern)
+  [[ -n "$pattern" ]] || { echo 0; return 0; }
+  log_count "$1" "$pattern"
+}
+# turn_has_tool_call <name> <pattern> <baseline>: the call shows in the debug log past the baseline or on the screen.
+turn_has_tool_call() { log_has_more_than "$1" "$2" "$3" || pane_has "$1" "$2"; }
+# require_waiting_turn_tool_call <name> <baseline>: ends the run as SETUP when the peer turn shows no tool call in time.
 require_waiting_turn_tool_call() {
-  local pattern=${WAITING_HANDOFF_TOOL_CALL_PATTERN-$WAITING_HANDOFF_TOOL_CALL_PATTERN_DEFAULT}
+  local pattern
+  pattern=$(waiting_tool_call_pattern)
   [[ -n "$pattern" ]] || return 0
-  wait_for_setup "the peer turn in '$1' to run its sleep (no /$pattern/ in the debug log or on the screen)" "$LIVE_SETUP_TIMEOUT" turn_has_tool_call "$1" "$pattern"
+  wait_for_setup "the peer turn in '$1' to run its sleep (no /$pattern/ in the debug log or on the screen)" "$LIVE_SETUP_TIMEOUT" turn_has_tool_call "$1" "$pattern" "$2"
 }
 
 # The abandon of a handoff that waits for a turn: a `none` record with reason background_busy. The reason
