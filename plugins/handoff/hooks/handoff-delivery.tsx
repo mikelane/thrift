@@ -174,9 +174,9 @@ async function deliverNote(
   settledHandoff: SettledHandoff,
   message: string,
 ): Promise<NoteDeliveryResult> {
-  const appendSessionId = await readSessionId($, 'delivery')
+  const appendSessionId = await readSessionId($, 'delivery (append)')
   if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId: appendSessionId }
-  const submitSessionId = await readSessionId($, 'delivery')
+  const submitSessionId = await readSessionId($, 'delivery (submit)')
   return { noteDelivery: await deliverNoteAsPrompt($, state, settledHandoff, message), noteSessionId: submitSessionId }
 }
 
@@ -224,7 +224,7 @@ function sendLateArrivals($: EngineInterface, state: SessionState, holdBackPerso
   })
 }
 
-type SessionIdRead = 'delivery' | 'move check' | 'continue check'
+type SessionIdRead = 'delivery (append)' | 'delivery (submit)' | 'move check' | 'continue check'
 
 async function readSessionId($: EngineInterface, purpose: SessionIdRead): Promise<string | undefined> {
   try {

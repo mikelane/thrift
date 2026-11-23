@@ -701,7 +701,8 @@ These need a live terminal and have not been watched yet:
   stay out of the resumed session (`reason: session_moved`), a compaction that met a turn in flight skips
   the handoff's clear (`clear_skipped: turn_running`), and the continue prompt is skipped after the
   person's clear (`continue_skip: cleared_by_person`). Only the tests confirm these. The live scenario
-  `clear-resume-during-handoff` ran against this head and its 28 checks passed, but it prints the clear order and the
+  `clear-resume-during-handoff` passed its 28 checks at 68e3468. The delivery fixes since then (7fc078b, dda3c6c, fc8387a) are
+  covered by unit tests and have not been re-run live. The scenario prints the clear order and the
   `/resume` path rather than judging them, and it checks only the invariants: the "Handed off." line stays out of the
   resumed pane, and `clear_skipped: turn_running` carries no note. Not confirmed live: that `cleared_by` names the clear
   that ran first, that `continue_skip: cleared_by_person` follows a person's clear, and that the note lands in the session

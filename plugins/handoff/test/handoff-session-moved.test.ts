@@ -112,9 +112,23 @@ describe('a session id that cannot be read after the clear', () => {
       world.sessionIdDenials = 1
     }
     await runHandoff($, world)
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the delivery: '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the delivery (append): '))).toBe(true)
     expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+})
+
+describe('a session id that cannot be read after the append is refused', () => {
+  test('It names the submit read in the debug line', async ($, on) => {
+    const world = await startedWorld($, on)
+    Object.defineProperty(world, 'appendDenied', {
+      get: () => {
+        world.sessionIdDenials = 1
+        return true
+      },
+    })
+    await runHandoff($, world)
+    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the delivery (submit): '))).toBe(true)
   })
 })
 
