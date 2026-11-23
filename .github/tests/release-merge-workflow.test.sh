@@ -78,7 +78,7 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
 test_the_file_the_merge_step_sources_is_the_lib_the_tests_exercise() {
   local sourced
   sourced=$(merge_step_script | sed -n 's/^source //p')
-  [[ "$REPO_ROOT/$sourced" -ef "$HARNESS_DIR/../scripts/release-merge-lib.sh" ]] \
+  [[ "$REPO_ROOT/$sourced" -ef "$RELEASE_MERGE_LIB" ]] \
     || fail "the merge step sources $sourced, which is not the lib the tests source"
 }
 
@@ -140,7 +140,7 @@ test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
 # comment on a merge line is stripped, so a flag named only in that comment does not count. Each
 # line gets one trailing space, so a flag at the end of the line matches the ' --flag ' patterns.
 merge_commands() {
-  grep -E '^[[:space:]]*gh pr merge ' "$HARNESS_DIR/../scripts/release-merge-lib.sh" \
+  grep -E '^[[:space:]]*gh pr merge ' "$RELEASE_MERGE_LIB" \
     | sed -e "s/[[:space:]]#.*$//" -e "s/$/ /"
 }
 
