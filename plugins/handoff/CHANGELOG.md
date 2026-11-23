@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/mikelane/thrift/compare/handoff-v0.3.2...handoff-v0.3.3) (2026-11-23)
+
+
+### Bug Fixes
+
+* **handoff:** settle a /clear or /resume that races a handoff ([#179](https://github.com/mikelane/thrift/issues/179)) ([b0524ec](https://github.com/mikelane/thrift/commit/b0524ec2433fd5882aae9376adda4240758ebc5d))
+
 ## [0.3.2](https://github.com/mikelane/thrift/compare/handoff-v0.3.1...handoff-v0.3.2) (2026-11-16)
 
 
