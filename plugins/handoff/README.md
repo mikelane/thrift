@@ -561,7 +561,7 @@ A check rebuilds this line through the code that writes the log and fails if the
 | `trigger_values.reason` | Present when it explains a `none`: `backoff`, `compaction_vetoed`, `compaction_failed`, `no_handoff_written`, `handoff_failed`, `clear_failed`, `session_ended` (the session ended before the handoff cleared and you did not type `/clear`), `band_failed`, `not_now`, `send_here`, or `background_busy` (a press or a handoff that would clear was refused because background work is running; a typed `/handoff` is never refused) |
 | `trigger_values.fork_reason` | Present only on a `no_handoff_written` record: `nothing-to-fork` when Claude had not finished a reply in the session to fork (a new session before its first turn ends, right after a `/clear`, or a resume that starts the conversation afresh). Absent for every other reason the fork wrote no note |
 | `trigger_values.note` | Present on a `cleared` record: how the handoff note reached the fresh session. `appended` (added to the session), `submitted` (sent as a prompt after the append was refused), `in_box` (left in the prompt box, unsent until you press Enter), or `not_carried` (nothing could carry it) |
-| `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear`) or `person` (you typed `/clear` before the handoff's own clear was issued, so the note went into the fresh session you made and no second clear ran). A `/clear` you queued ahead of an already-issued handoff clear, or one still running when the handoff issued its clear, still reads `handoff`: the handoff's clear ran last and made the session that holds the note |
+| `trigger_values.cleared_by` | Present only on a `cleared` record: who ran the clear. `handoff` (the handoff's own `/clear` ran first) or `person` (a `/clear` you typed ran before the handoff's own clear: either before it was issued, so the note went into the fresh session you made and no second clear ran, or queued or still running when the handoff issued its clear but finishing first). The plugin tells which ran first by which clear returned first, not by the order the commands arrived in. A `/clear` that ran after the handoff's own still reads `handoff` |
 | `trigger_values.compacted_before_clear` | Present, as `true`, only on the record that ends a handoff (a `cleared` record, or the `none` record of an abandon) when `compactBeforeClear` was on and the compaction before the clear worked. It tells a `background_busy`, `clear_failed`, or `session_ended` record that left the session compacted from one that left it unchanged. A vetoed or failed compaction writes its own `none` record and leaves this off. A compaction in act mode outside a handoff writes a `compacted` record instead |
 | `trigger_values.late_turn` | Present, as `true`, only on a `cleared` record, when a turn started in the old session after the handoff queued its `/clear` and before that clear ended the session. A prompt the engine had queued ahead of the `/clear` ran first. The note then ends with the "A turn ran in the previous session" line. Absent when no such turn started |
 | `trigger_values.continued` | Present only on a `cleared` record: what `continueAfterHandoff` did. `submitted` (the continue prompt was submitted in the fresh session), `skipped` (it was on but a condition did not hold; see `continue_skip`), or `off` (the setting is off, or the plugin ran in `off`) |
@@ -636,7 +636,7 @@ by hand on 2.1.299:
   true`, and the note lands in the final session. It leaves an empty session in the resume list.
   The order varies: the 2.1.299 hand run and the first 2.1.302 harness run put the person's clear
   after the handoff's, but one run on 2.1.302 put it about 75 ms ahead (the person's clear reached the hook at .936, four
-  milliseconds after the handoff queued its own at .932; issue #43, "Run A"). The record read the same either way. The typed command was
+  milliseconds after the handoff queued its own at .932; issue #43, "Run A"). Until #89 the record read `handoff` either way; it now reads `person` when the person's clear returned first. The typed command was
   sent before the compaction finished: the new arrival check in `clear-resume-during-handoff`
   passed for both the `/clear` and the `/resume` on 2.1.302 (PR #101; issue #43, "Post-refactor
   live runs").
@@ -693,7 +693,8 @@ These need a live terminal and have not been watched yet:
   `/resume` typed during the wait is queued and runs the moment the turn ends, so the compaction
   met a turn in flight and logged `compaction_failed` in 3 of 5 wait-case handoffs. After a
   `/resume` the handoff still cleared, uncompacted; after a `/clear` the person's clear won. A
-  typed `/clear` that ran ahead of the handoff's own was still credited to the handoff.
+  typed `/clear` that ran ahead of the handoff's own was still credited to the handoff (fixed in #89:
+  `cleared_by` is now `person` then).
 - Anything with a bridge or SDK client, such as a prompt refused for its attachment, a remote
   prompt held through an abandon, and what the sender sees as the drop reason. The harness cannot
   stand in for a client.

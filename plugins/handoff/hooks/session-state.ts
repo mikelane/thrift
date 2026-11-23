@@ -95,6 +95,9 @@ export type SessionState = Settings & {
   deferredPress: ButtonPress | null
   hasTurnAfterNote: boolean
   isOwnClearQueued: boolean
+  // True once the handoff's own clear returned; a foreign clear that returned before that ran ahead of it.
+  hasOwnClearReturned: boolean
+  hasForeignClearRunAhead: boolean
   foreignClearsAhead: number
   hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
@@ -133,6 +136,8 @@ export const createState = (settings: Settings): SessionState => ({
   deferredPress: null,
   hasTurnAfterNote: false,
   isOwnClearQueued: false,
+  hasOwnClearReturned: false,
+  hasForeignClearRunAhead: false,
   foreignClearsAhead: 0,
   hasLateTurn: false,
   turnEndWaiter: null,
@@ -265,6 +270,8 @@ export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
   state.handoffStage = 'idle'
   state.isOwnClearQueued = false
+  state.hasOwnClearReturned = false
+  state.hasForeignClearRunAhead = false
   state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
@@ -279,7 +286,21 @@ export const beginBeforeClear = (state: SessionState): void => {
 export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
   state.isOwnClearQueued = true
+  state.hasOwnClearReturned = false
+  state.hasForeignClearRunAhead = false
   state.hasLateTurn = false
+}
+
+export const markOwnClearReturned = (state: SessionState): void => {
+  state.hasOwnClearReturned = true
+}
+
+// The engine runs the clears one after another, so a foreign clear that returned before the handoff's own did ran ahead of it,
+// whatever order their commands reached the hooks in. Only a clear that ran counts: the caller passes none that was answered
+// in its place or threw.
+export const recordForeignClearReturned = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
+  if (state.handoffStage === 'own_clear' && !state.hasOwnClearReturned) state.hasForeignClearRunAhead = true
 }
 
 const PLUGIN_NAME = 'handoff'

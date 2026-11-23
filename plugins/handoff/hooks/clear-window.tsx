@@ -7,7 +7,7 @@ import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
 import { writeRecord } from './record-writer'
-import { beginOwnClear, preClearOutcome, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
+import { beginOwnClear, markOwnClearReturned, preClearOutcome, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
@@ -109,7 +109,11 @@ export async function waitForClearWindow(
   const clearWindow = { outcome, hasCompactedBeforeClear, hasTurnAfterNote: state.hasTurnAfterNote }
   if (outcome !== 'clear') return { ...clearWindow, clearing: null }
   beginOwnClear(state)
-  return { ...clearWindow, clearing: clearSession($) }
+  const clearing = clearSession($).then(isCleared => {
+    markOwnClearReturned(state)
+    return isCleared
+  })
+  return { ...clearWindow, clearing }
 }
 
 export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed'

@@ -145,7 +145,7 @@ async function runHandoff(
     if (!isCleared) {
       return await abandonAfterWait(abandon, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
-    const clearedBy = CLEARED_BY[outcome]
+    const clearedBy = state.hasForeignClearRunAhead ? 'person' : CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
   } finally {
     endHandoff(state)

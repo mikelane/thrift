@@ -134,9 +134,39 @@ describe('a person clear queued ahead of the handoff clear', () => {
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { late_turn: true } })
   })
 
-  test('It records cleared_by handoff because the handoff clear made the session that holds the note', async ($, on) => {
+  test('It records cleared_by person because the person clear ran before the handoff clear', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
+  })
+})
+
+describe('a person clear in flight when the handoff clear is queued, ending first', () => {
+  test('It records cleared_by person because the in-flight person clear ended before the handoff clear', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearInFlightAcrossOwnClear(world, $)
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
+  })
+})
+
+describe('a person clear that ran after the handoff clear', () => {
+  test('It records cleared_by handoff because the handoff clear ran first', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.onClearEnded = async () => {
+      world.onClearEnded = undefined
+      void world.clock.sleep(0).then(() => runCommand($, 'clear'))
+    }
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
+  })
+})
+
+describe('a person clear answered in its place while the handoff clear waits, for cleared_by', () => {
+  test('It records cleared_by handoff because the answered clear ran nothing', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    answeredPersonClearThenOwnClear(world, $)
     await finishNote()
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
   })
