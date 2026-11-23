@@ -134,9 +134,72 @@ describe('a person clear queued ahead of the handoff clear', () => {
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { late_turn: true } })
   })
 
-  test('It records cleared_by handoff because the handoff clear made the session that holds the note', async ($, on) => {
+  test('It records cleared_by person because the person clear ran before the handoff clear', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
+  })
+})
+
+describe('a foreign clear that finished before the handoff clear', () => {
+  test('It writes a debug line saying the clear is credited to the person', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(world.debugLines).toContain('handoff: a clear this plugin did not issue finished first, so the clear is credited to the person')
+  })
+
+  test('It writes no such debug line when the handoff clear ran alone', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await finishNote()
+    expect(world.debugLines.filter(line => line.includes('did not issue'))).toEqual([])
+  })
+})
+
+describe('second_clear', () => {
+  test('It records second_clear true when the person clear ran first and the handoff clear ran too', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(lastRecord(world).trigger_values).toMatchObject({ cleared_by: 'person', second_clear: true })
+  })
+
+  test('It leaves second_clear off when the handoff clear ran alone', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await finishNote()
+    expect(lastRecord(world).trigger_values.second_clear).toBeUndefined()
+  })
+})
+
+describe('a person clear in flight when the handoff clear is queued, ending first', () => {
+  test('It records cleared_by person because the in-flight person clear ended before the handoff clear', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearInFlightAcrossOwnClear(world, $)
+    await finishNote()
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
+  })
+})
+
+describe('a person clear that ran after the handoff clear', () => {
+  test('It records cleared_by handoff because the handoff clear ran first', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    // The delivery registers /handoff after the handoff clear returned and before the record is written, so the person's
+    // clear runs and returns inside the handoff, behind the handoff clear.
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      await runCommand($, 'clear')
+    }
+    await finishNote()
+    expect(world.clearOrigins).toHaveLength(2)
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
+  })
+})
+
+describe('a person clear answered in its place while the handoff clear waits, for cleared_by', () => {
+  test('It records cleared_by handoff because the answered clear ran nothing', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    answeredPersonClearThenOwnClear(world, $)
     await finishNote()
     expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'handoff' } })
   })

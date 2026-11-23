@@ -38,6 +38,7 @@ import {
   noteCacheReads,
   forgetForeignClear,
   recordForeignClear,
+  recordForeignClearReturned,
   recordSessionEnd,
   releaseTurnEndWaiter,
   resetForNewSession,
@@ -194,6 +195,7 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
     try {
       const clearOutput = await next(e)
       if (clearOutput.ref === undefined) forgetForeignClear(state)
+      else recordForeignClearReturned(state, e.origin)
       return clearOutput
     } catch (error) {
       forgetForeignClear(state)

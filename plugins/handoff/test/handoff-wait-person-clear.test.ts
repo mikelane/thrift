@@ -196,6 +196,11 @@ test('It records cleared_by person on the cleared record when the person clears 
   expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { cleared_by: 'person' } })
 })
 
+test('It leaves second_clear off when the person cleared during the wait and the handoff ran no clear', async ($, on) => {
+  const world = await firstHandoffEndsByPersonClear($, on)
+  expect(lastRecord(world).trigger_values.second_clear).toBeUndefined()
+})
+
 test('It records cleared_by handoff on the cleared record when the handoff runs its own clear', async ($, on) => {
   const { world, finishNote } = await writingTheNote($, on)
   await finishNote()

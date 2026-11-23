@@ -10,6 +10,7 @@ export const DECISION_REASONS = [
   'not_now',
   'send_here',
   'background_busy',
+  'session_moved',
 ] as const
 
 export type DecisionReason = (typeof DECISION_REASONS)[number]

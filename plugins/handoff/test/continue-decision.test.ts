@@ -8,10 +8,50 @@ const MID_FLIGHT: ContinueInput = {
   signal: 'weak',
   noteDelivery: 'appended',
   hasHeldPromptStartedTurn: false,
-  isSameSession: true,
+  sessionCheck: 'same',
+  clearedBy: 'handoff',
 }
 
 describe('decideContinue', () => {
+  test('It skips with cleared_by_person when the person cleared first', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
+  })
+
+  test('It logs off rather than cleared_by_person when the setting is off', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', isEnabled: false })).toEqual({ submit: false, fields: { continued: 'off' } })
+  })
+
+  test('It keeps strong_signal ahead of cleared_by_person', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', signal: 'strong' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'strong_signal' },
+    })
+  })
+
+  test('It reports note_not_appended before cleared_by_person when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', noteDelivery: 'in_box' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'note_not_appended' },
+    })
+  })
+
+  test('It reports cleared_by_person before held_prompt_sent when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', hasHeldPromptStartedTurn: true })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
+  })
+
+  test('It reports cleared_by_person before session_moved when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, clearedBy: 'person', sessionCheck: 'moved' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'cleared_by_person' },
+    })
+  })
+
   test('It submits after a weak-signal handoff whose note was appended', () => {
     expect(decideContinue(MID_FLIGHT)).toEqual({ submit: true })
   })
@@ -63,15 +103,29 @@ describe('decideContinue', () => {
     })
   })
 
+  test('It skips with session_unknown when a session id could not be read', () => {
+    expect(decideContinue({ ...MID_FLIGHT, sessionCheck: 'unknown' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'session_unknown' },
+    })
+  })
+
+  test('It reports held_prompt_sent before session_unknown when both hold', () => {
+    expect(decideContinue({ ...MID_FLIGHT, hasHeldPromptStartedTurn: true, sessionCheck: 'unknown' })).toEqual({
+      submit: false,
+      fields: { continued: 'skipped', continue_skip: 'held_prompt_sent' },
+    })
+  })
+
   test('It skips with session_moved when the session is no longer the fresh one', () => {
-    expect(decideContinue({ ...MID_FLIGHT, isSameSession: false })).toEqual({
+    expect(decideContinue({ ...MID_FLIGHT, sessionCheck: 'moved' })).toEqual({
       submit: false,
       fields: { continued: 'skipped', continue_skip: 'session_moved' },
     })
   })
 
   test('It reports the setting off before any skip reason', () => {
-    expect(decideContinue({ ...MID_FLIGHT, isEnabled: false, signal: 'strong', isSameSession: false })).toEqual({
+    expect(decideContinue({ ...MID_FLIGHT, isEnabled: false, signal: 'strong', sessionCheck: 'moved' })).toEqual({
       submit: false,
       fields: { continued: 'off' },
     })
@@ -92,7 +146,7 @@ describe('decideContinue', () => {
   })
 
   test('It reports held_prompt_sent before session_moved when both hold', () => {
-    expect(decideContinue({ ...MID_FLIGHT, hasHeldPromptStartedTurn: true, isSameSession: false })).toEqual({
+    expect(decideContinue({ ...MID_FLIGHT, hasHeldPromptStartedTurn: true, sessionCheck: 'moved' })).toEqual({
       submit: false,
       fields: { continued: 'skipped', continue_skip: 'held_prompt_sent' },
     })

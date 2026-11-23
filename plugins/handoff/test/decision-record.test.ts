@@ -77,6 +77,8 @@ describe('recordFromEvaluation', () => {
     { name: 'compacted_before_clear', extra: { compactedBeforeClear: true }, expected: { compacted_before_clear: true } },
     { name: 'late_turn', extra: { lateTurn: true }, expected: { late_turn: true } },
     { name: 'cleared_by handoff', extra: { clearedBy: 'handoff' }, expected: { cleared_by: 'handoff' } },
+    { name: 'second_clear', extra: { hasSecondClear: true }, expected: { second_clear: true } },
+    { name: 'delivery_session_id', extra: { noteSessionId: 'session-b' }, expected: { delivery_session_id: 'session-b' } },
   ]
   for (const { name, extra, expected } of optionalFields) {
     test(`It adds ${name} to trigger_values and nothing else when the evaluation has it`, () => {
@@ -89,6 +91,8 @@ describe('recordFromEvaluation', () => {
   const absentFields: ReadonlyArray<{ name: string; extra: Partial<Evaluation> }> = [
     { name: 'compactedBeforeClear is false', extra: { compactedBeforeClear: false } },
     { name: 'lateTurn is false', extra: { lateTurn: false } },
+    { name: 'hasSecondClear is false', extra: { hasSecondClear: false } },
+    { name: 'noteSessionId is undefined', extra: { noteSessionId: undefined } },
     { name: 'clearedBy is undefined', extra: { clearedBy: undefined } },
     { name: 'reason is undefined', extra: { reason: undefined } },
     { name: 'forkReason is undefined', extra: { forkReason: undefined } },

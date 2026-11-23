@@ -11,6 +11,9 @@ export type { DecisionReason }
 // Who ran the clear that a `cleared` record follows: the person's own /clear during the wait, or the handoff's.
 export type ClearedBy = 'person' | 'handoff'
 
+// Why the handoff ended without its own clear: the compaction before it failed while a turn was running. The plugin sees the turn, not who started it.
+export type ClearSkipCause = 'turn_running'
+
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
 export type TriggerValues = {
@@ -32,6 +35,9 @@ export type TriggerValues = {
   held_restore?: GroupDelivery
   leftover_strips?: number
   cleared_by?: ClearedBy
+  second_clear?: true
+  delivery_session_id?: string
+  clear_skipped?: ClearSkipCause
   compacted_before_clear?: true
   late_turn?: true
   continued?: ContinueFields['continued']
@@ -76,6 +82,9 @@ export type Evaluation = Trigger & {
   forkReason?: ForkReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
+  hasSecondClear?: boolean
+  noteSessionId?: string
+  clearSkipCause?: ClearSkipCause
   compactedBeforeClear?: boolean
   lateTurn?: boolean
   continueFields?: ContinueFields
@@ -142,7 +151,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, hasSecondClear, noteSessionId, clearSkipCause, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
@@ -164,6 +173,9 @@ export const recordFromEvaluation = (
       ...(forkReason ? { fork_reason: forkReason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
+      ...(hasSecondClear ? { second_clear: true as const } : {}),
+      ...(noteSessionId ? { delivery_session_id: noteSessionId } : {}),
+      ...(clearSkipCause ? { clear_skipped: clearSkipCause } : {}),
       ...compactedFields,
       ...lateTurnFields,
       ...continueFields,

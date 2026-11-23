@@ -1,10 +1,14 @@
-import { expect, test } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import {
   beginBeforeClear,
   beginOwnClear,
+  clearedByFor,
+  hasSecondClear,
   forgetForeignClear,
+  markOwnClearReturned,
   recordForeignClear,
+  recordForeignClearReturned,
   recordSessionEnd,
   createState,
   endHandoff,
@@ -196,4 +200,105 @@ test('It counts another plugin clear as foreign in recordForeignClear', () => {
   recordForeignClear(state, { kind: 'plugin', name: 'other-plugin' })
   recordSessionEnd(state, 'clear')
   expect(state.isOwnClearQueued).toBe(true)
+})
+
+test('It marks a foreign clear that returned before the own clear as run ahead in recordForeignClearReturned', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClearReturned(state, PERSON_ORIGIN)
+  expect(state.didForeignClearFinishFirst).toBe(true)
+})
+
+test('It ignores the handoff plugin own clear returning in recordForeignClearReturned', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClearReturned(state, { kind: 'plugin', name: 'handoff' })
+  expect(state.didForeignClearFinishFirst).toBe(false)
+})
+
+test('It counts another plugin clear that returned first as run ahead in recordForeignClearReturned', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClearReturned(state, { kind: 'plugin', name: 'other-plugin' })
+  expect(state.didForeignClearFinishFirst).toBe(true)
+})
+
+test('It ignores a foreign clear that returned after the own clear in recordForeignClearReturned', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  markOwnClearReturned(state)
+  recordForeignClearReturned(state, PERSON_ORIGIN)
+  expect(state.didForeignClearFinishFirst).toBe(false)
+})
+
+test('It ignores a foreign clear that returned outside the own_clear stage in recordForeignClearReturned', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordForeignClearReturned(state, PERSON_ORIGIN)
+  expect(state.didForeignClearFinishFirst).toBe(false)
+})
+
+test('It records that the own clear returned in markOwnClearReturned', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  markOwnClearReturned(state)
+  expect(state.hasOwnClearReturned).toBe(true)
+})
+
+test('It forgets a returned own clear and a run-ahead foreign clear from beginOwnClear', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClearReturned(state, PERSON_ORIGIN)
+  markOwnClearReturned(state)
+  beginOwnClear(state)
+  expect(state).toMatchObject({ hasOwnClearReturned: false, didForeignClearFinishFirst: false })
+})
+
+test('It forgets a returned own clear and a run-ahead foreign clear from endHandoff', () => {
+  const state = createState(settings)
+  beginOwnClear(state)
+  recordForeignClearReturned(state, PERSON_ORIGIN)
+  markOwnClearReturned(state)
+  endHandoff(state)
+  expect(state).toMatchObject({ hasOwnClearReturned: false, didForeignClearFinishFirst: false })
+})
+
+describe('clearedByFor', () => {
+  test('It names the handoff when it cleared and no foreign clear finished first', () => {
+    expect(clearedByFor(createState(settings), 'clear')).toBe('handoff')
+  })
+
+  test('It names the person when the person cleared before the handoff issued its clear', () => {
+    expect(clearedByFor(createState(settings), 'deliver_to_person_clear')).toBe('person')
+  })
+
+  test('It names the person when a foreign clear finished before the handoff clear', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(clearedByFor(state, 'clear')).toBe('person')
+  })
+
+  test('It names the person when a foreign clear finished first and the person had cleared too', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(clearedByFor(state, 'deliver_to_person_clear')).toBe('person')
+  })
+})
+
+describe('hasSecondClear', () => {
+  test('It is true when the handoff cleared after a foreign clear finished first', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(hasSecondClear(state, 'clear')).toBe(true)
+  })
+
+  test('It is false when the handoff cleared and nothing cleared before it', () => {
+    expect(hasSecondClear(createState(settings), 'clear')).toBe(false)
+  })
+
+  test('It is false when the person cleared and the handoff issued no clear of its own', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(hasSecondClear(state, 'deliver_to_person_clear')).toBe(false)
+  })
 })

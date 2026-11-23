@@ -1,5 +1,6 @@
 import type { PromptOrigin } from 'claude-code'
 import type { Offer } from '../types'
+import type { ClearedBy } from './decision-record'
 import type { Button, Mode } from './signals'
 
 type Settings = {
@@ -43,21 +44,40 @@ export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 // What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
 
-export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'deliver_to_person_clear' | 'clear'
+export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted' | 'deliver_to_person_clear' | 'clear'
+
+// The outcomes that end in a cleared session, whoever cleared it.
+export type ClearingOutcome = Extract<PreClearOutcome, 'deliver_to_person_clear' | 'clear'>
+
+// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
+const CLEARED_BY = {
+  clear: 'handoff',
+  deliver_to_person_clear: 'person',
+} as const satisfies Record<ClearingOutcome, ClearedBy>
+
+// "Person" means any clear this plugin did not issue: another plugin's or a scheduled one counts too.
+export const clearedByFor = (state: Pick<SessionState, 'didForeignClearFinishFirst'>, outcome: ClearingOutcome): ClearedBy =>
+  state.didForeignClearFinishFirst ? 'person' : CLEARED_BY[outcome]
+
+// The handoff's own clear ran after a foreign one had already cleared the session.
+export const hasSecondClear = (state: Pick<SessionState, 'didForeignClearFinishFirst'>, outcome: ClearingOutcome): boolean =>
+  outcome === 'clear' && state.didForeignClearFinishFirst
 
 const assertNever = (value: never): never => {
   throw new Error(`unhandled value: ${String(value)}`)
 }
 
-// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons.
-export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean): PreClearOutcome => {
+// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons. A compaction that
+// a turn preempted comes last: it only keeps the handoff from clearing when nothing else decided the outcome.
+export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean, isCompactionPreempted: boolean): PreClearOutcome => {
   switch (sessionEnd) {
     case 'other':
       return 'abandon_session_ended'
     case 'cleared_by_person':
       return 'deliver_to_person_clear'
     case null:
-      return isBusy ? 'abandon_busy' : 'clear'
+      if (isBusy) return 'abandon_busy'
+      return isCompactionPreempted ? 'abandon_compaction_preempted' : 'clear'
     default:
       return assertNever(sessionEnd)
   }
@@ -95,6 +115,9 @@ export type SessionState = Settings & {
   deferredPress: ButtonPress | null
   hasTurnAfterNote: boolean
   isOwnClearQueued: boolean
+  // True once the handoff's own clear returned; a foreign clear that returned before that ran ahead of it.
+  hasOwnClearReturned: boolean
+  didForeignClearFinishFirst: boolean
   foreignClearsAhead: number
   hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
@@ -133,6 +156,8 @@ export const createState = (settings: Settings): SessionState => ({
   deferredPress: null,
   hasTurnAfterNote: false,
   isOwnClearQueued: false,
+  hasOwnClearReturned: false,
+  didForeignClearFinishFirst: false,
   foreignClearsAhead: 0,
   hasLateTurn: false,
   turnEndWaiter: null,
@@ -265,6 +290,8 @@ export const endHandoff = (state: SessionState): void => {
   state.handoffHold = { phase: 'idle' }
   state.handoffStage = 'idle'
   state.isOwnClearQueued = false
+  state.hasOwnClearReturned = false
+  state.didForeignClearFinishFirst = false
   state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
@@ -279,7 +306,21 @@ export const beginBeforeClear = (state: SessionState): void => {
 export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
   state.isOwnClearQueued = true
+  state.hasOwnClearReturned = false
+  state.didForeignClearFinishFirst = false
   state.hasLateTurn = false
+}
+
+export const markOwnClearReturned = (state: SessionState): void => {
+  state.hasOwnClearReturned = true
+}
+
+// The engine runs the clears one after another, so a foreign clear that returned before the handoff's own did ran ahead of it,
+// whatever order their commands reached the hooks in. Only a clear that ran counts: the caller passes none that was answered
+// in its place or threw.
+export const recordForeignClearReturned = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
+  if (state.handoffStage === 'own_clear' && !state.hasOwnClearReturned) state.didForeignClearFinishFirst = true
 }
 
 const PLUGIN_NAME = 'handoff'
