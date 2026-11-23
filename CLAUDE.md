@@ -60,7 +60,8 @@ specific to this repo.
     omits one that has closed. The gate counts a run only if its record names the release PR with
     base `main`. A run with no record, an expired or unreadable one, or one naming another PR does
     not count, and the PR is refused (CI path, with a warning annotation) or skipped (sweep, with
-    the reason per run on stderr). A finished run with no record that did not succeed (failed or
+    the reason per run on stderr; a run whose record names another PR, a decoy, also gets a warning
+    annotation naming the run and the record, while one with no record stays on stderr). A finished run with no record that did not succeed (failed or
     cancelled) is not skipped: the lookup stops there and reports its conclusion, so an older success
     cannot stand in for it. Such a decoy run can hold a release PR for a person; that is fail-closed.
     It would come from a base whose `ci.yml` lacks the `pr-record` job, and only someone with write

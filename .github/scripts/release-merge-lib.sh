@@ -106,11 +106,14 @@ release_merge_problems() {
 # download, a temp file, or no unzip), which the caller must not read as "does not count", and
 # sets release_merge_run_record_detail to a whole phrase naming the lookup and the run. Reads with
 # $RUNS_TOKEN, as release_merge_ci_outcome does.
+# Sets release_merge_run_record_named to the record when it names another PR or base, and to nothing
+# otherwise.
 # SAFETY: a base branch's own ci.yml could write any record it likes. Only someone with write
 # access can create that branch, and the gate's author, SHA and file-allowlist checks still apply.
 release_merge_run_record_verdict() {
   local artifact_id record zip_path read_status=0
   release_merge_run_record_detail=
+  release_merge_run_record_named=
   if [[ -z "$2" ]]; then
     release_merge_run_record_detail="is unknown (no run id)"
     return 1
@@ -152,6 +155,7 @@ release_merge_run_record_verdict() {
   if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$record" >/dev/null; then
     return 0
   fi
+  release_merge_run_record_named=$record
   release_merge_run_record_detail="has a pr-record naming $record"
   return 1
 }
@@ -173,7 +177,8 @@ release_merge_run_record_verdict() {
 # it is not mistaken for "no run yet". Sets release_merge_ci_conclusion to what the latest run
 # concluded, for the caller that reports a return of 4. On a return of 2 from a record lookup,
 # release_merge_run_record_detail names it (it is empty when the runs lookup itself failed).
-# Sets release_merge_ci_run_id to the id of the run it chose, which the sweep hands to the gate.
+# Sets release_merge_ci_run_id to the id of the run it chose, which the sweep hands to the gate, and
+# release_merge_ci_decoy_runs to one line for each run it skipped because its record names another PR.
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
 release_merge_ci_outcome() {
@@ -181,6 +186,7 @@ release_merge_ci_outcome() {
   release_merge_ci_conclusion=
   release_merge_ci_run_id=
   release_merge_ci_skip_reasons=
+  release_merge_ci_decoy_runs=
   release_merge_run_record_detail=
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
   candidate_runs=$(jq -rs --arg repo "$1" --arg ref "$3" '
@@ -205,7 +211,8 @@ release_merge_ci_outcome() {
     fi
     case "$record_status" in
       0) release_merge_ci_conclusion=$run_conclusion; release_merge_ci_run_id=$run_id; break ;;
-      1|3) release_merge_ci_skip_reasons+="run $run_id $release_merge_run_record_detail"$'\n' ;;
+      1|3) release_merge_ci_skip_reasons+="run $run_id $release_merge_run_record_detail"$'\n'
+           [[ -z "$release_merge_run_record_named" ]] || release_merge_ci_decoy_runs+="run $run_id $release_merge_run_record_detail"$'\n' ;;
       *) release_merge_ci_conclusion=; return 2 ;;
     esac
   done 3<<<"$candidate_runs"
@@ -215,6 +222,16 @@ release_merge_ci_outcome() {
     running) return 3 ;;
     *) return 4 ;;
   esac
+}
+
+# release_merge_sweep_warn_decoys <number>: prints a warning annotation, on stderr, for each run
+# release_merge_ci_outcome skipped because its pr-record names another PR (a CI run a base branch put
+# on this release head, issue #117). The line carries a base ref a fork controls, so % is escaped.
+release_merge_sweep_warn_decoys() {
+  local decoy
+  while IFS= read -r decoy; do
+    [[ -z "$decoy" ]] || echo "::warning title=Release PR #$1 skipped a CI run for another PR::${decoy//\%/%25}" >&2
+  done <<<"$release_merge_ci_decoy_runs"
 }
 
 # release_merge_sweep <repo> <base>: prints "<number> <head-sha> <ci-run-id>" for each open
@@ -239,6 +256,7 @@ release_merge_sweep() (
         local lookup_failed=0
         while read -r number sha ref; do
           release_merge_ci_outcome "$1" "$sha" "$ref" "$number" "$2" && ci_status=0 || ci_status=$?
+          release_merge_sweep_warn_decoys "$number"
           case "$ci_status" in
             0) echo "$number $sha $release_merge_ci_run_id" ;;
             1) echo "Skipping PR #$number at $sha: no CI run at that head whose pr-record names it" \

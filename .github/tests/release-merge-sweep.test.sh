@@ -365,6 +365,42 @@ test_a_sweep_ignores_a_successful_run_with_an_unreadable_record_and_says_why() {
   assert_file_has "$TEST_DIR/sweep-err" "run 1 has an unreadable pr-record"
 }
 
+# The record naming another PR is the decoy of issue #117, so the sweep says so in an annotation that
+# names the run and the record; a run with no record or an unreadable one stays on stderr only.
+test_a_sweep_warns_with_an_annotation_naming_the_run_and_the_record_of_a_decoy_run() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 999@old-feature'
+  sweep >/dev/null 2>"$TEST_DIR/sweep-err"
+  assert_file_has "$TEST_DIR/sweep-err" \
+    '::warning title=Release PR #111 skipped a CI run for another PR::run 1 has a pr-record naming {"number":999,"base":"old-feature"}'
+}
+
+test_a_sweep_warns_about_a_decoy_run_even_when_an_older_run_is_selected() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 2 999@old-feature' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  sweep >"$TEST_DIR/sweep-out" 2>"$TEST_DIR/sweep-err"
+  assert_file_has "$TEST_DIR/sweep-out" "111 $SHA_A 1"
+  assert_file_has "$TEST_DIR/sweep-err" "::warning title=Release PR #111 skipped a CI run for another PR::run 2 has"
+}
+
+test_a_sweep_escapes_a_percent_sign_in_the_decoy_annotation() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 999@50%0A'
+  sweep >/dev/null 2>"$TEST_DIR/sweep-err"
+  assert_file_has "$TEST_DIR/sweep-err" '"base":"50%250A"}'
+}
+
+test_a_sweep_gives_no_annotation_for_a_run_with_no_record_or_an_unreadable_one() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 2 corrupt' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1 none'
+  sweep >/dev/null 2>"$TEST_DIR/sweep-err"
+  assert_file_lacks "$TEST_DIR/sweep-err" "::warning"
+}
+
 test_a_sweep_says_what_a_mismatched_record_names() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 999@old-feature'
