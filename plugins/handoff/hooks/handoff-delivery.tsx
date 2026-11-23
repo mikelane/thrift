@@ -14,7 +14,7 @@ import {
   groupsLeftToSend,
   handoffMessage,
   joinPrompts,
-  noteElsewhereMessage,
+  noteInOtherSessionMessage,
   noteTookGroupAlong,
   speaksForPerson,
   type Carried,
@@ -219,10 +219,10 @@ async function readSessionId($: EngineInterface): Promise<string | undefined> {
 
 // A /resume queued behind the clear runs in the fresh session, so by the time the note is in, the person may be in another
 // session. An id that cannot be read on either side is not taken for a move.
-async function hasMovedFrom($: EngineInterface, deliverySessionId: string | undefined): Promise<boolean> {
-  if (deliverySessionId === undefined) return false
+async function hasSessionMovedFrom($: EngineInterface, noteSessionId: string | undefined): Promise<boolean> {
+  if (noteSessionId === undefined) return false
   const currentSessionId = await readSessionId($)
-  return currentSessionId !== undefined && currentSessionId !== deliverySessionId
+  return currentSessionId !== undefined && currentSessionId !== noteSessionId
 }
 
 // The submit runs in a clock tick, since the engine refuses one from a hook the turn may be waiting on.
@@ -237,7 +237,7 @@ function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
 }
 
 type ContinueContext = {
-  freshSessionId: string | undefined
+  noteSessionId: string | undefined
   noteDelivery: NoteDelivery
   hasHeldPromptStartedTurn: boolean
   clearedBy: ClearedBy
@@ -247,7 +247,7 @@ async function submitContinuePrompt(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
-  { freshSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy }: ContinueContext,
+  { noteSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy }: ContinueContext,
 ): Promise<ContinueFields> {
   const decide = (isSameSession: boolean, hasTurnStarted: boolean) =>
     decideContinue({
@@ -264,7 +264,7 @@ async function submitContinuePrompt(
   // The session and turn checks run inside the tick, straight before the submit: the hold on prompts has ended, so a
   // /resume, /clear, or prompt the person sends before the tick is seen here rather than overtaken by the submit.
   return afterTick($, async () => {
-    const isSameSession = freshSessionId !== undefined && (await readSessionId($)) === freshSessionId
+    const isSameSession = noteSessionId !== undefined && (await readSessionId($)) === noteSessionId
     const decision = decide(isSameSession, hasHeldPromptStartedTurn || state.isTurnRunning)
     if (!decision.submit) return decision.fields
     const { isUnattended } = settledHandoff
@@ -287,14 +287,14 @@ export async function continueInFreshSession(
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
   // The session the note is delivered to, read straight after the clear; the continue prompt and the handed-off line compare against it.
-  const freshSessionId = await readSessionId($)
+  const noteSessionId = await readSessionId($)
   await registerHandoffCommand($)
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
   const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
   if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
-  const hasSessionMoved = await hasMovedFrom($, freshSessionId)
-  if (hasSessionMoved && freshSessionId !== undefined) $.ui.log(noteElsewhereMessage(freshSessionId))
+  const hasSessionMoved = await hasSessionMovedFrom($, noteSessionId)
+  if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
   const groupsToSend = groupsLeftToSend(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)
@@ -302,7 +302,7 @@ export async function continueInFreshSession(
   const deliveries = await sendHeldGroups($, state, groupsToSend, settledHandoff.isUnattended, { placement, holdBackPersonGroups: holdBackPerson })
   const late = await sendLateArrivals($, state, holdBackPerson)
   const hasHeldPromptStartedTurn = [...deliveries, ...late.deliveries].includes('submitted')
-  const continueFields = await submitContinuePrompt($, state, settledHandoff, { freshSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy })
+  const continueFields = await submitContinuePrompt($, state, settledHandoff, { noteSessionId, noteDelivery, hasHeldPromptStartedTurn, clearedBy })
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',

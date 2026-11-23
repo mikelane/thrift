@@ -12,7 +12,7 @@ export type { DecisionReason }
 export type ClearedBy = 'person' | 'handoff'
 
 // Why the handoff ended without its own clear: the compaction before it failed because a turn, started by the person's command, took the session.
-export type ClearSkipped = 'person_command'
+export type ClearSkipCause = 'person_command'
 
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
@@ -35,7 +35,7 @@ export type TriggerValues = {
   held_restore?: GroupDelivery
   leftover_strips?: number
   cleared_by?: ClearedBy
-  clear_skipped?: ClearSkipped
+  clear_skipped?: ClearSkipCause
   compacted_before_clear?: true
   late_turn?: true
   continued?: ContinueFields['continued']
@@ -80,7 +80,7 @@ export type Evaluation = Trigger & {
   forkReason?: ForkReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
-  clearSkipped?: ClearSkipped
+  clearSkipCause?: ClearSkipCause
   compactedBeforeClear?: boolean
   lateTurn?: boolean
   continueFields?: ContinueFields
@@ -147,7 +147,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, clearSkipped, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, clearSkipCause, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
@@ -169,7 +169,7 @@ export const recordFromEvaluation = (
       ...(forkReason ? { fork_reason: forkReason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
-      ...(clearSkipped ? { clear_skipped: clearSkipped } : {}),
+      ...(clearSkipCause ? { clear_skipped: clearSkipCause } : {}),
       ...compactedFields,
       ...lateTurnFields,
       ...continueFields,

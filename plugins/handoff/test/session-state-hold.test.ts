@@ -53,7 +53,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     hasTurnAfterNote: false,
     isOwnClearQueued: false,
     hasOwnClearReturned: false,
-    hasForeignClearRunAhead: false,
+    didForeignClearFinishFirst: false,
     foreignClearsAhead: 0,
     hasLateTurn: false,
     turnEndWaiter: null,

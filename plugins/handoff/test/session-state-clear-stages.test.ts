@@ -101,7 +101,7 @@ test('It clears when no session ended and nothing is busy in preClearOutcome', (
 })
 
 test('It skips the clear when a turn preempted the compaction and nothing else decided in preClearOutcome', () => {
-  expect(preClearOutcome(null, false, true)).toBe('abandon_clear_skipped')
+  expect(preClearOutcome(null, false, true)).toBe('abandon_compaction_preempted')
 })
 
 test('It abandons as busy over a preempted compaction in preClearOutcome', () => {

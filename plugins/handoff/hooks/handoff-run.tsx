@@ -7,7 +7,7 @@ import { CLEARED_BY, abandonAfterWait, type AbandonHandoff, waitForClearWindow }
 import {
   heldGroupFields,
   leftoverStripFields,
-  type ClearSkipped,
+  type ClearSkipCause,
   type DecisionReason,
   type HandoffRequest,
   type SettledHandoff,
@@ -41,15 +41,15 @@ async function readSessionId($: EngineInterface): Promise<string | undefined> {
   }
 }
 
+type AbandonDetails = { sessionId?: string; forkReason?: ForkReason; clearSkipCause?: ClearSkipCause }
+
 async function abandonHandoff(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
   reason: DecisionReason,
   message: string,
-  sessionId?: string,
-  forkReason?: ForkReason,
-  clearSkipped?: ClearSkipped,
+  { sessionId, forkReason, clearSkipCause }: AbandonDetails = {},
 ) {
   // Before the first await, as in continueInFreshSession: the caller took the held prompts in the same synchronous run, so a
   // prompt that arrives while they are restored is held until they, and every prompt that arrived meanwhile, are back.
@@ -64,7 +64,7 @@ async function abandonHandoff(
     action: 'none',
     reason,
     forkReason,
-    clearSkipped,
+    clearSkipCause,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
@@ -104,13 +104,13 @@ async function prepareHandoff($: EngineInterface, state: SessionState, request: 
     beginNoteWindow(state)
     const outcome = await writeNote($)
     if (outcome.note === null) {
-      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', noHandoffMessage(outcome.forkReason), oldId, outcome.forkReason)
+      await abandonHandoff($, state, settleHandoff(state, request), 'no_handoff_written', noHandoffMessage(outcome.forkReason), { sessionId: oldId, forkReason: outcome.forkReason })
       return null
     }
     return { oldId, note: outcome.note }
   } catch (error) {
     debug($, `handoff failed before the clear: ${String(error)}`)
-    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', NO_HANDOFF_MESSAGE, oldId)
+    await abandonHandoff($, state, settleHandoff(state, request), 'handoff_failed', NO_HANDOFF_MESSAGE, { sessionId: oldId })
     return null
   }
 }
@@ -129,13 +129,13 @@ async function runHandoff(
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     const redraw = (band: BandState) => redrawBand($, state, band)
-    const abandon: AbandonHandoff = (settled, reason, message, sessionId, clearSkipped) =>
-      abandonHandoff($, state, settled, reason, message, sessionId, undefined, clearSkipped)
+    const abandon: AbandonHandoff = (settled, reason, message, sessionId, clearSkipCause) =>
+      abandonHandoff($, state, settled, reason, message, { sessionId, clearSkipCause })
     const { outcome, hasCompactedBeforeClear, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId, redraw)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') return await abandonAfterWait(abandon, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
     if (outcome === 'abandon_busy') return await abandonAfterWait(abandon, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
-    if (outcome === 'abandon_clear_skipped') return await abandonAfterWait(abandon, settleAfterWait(), 'clear_skipped', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_compaction_preempted') return await abandonAfterWait(abandon, settleAfterWait(), 'compaction_preempted', hasCompactedBeforeClear, prepared.oldId)
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {
@@ -150,7 +150,7 @@ async function runHandoff(
     if (!isCleared) {
       return await abandonAfterWait(abandon, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
-    const clearedBy = state.hasForeignClearRunAhead ? 'person' : CLEARED_BY[outcome]
+    const clearedBy = state.didForeignClearFinishFirst ? 'person' : CLEARED_BY[outcome]
     await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
   } finally {
     endHandoff(state)

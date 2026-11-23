@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { handedOffMessage, noteElsewhereMessage } from '../hooks/handoff-note'
+import { handedOffMessage, noteInOtherSessionMessage } from '../hooks/handoff-note'
 import { install, lastRecord, runCommand, startSession } from './helpers'
 
 const LOG_PREFIX = 'log:'
 const TOAST_PREFIX = 'toast:'
-const ELSEWHERE = noteElsewhereMessage('new-session')
+const ELSEWHERE = noteInOtherSessionMessage('new-session')
 
 type Engine = Parameters<typeof install>[0]
 type On = Parameters<typeof install>[1]
@@ -79,10 +79,10 @@ describe('a handoff that stayed in the fresh session', () => {
 })
 
 // Wording-independent: the message names whichever session holds the note, not a fixed one.
-test('It names the session it is given in noteElsewhereMessage', () => {
-  expect(noteElsewhereMessage('session-a')).toContain('session-a')
-  expect(noteElsewhereMessage('session-b')).toContain('session-b')
-  expect(noteElsewhereMessage('session-a')).not.toContain('session-b')
+test('It names the session it is given in noteInOtherSessionMessage', () => {
+  expect(noteInOtherSessionMessage('session-a')).toContain('session-a')
+  expect(noteInOtherSessionMessage('session-b')).toContain('session-b')
+  expect(noteInOtherSessionMessage('session-a')).not.toContain('session-b')
 })
 
 describe('a session id that cannot be read after the clear', () => {
@@ -97,7 +97,7 @@ describe('a session id that cannot be read after the clear', () => {
   })
 })
 
-describe('a session id that cannot be read once the note is in, for hasMovedFrom', () => {
+describe('a session id that cannot be read once the note is in, for hasSessionMovedFrom', () => {
   test('It shows the handed-off line and records no reason because the current session cannot be told', async ($, on) => {
     const world = await startedWorld($, on)
     // The delivery registers /handoff straight after it reads the fresh id, so a denial set there hits only the read once the

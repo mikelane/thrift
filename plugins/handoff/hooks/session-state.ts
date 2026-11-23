@@ -43,7 +43,7 @@ export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 // What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
 
-export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_clear_skipped' | 'deliver_to_person_clear' | 'clear'
+export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted' | 'deliver_to_person_clear' | 'clear'
 
 const assertNever = (value: never): never => {
   throw new Error(`unhandled value: ${String(value)}`)
@@ -59,7 +59,7 @@ export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy
       return 'deliver_to_person_clear'
     case null:
       if (isBusy) return 'abandon_busy'
-      return isCompactionPreempted ? 'abandon_clear_skipped' : 'clear'
+      return isCompactionPreempted ? 'abandon_compaction_preempted' : 'clear'
     default:
       return assertNever(sessionEnd)
   }
@@ -99,7 +99,7 @@ export type SessionState = Settings & {
   isOwnClearQueued: boolean
   // True once the handoff's own clear returned; a foreign clear that returned before that ran ahead of it.
   hasOwnClearReturned: boolean
-  hasForeignClearRunAhead: boolean
+  didForeignClearFinishFirst: boolean
   foreignClearsAhead: number
   hasLateTurn: boolean
   turnEndWaiter: (() => void) | null
@@ -139,7 +139,7 @@ export const createState = (settings: Settings): SessionState => ({
   hasTurnAfterNote: false,
   isOwnClearQueued: false,
   hasOwnClearReturned: false,
-  hasForeignClearRunAhead: false,
+  didForeignClearFinishFirst: false,
   foreignClearsAhead: 0,
   hasLateTurn: false,
   turnEndWaiter: null,
@@ -273,7 +273,7 @@ export const endHandoff = (state: SessionState): void => {
   state.handoffStage = 'idle'
   state.isOwnClearQueued = false
   state.hasOwnClearReturned = false
-  state.hasForeignClearRunAhead = false
+  state.didForeignClearFinishFirst = false
   state.foreignClearsAhead = 0
   state.hasLateTurn = false
 }
@@ -289,7 +289,7 @@ export const beginOwnClear = (state: SessionState): void => {
   state.handoffStage = 'own_clear'
   state.isOwnClearQueued = true
   state.hasOwnClearReturned = false
-  state.hasForeignClearRunAhead = false
+  state.didForeignClearFinishFirst = false
   state.hasLateTurn = false
 }
 
@@ -302,7 +302,7 @@ export const markOwnClearReturned = (state: SessionState): void => {
 // in its place or threw.
 export const recordForeignClearReturned = (state: SessionState, origin: PromptOrigin): void => {
   if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
-  if (state.handoffStage === 'own_clear' && !state.hasOwnClearReturned) state.hasForeignClearRunAhead = true
+  if (state.handoffStage === 'own_clear' && !state.hasOwnClearReturned) state.didForeignClearFinishFirst = true
 }
 
 const PLUGIN_NAME = 'handoff'

@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BandState } from '../types'
 import { WAITING, WAITING_STATUS } from './band-text'
-import type { ClearSkipped, ClearedBy, DecisionReason, HandoffRequest, SettledHandoff, Trigger } from './decision-record'
+import type { ClearSkipCause, ClearedBy, DecisionReason, HandoffRequest, SettledHandoff, Trigger } from './decision-record'
 import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
@@ -17,14 +17,14 @@ export type AbandonHandoff = (
   reason: DecisionReason,
   message: string,
   sessionId: string,
-  clearSkipped?: ClearSkipped,
+  clearSkipCause?: ClearSkipCause,
 ) => Promise<void>
 
 // Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
 export const CLEARED_BY = {
   clear: 'handoff',
   deliver_to_person_clear: 'person',
-} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy' | 'abandon_clear_skipped'>, ClearedBy>
+} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted'>, ClearedBy>
 
 type ClearWindow = {
   outcome: PreClearOutcome
@@ -43,7 +43,7 @@ export async function showWaitingStatus($: EngineInterface, state: SessionState,
 }
 
 // Only a compaction that did not happen can have been preempted.
-type CompactionResult = { isCompacted: true; isPreempted: false } | { isCompacted: false; isPreempted: boolean }
+type CompactionResult = { isCompacted: true; isCompactionPreempted: false } | { isCompacted: false; isCompactionPreempted: boolean }
 
 // Whether the session was compacted: a vetoed or failed compaction leaves it as it was. A compaction that failed while a turn
 // was running was preempted by that turn: the engine refuses a compaction against a turn in flight (seen on 2.1.302 when a
@@ -56,16 +56,16 @@ export async function compactBeforeClearing(
 ): Promise<CompactionResult> {
   try {
     const compaction = await $.session.compact()
-    if (compaction.skip === undefined) return { isCompacted: true, isPreempted: false }
+    if (compaction.skip === undefined) return { isCompacted: true, isCompactionPreempted: false }
     await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_vetoed', sessionId })
   } catch (error) {
     // Read before the first await below, so the record write cannot change it.
-    const isPreempted = state.isTurnRunning
+    const isCompactionPreempted = state.isTurnRunning
     debug($, `compaction before the clear failed: ${String(error)}`)
     await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
-    return { isCompacted: false, isPreempted }
+    return { isCompacted: false, isCompactionPreempted }
   }
-  return { isCompacted: false, isPreempted: false }
+  return { isCompacted: false, isCompactionPreempted: false }
 }
 
 export async function clearSession($: EngineInterface): Promise<boolean> {
@@ -115,7 +115,7 @@ export async function waitForClearWindow(
       isCompacted = true
       const compaction = await compactBeforeClearing($, state, request.trigger, oldId)
       hasCompactedBeforeClear = compaction.isCompacted
-      isCompactionPreempted = compaction.isPreempted
+      isCompactionPreempted = compaction.isCompactionPreempted
       continue
     }
     if (!mustRefuseWhenBusy) break
@@ -133,7 +133,7 @@ export async function waitForClearWindow(
   return { ...clearWindow, clearing }
 }
 
-export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'clear_skipped'
+export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'compaction_preempted'
 
 // Abandons a handoff after the wait: the session ended, background work was running, or the clear failed.
 // No clear starts here, so the no-await rule on waitForClearWindow does not apply.
@@ -153,7 +153,7 @@ export function abandonAfterWait(
     }
     case 'clear_failed':
       return abandon(settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
-    case 'clear_skipped':
+    case 'compaction_preempted':
       return abandon(settledHandoff, 'compaction_failed', CLEAR_SKIPPED_MESSAGE, oldId, 'person_command')
     default: {
       const unhandled: never = cause

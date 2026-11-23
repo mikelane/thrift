@@ -204,21 +204,21 @@ test('It marks a foreign clear that returned before the own clear as run ahead i
   const state = createState(settings)
   beginOwnClear(state)
   recordForeignClearReturned(state, PERSON_ORIGIN)
-  expect(state.hasForeignClearRunAhead).toBe(true)
+  expect(state.didForeignClearFinishFirst).toBe(true)
 })
 
 test('It ignores the handoff plugin own clear returning in recordForeignClearReturned', () => {
   const state = createState(settings)
   beginOwnClear(state)
   recordForeignClearReturned(state, { kind: 'plugin', name: 'handoff' })
-  expect(state.hasForeignClearRunAhead).toBe(false)
+  expect(state.didForeignClearFinishFirst).toBe(false)
 })
 
 test('It counts another plugin clear that returned first as run ahead in recordForeignClearReturned', () => {
   const state = createState(settings)
   beginOwnClear(state)
   recordForeignClearReturned(state, { kind: 'plugin', name: 'other-plugin' })
-  expect(state.hasForeignClearRunAhead).toBe(true)
+  expect(state.didForeignClearFinishFirst).toBe(true)
 })
 
 test('It ignores a foreign clear that returned after the own clear in recordForeignClearReturned', () => {
@@ -226,14 +226,14 @@ test('It ignores a foreign clear that returned after the own clear in recordFore
   beginOwnClear(state)
   markOwnClearReturned(state)
   recordForeignClearReturned(state, PERSON_ORIGIN)
-  expect(state.hasForeignClearRunAhead).toBe(false)
+  expect(state.didForeignClearFinishFirst).toBe(false)
 })
 
 test('It ignores a foreign clear that returned outside the own_clear stage in recordForeignClearReturned', () => {
   const state = createState(settings)
   beginBeforeClear(state)
   recordForeignClearReturned(state, PERSON_ORIGIN)
-  expect(state.hasForeignClearRunAhead).toBe(false)
+  expect(state.didForeignClearFinishFirst).toBe(false)
 })
 
 test('It records that the own clear returned in markOwnClearReturned', () => {
@@ -249,7 +249,7 @@ test('It forgets a returned own clear and a run-ahead foreign clear from beginOw
   recordForeignClearReturned(state, PERSON_ORIGIN)
   markOwnClearReturned(state)
   beginOwnClear(state)
-  expect(state).toMatchObject({ hasOwnClearReturned: false, hasForeignClearRunAhead: false })
+  expect(state).toMatchObject({ hasOwnClearReturned: false, didForeignClearFinishFirst: false })
 })
 
 test('It forgets a returned own clear and a run-ahead foreign clear from endHandoff', () => {
@@ -258,5 +258,5 @@ test('It forgets a returned own clear and a run-ahead foreign clear from endHand
   recordForeignClearReturned(state, PERSON_ORIGIN)
   markOwnClearReturned(state)
   endHandoff(state)
-  expect(state).toMatchObject({ hasOwnClearReturned: false, hasForeignClearRunAhead: false })
+  expect(state).toMatchObject({ hasOwnClearReturned: false, didForeignClearFinishFirst: false })
 })

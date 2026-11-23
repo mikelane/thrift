@@ -50,7 +50,7 @@ test('It submits no continue prompt after a strong-signal band that an interrupt
   expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'strong_signal' })
 })
 
-// Mutation-gap probe: both id reads fail. Passes on the code; fails if the freshSessionId !== undefined guard is removed.
+// Mutation-gap probe: both id reads fail. Passes on the code; fails if the noteSessionId !== undefined guard is removed.
 test('It logs session_moved when neither session id read succeeds', CONTINUING, async ($, on) => {
   const world = install($, on)
   world.onClearEnded = async () => {
