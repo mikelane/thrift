@@ -21,8 +21,9 @@ assert_sweep_skips() {
   assert_file_has "$TEST_DIR/sweep-err" "Skipping PR #$1 at $2: "
 }
 
-# assert_sweep_warns_ci_failed <number> <sha>: the sweep selects nothing, exits 0, and reports a
-# failed CI run at <sha> as a warning annotation rather than as an ordinary skip.
+# assert_sweep_warns_ci_failed <number> <sha> [conclusion]: the sweep selects nothing, exits 0, and
+# reports a CI run at <sha> that concluded <conclusion> (default failure) as a warning annotation
+# rather than as an ordinary skip.
 assert_sweep_warns_ci_failed() {
   local got status
   got=$(sweep 2>"$TEST_DIR/sweep-err")
@@ -30,7 +31,7 @@ assert_sweep_warns_ci_failed() {
   [[ -z "$got" ]] || fail "selected [$got]"
   [[ "$status" == 0 ]] || fail "the sweep exited $status"
   assert_file_has "$TEST_DIR/sweep-err" \
-    "::warning title=Release PR #$1 not merged::CI did not succeed at $2"
+    "::warning title=Release PR #$1 not merged::CI concluded ${3:-failure} at $2"
   assert_file_lacks "$TEST_DIR/sweep-err" "Skipping PR #$1"
 }
 
@@ -198,7 +199,7 @@ test_a_sweep_selects_each_pr_whose_ci_passed_and_no_other() {
   got=$(sweep 2>"$TEST_DIR/sweep-err")
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
   assert_file_has "$TEST_DIR/sweep-err" \
-    "::warning title=Release PR #112 not merged::CI did not succeed at $SHA_B"
+    "::warning title=Release PR #112 not merged::CI concluded failure at $SHA_B"
 }
 
 test_the_ci_run_lookup_uses_the_runs_token_not_the_app_token() {
@@ -218,12 +219,37 @@ test_a_sweep_fails_when_the_ci_run_lookup_fails_so_a_stuck_pr_is_not_hidden() {
   write_pulls "$(open_pr 111 $SHA_A)"
   : >"$TEST_DIR/runs-$SHA_A.error"
   sweep_fails || fail 'a failed CI run lookup was read as "no CI run"'
-  assert_file_has "$TEST_DIR/sweep-err" "Cannot read the CI runs of PR #111 at $SHA_A;"
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
 }
 
 test_a_sweep_fails_when_the_pull_request_list_fails() {
   : >"$TEST_DIR/pulls.error"
   sweep_fails || fail 'a failed pull request list was read as "no open release PR"'
+}
+
+test_a_sweep_names_the_pull_request_list_when_that_is_the_lookup_that_failed() {
+  : >"$TEST_DIR/pulls.error"
+  sweep_fails || fail 'a failed pull request list was read as "no open release PR"'
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR sweep failed::cannot list the open release PRs"
+}
+
+test_a_sweep_does_not_blame_the_pull_request_list_when_a_ci_lookup_failed() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  : >"$TEST_DIR/runs-$SHA_A.error"
+  sweep_fails || fail 'a failed CI run lookup was read as "no CI run"'
+  assert_file_lacks "$TEST_DIR/sweep-err" "cannot list the open release PRs"
+}
+
+test_a_sweep_warning_names_the_conclusion_of_a_cancelled_run() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed cancelled 2026-10-18T10:00:00Z'
+  assert_sweep_warns_ci_failed 111 "$SHA_A" cancelled
+}
+
+test_a_sweep_warning_escapes_a_percent_sign_in_the_conclusion() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed 50%0A 2026-10-18T10:00:00Z'
+  assert_sweep_warns_ci_failed 111 "$SHA_A" '50%250A'
 }
 
 test_a_sweep_still_selects_a_pr_when_a_later_pr_lookup_fails() {
@@ -240,14 +266,14 @@ test_a_sweep_fails_when_a_later_pr_lookup_fails_even_after_selecting_one() {
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z'
   : >"$TEST_DIR/runs-$SHA_B.error"
   sweep_fails || fail 'a failed CI run lookup after a selected PR left the sweep green'
-  assert_file_has "$TEST_DIR/sweep-err" "Cannot read the CI runs of PR #112 at $SHA_B;"
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #112 not merged::cannot read the CI runs at $SHA_B"
 }
 
 test_a_sweep_fails_when_the_ci_runs_response_is_not_json() {
   write_pulls "$(open_pr 111 $SHA_A)"
   echo 'not json' >"$TEST_DIR/runs-$SHA_A.json"
   sweep_fails || fail 'an unreadable CI runs response was read as "no CI run"'
-  assert_file_has "$TEST_DIR/sweep-err" "Cannot read the CI runs of PR #111 at $SHA_A;"
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
 }
 
 # The stub prints the runs as two pages, as `gh api --paginate` does: an older failure on page 1 and
@@ -312,6 +338,17 @@ test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
     'CI completed success 2026-10-18T11:00:00Z - - - 999@old-feature,111 2' \
     'CI completed failure 2026-10-18T10:00:00Z - - - 999@old-feature,111 1'
   assert_sweep_skips 111 "$SHA_A"
+}
+
+# gh exits 0 but the open-PR list is not JSON: the sweep names the failed lookup and fails.
+test_a_sweep_names_an_unparseable_pr_list_as_the_failed_lookup() {
+  local status
+  stub_gh
+  echo 'not json' >"$TEST_DIR/pulls.json"
+  release_merge_sweep "$REPO" main >"$TEST_DIR/sweep-out" 2>"$TEST_DIR/sweep-err"
+  status=$?
+  [[ "$status" != 0 ]] || fail 'the sweep succeeded on an unparseable PR list'
+  assert_file_has "$TEST_DIR/sweep-err" '::error title=Release PR sweep failed::cannot list the open release PRs'
 }
 
 run_tests "$@"

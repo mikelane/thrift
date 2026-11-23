@@ -167,6 +167,34 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_gate_cannot_be_checked() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# with_config <path> <command>...: runs the command with the allowlist read from <path>.
+with_config() {
+  RELEASE_MERGE_CONFIG=$1
+  shift
+  "$@"
+}
+
+# The next two run the real gate: a lookup that fails inside it must fail the step (the job turns
+# red) and still not merge, not read as a refusal that leaves the job green.
+test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/pulls.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_lacks "Not merging PR"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_lacks "Not merging PR"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
 test_the_merge_step_does_not_log_a_merged_line_after_a_lost_race() {
   stage_release_pr 111 "$SHA_A" handoff success
   jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
@@ -213,6 +241,40 @@ test_the_merge_step_leaves_no_temp_files_after_a_merge() {
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
   left=$(ls "$TEST_DIR/work")
   [[ -z "$left" ]] || fail "left [$left]"
+}
+
+# with_failing_mktemp <prefix> <command>...: runs the command with a mktemp that fails for the
+# template <prefix>.XXXXXX and makes every other temp file as usual. run_merge_step runs it in a
+# subshell, so the stub does not outlive the test.
+with_failing_mktemp() {
+  FAILING_MKTEMP_PREFIX=$1
+  shift
+  mktemp() { [[ "$1" != */"$FAILING_MKTEMP_PREFIX".* ]] && command mktemp "$@"; }
+  "$@"
+}
+
+# assert_temp_file_failure_stops_the_gate <prefix>: the gate stops at the mktemp for <prefix> with
+# its own error, not at a later step reading an empty path.
+assert_temp_file_failure_stops_the_gate() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_failing_mktemp "$1" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot create a temp file"
+  assert_out_lacks "cannot fetch"
+  assert_out_lacks "cannot read the changed files"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_pr_temp_file() {
+  assert_temp_file_failure_stops_the_gate pr
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_files_temp_file() {
+  assert_temp_file_failure_stops_the_gate files
+}
+
+test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_raw_temp_file() {
+  assert_temp_file_failure_stops_the_gate raw
 }
 
 test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {
@@ -310,7 +372,7 @@ test_a_sweep_run_fails_when_the_ci_lookup_fails_and_nothing_else_is_a_candidate(
   : >"$TEST_DIR/runs-$SHA_A.error"
   TRIGGER='Release Please' run_merge_step release_merge_run
   assert_exit_code 1
-  assert_out_has "Cannot read the CI runs of PR #111 at $SHA_A;"
+  assert_out_has "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
 }
 
 test_a_sweep_run_that_failed_reports_the_failure_instead_of_nothing_to_merge() {
@@ -364,6 +426,22 @@ test_a_sweep_run_stays_green_when_the_gate_refuses_a_pr() {
   edit_pr 111 '.user.login = "mikelane"'
   TRIGGER='Release Please' run_merge_step release_merge_run
   assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+# The pull request files API stops at 3000 files, so the files it listed may not be all the PR changes.
+test_the_merge_step_does_not_merge_a_pr_that_changes_more_files_than_the_files_api_listed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.changed_files = 3001'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_does_not_merge_a_pr_that_changes_files_when_the_files_api_listed_none() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.changed_files = 1'
+  echo '[]' >"$TEST_DIR/files-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 

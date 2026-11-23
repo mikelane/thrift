@@ -4,8 +4,8 @@
 # Usage: release-merge-adversarial.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
-# shellcheck source=release-merge-lib.sh
-source "$HARNESS_DIR/release-merge-lib.sh"
+# shellcheck source=../scripts/release-merge-lib.sh
+source "$RELEASE_MERGE_LIB"
 
 REPO=mikelane/thrift
 BRANCH=release-please--branches--main--components--handoff

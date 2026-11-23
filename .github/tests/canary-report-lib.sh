@@ -14,6 +14,7 @@ HARNESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$HARNESS_DIR/../.." && pwd)
 CI_YML=${CANARY_CI_YML:-$REPO_ROOT/.github/workflows/ci.yml}
 CHECK_SH=$REPO_ROOT/scripts/check.sh
+RELEASE_MERGE_LIB=$REPO_ROOT/.github/scripts/release-merge-lib.sh
 [[ -r "$CI_YML" ]] || { echo "Cannot read the workflow $CI_YML, so the harness has no step scripts to test." >&2; exit 2; }
 
 # dash: three live-harness tests run the session command under a POSIX sh. ruby: the release-merge

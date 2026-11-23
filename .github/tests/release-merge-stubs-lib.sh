@@ -3,8 +3,8 @@
 # constants the tests share, a stub `gh`, and the fixtures that fill it (open pull requests, a
 # release PR, its changed files, CI runs).
 # shellcheck disable=SC2034 # file-wide: the constants below are read by the test files that source this
-# shellcheck source=release-merge-lib.sh
-source "$HARNESS_DIR/release-merge-lib.sh"
+# shellcheck source=../scripts/release-merge-lib.sh
+source "$RELEASE_MERGE_LIB"
 
 REPO=mikelane/thrift
 BOT='thrift-release[bot]'
@@ -14,10 +14,10 @@ CONFIG=$REPO_ROOT/release-please-config.json
 SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
-# write_pr <file> [jq filter]: a release PR that passes the gate, edited by the filter.
+# write_pr <file> [jq filter]: a release PR that passes the gate (one changed file), edited by the filter.
 write_pr() {
   jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" '{
-    number: 111, state: "open", base: {ref: "main"},
+    number: 111, state: "open", changed_files: 1, base: {ref: "main"},
     head: {ref: "release-please--branches--main--components--handoff", sha: $sha,
            repo: {full_name: $repo}},
     user: {login: $bot}}' | jq "${2:-.}" >"$1"
@@ -54,7 +54,7 @@ stub_gh() {
     '    if [[ -r "$dir/runs-$sha.json" ]]; then cat "$dir/runs-$sha.json"; else echo "{\"workflow_runs\":[]}"; fi ;;' \
     '  */pulls) jq -r ".[0].number // empty" "$dir/pulls.json" ;;' \
     '  */pulls/*/files) require_paginate; cat "$dir/files-$(basename "$(dirname "$path")").json" ;;' \
-    '  */pulls\?*) require_paginate; [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
+    '  */pulls\?*) require_paginate; echo "$path" >>"$dir/pulls-paths"; [[ -e "$dir/pulls.error" ]] && { echo "HTTP 500" >&2; exit 1; }; cat "$dir/pulls.json" ;;' \
     '  */pulls/*) cat "$dir/pr-${path##*/}.json" ;;' \
     '  *) echo "unexpected gh call: $*" >&2; exit 1 ;;' \
     'esac' >"$TEST_DIR/gh"

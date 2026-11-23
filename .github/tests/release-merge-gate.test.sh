@@ -14,14 +14,16 @@ plugins/handoff/version.txt
 plugins/handoff/.claude-plugin/plugin.json'
 
 # gate_problems <pr-filter> [files]: the gate's output for a PR edited by the filter, with the open
-# pull requests the stub `gh` serves from pulls.json.
+# pull requests the stub `gh` serves from pulls.json. The files API is taken to have listed one file
+# per line (LISTED_COUNT overrides), and the PR to change that many (the filter may say otherwise).
 gate_problems() {
-  local dir
+  local dir listed
   dir=$TEST_DIR
   stub_gh
-  write_pr "$dir/pr.json" "$1"
   printf '%s\n' "${2:-$GOOD_FILES}" >"$dir/files"
-  release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA"
+  listed=${LISTED_COUNT:-$(grep -c . "$dir/files")}
+  write_pr "$dir/pr.json" ".changed_files = $listed | $1"
+  release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA" "$listed"
 }
 
 # problems <pr-filter> [files]: gate_problems when the release PR is the only open PR.
@@ -145,25 +147,31 @@ test_every_problem_is_reported() {
     || fail "got [$got]"
 }
 
-test_an_unreadable_config_blocks_the_merge() {
-  local dir got
+test_an_unreadable_config_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local dir got status
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
   echo 'plugins/handoff/CHANGELOG.md' >"$dir/files"
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
-  got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
-  [[ "$got" == "cannot read the allowlist from $dir/missing.json" ]] || fail "got [$got]"
+  got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 1 2>"$dir/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed allowlist lookup returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$dir/err" "cannot read the allowlist from $dir/missing.json"
 }
 
-test_an_unreadable_changed_files_list_blocks_the_merge() {
-  local dir got
+test_an_unreadable_changed_files_list_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local dir got status
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
-  got=$(release_merge_problems "$dir/pr.json" "$dir/missing-files" "$CONFIG" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
-  [[ "$got" == "cannot read the changed files from $dir/missing-files" ]] || fail "got [$got]"
+  got=$(release_merge_problems "$dir/pr.json" "$dir/missing-files" "$CONFIG" "$REPO" main "$BOT" "$SHA" 1 2>"$dir/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed changed-files read returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$dir/err" "cannot read the changed files from $dir/missing-files"
 }
 
 # The inline `gh` behaves like the real one when `gh api` gets fields (-f) and no --method: it
@@ -215,13 +223,14 @@ test_changed_files_reads_every_page_of_the_files_api() {
 
 # problems_for_names <json>: the gate's output for a PR whose files API returned the JSON.
 problems_for_names() {
-  local dir
+  local dir listed
   dir=$TEST_DIR
   changed_files "$1" >"$dir/files"
-  write_pr "$dir/pr.json"
+  listed=$(jq '[.[].filename] | length' <<<"$1")
+  write_pr "$dir/pr.json" ".changed_files = $listed"
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
-  release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA"
+  release_merge_problems "$dir/pr.json" "$dir/files" "$CONFIG" "$REPO" main "$BOT" "$SHA" "$listed"
 }
 
 test_a_file_name_with_a_trailing_newline_blocks_the_merge() {
@@ -275,12 +284,14 @@ test_an_open_pr_from_another_branch_is_not_a_sibling() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
-test_a_failed_open_pr_lookup_blocks_the_merge() {
-  local got
+test_a_failed_open_pr_lookup_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local got status
   touch "$TEST_DIR/pulls.error"
-  got=$(gate_problems . 2>/dev/null)
-  [[ "$got" == 'cannot list the open PRs from release-please--branches--main--components--handoff' ]] \
-    || fail "got [$got]"
+  got=$(gate_problems . 2>"$TEST_DIR/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed PR list returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$TEST_DIR/err" 'cannot list the open PRs from release-please--branches--main--components--handoff'
 }
 
 test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {
@@ -288,6 +299,57 @@ test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {
   write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.head.repo.full_name = "someone/thrift"')"
   got=$(gate_problems .)
   [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# The files API lists at most 3000 files and the allowlist only sees what it lists, so the gate
+# compares the PR's own changed_files count with the number of files listed.
+test_a_pr_that_changes_more_files_than_the_files_api_listed_blocks_the_merge() {
+  local got
+  got=$(problems '.changed_files = 5')
+  [[ "$got" == 'the PR changes 5 files but the files API listed 4' ]] || fail "got [$got]"
+}
+
+test_a_pr_that_changes_files_when_the_files_api_listed_none_blocks_the_merge() {
+  local got
+  got=$(LISTED_COUNT=0 problems '.changed_files = 1' '')
+  [[ "$got" == 'the PR changes 1 files but the files API listed 0' ]] || fail "got [$got]"
+}
+
+test_a_pr_that_changes_over_3000_files_blocks_the_merge_even_when_all_listed_files_are_allowed() {
+  local got
+  got=$(LISTED_COUNT=3001 problems .)
+  [[ "$got" == 'the PR changes 3001 files, more than the 3000 the files API lists' ]] || fail "got [$got]"
+}
+
+test_a_pr_that_changes_exactly_3000_files_all_listed_has_no_count_problem() {
+  local got
+  got=$(LISTED_COUNT=3000 problems .)
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+test_a_pr_with_no_changed_files_count_blocks_the_merge() {
+  local got
+  got=$(problems 'del(.changed_files)')
+  [[ "$got" == 'the PR does not say how many files it changes' ]] || fail "got [$got]"
+}
+
+test_a_pr_whose_changed_files_count_is_not_a_number_blocks_the_merge() {
+  local got
+  got=$(problems '.changed_files = "4"')
+  [[ "$got" == 'the PR does not say how many files it changes' ]] || fail "got [$got]"
+}
+
+# A rename lists two names (filename and previous_filename) but is one file of the count.
+test_a_rename_counts_as_one_listed_file() {
+  local got
+  got=$(LISTED_COUNT=1 problems . $'plugins/handoff/CHANGELOG.md\nplugins/handoff/CHANGELOG.md')
+  [[ -z "$got" ]] || fail "got [$got]"
+}
+
+# The head ref is part of a URL query: & or + in it must not end or reshape the query.
+test_the_sibling_lookup_url_encodes_the_head_ref() {
+  problems '.head.ref = "release-please--a&b+c"' >/dev/null
+  assert_file_has "$TEST_DIR/pulls-paths" 'head=mikelane:release-please--a%26b%2Bc&per_page=100'
 }
 
 run_tests "$@"

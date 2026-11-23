@@ -89,7 +89,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
           sparse-checkout: |
-            .github/tests/release-merge-lib.sh
+            .github/scripts/release-merge-lib.sh
             release-please-config.json
           sparse-checkout-cone-mode: false
 
@@ -106,8 +106,8 @@ jobs:
           CI_TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          # shellcheck source=.github/tests/release-merge-lib.sh
-          source .github/tests/release-merge-lib.sh
+          # shellcheck source=.github/scripts/release-merge-lib.sh
+          source .github/scripts/release-merge-lib.sh
           # Every temp file lives here, so an early return or a failure still cleans up.
           work_dir=$(mktemp -d)
           trap 'rm -rf "$work_dir"' EXIT

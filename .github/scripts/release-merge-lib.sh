@@ -43,22 +43,28 @@ release_merge_changed_files() {
 # release_merge_sibling_problem <repo> <head-ref> <number>: prints a reason when an open PR other than
 # <number> has <head-ref> as its head in <repo> (head=<owner>:<branch> matches only this repository,
 # and the jq filter checks again). A run's pull_requests cannot say which PR triggered it, so with a
-# sibling no CI run can be tied to one PR. A lookup that fails prints a reason too: fail closed.
+# sibling no CI run can be tied to one PR. A lookup that fails returns 1 with its reason on stderr,
+# not a reason on stdout: a refusal is a policy decision, and a failed lookup is not one.
 release_merge_sibling_problem() {
   local siblings
-  siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
+  siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$(jq -rn --arg v "$2" '$v|@uri')&per_page=100" \
     | jq -r --arg repo "$1" --arg ref "$2" --argjson number "$3" '.[]
         | select(.number != $number and .head.ref == $ref and .head.repo.full_name == $repo)
-        | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2"; return; }
+        | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2" >&2; return 1; }
   [[ -z "$siblings" ]] || echo "another open PR shares the branch $2: $siblings"
 }
 
-# release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha>:
+# release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha> <listed>:
 # prints one line per reason the PR must not be merged, and nothing when it may be.
-# <pr.json> is the REST pull request object, <changed-files> lists one path per line.
+# <pr.json> is the REST pull request object, <changed-files> lists one path per line, and <listed>
+# is how many files the files API listed (its .filename entries, not the lines of <changed-files>,
+# which a rename makes two). The API lists at most 3000 files, so a PR whose changed_files differs
+# from <listed>, or is over 3000, has files the allowlist never saw. A lookup that
+# fails (the open PR list, the allowlist, the changed-files list) returns 1 with its reason on
+# stderr and prints no reason, so the caller fails the job instead of reading it as a refusal.
 release_merge_problems() {
-  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 allowed file
-  local pr_state pr_base_ref head_repo head_ref pr_author head_sha
+  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 listed=$8 allowed file
+  local pr_state pr_base_ref head_repo head_ref pr_author head_sha changed_files
   pr_state=$(jq -r '.state' "$pr")
   [[ "$pr_state" == open ]] || echo "the PR is $pr_state, not open"
   [[ "$(jq -r '.draft // false' "$pr")" == false ]] || echo "the PR is a draft"
@@ -72,10 +78,17 @@ release_merge_problems() {
   [[ "$pr_author" == "$bot" ]] || echo "the PR author is $pr_author, not $bot"
   head_sha=$(jq -r '.head.sha' "$pr")
   [[ "$head_sha" == "$tested_sha" ]] || echo "the PR head is $head_sha but CI tested $tested_sha"
-  release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")"
-  allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config"; return; }
+  changed_files=$(jq -r '.changed_files | if type == "number" then . else "" end' "$pr")
+  if [[ -z "$changed_files" ]]; then
+    echo "the PR does not say how many files it changes"
+  else
+    (( changed_files <= 3000 )) || echo "the PR changes $changed_files files, more than the 3000 the files API lists"
+    (( changed_files == listed )) || echo "the PR changes $changed_files files but the files API listed $listed"
+  fi
+  release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")" || return 1
+  allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config" >&2; return 1; }
   # A failed `<"$files"` skips the loop and prints no problem, which would pass every file.
-  [[ -r "$files" ]] || { echo "cannot read the changed files from $files"; return; }
+  [[ -r "$files" ]] || { echo "cannot read the changed files from $files" >&2; return 1; }
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     grep -qxF -- "$file" <<<"$allowed" || echo "$file is not a file a release PR changes"
@@ -93,11 +106,13 @@ release_merge_problems() {
 # two runs created in the same second the higher id is the later. Returns 0 on success, 1 when no
 # run counts, 3 when the latest run is still going, and 4 when it failed (a success older than a
 # later failure is a failure). A lookup that fails (API error, unreadable response) returns 2, so
-# it is not mistaken for "no run yet".
+# it is not mistaken for "no run yet". Sets release_merge_ci_conclusion to what the latest run
+# concluded, for the caller that reports a return of 4.
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
 release_merge_ci_outcome() {
   local runs conclusion
+  release_merge_ci_conclusion=
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
   conclusion=$(jq -rs --arg repo "$1" --arg ref "$3" --argjson number "$4" --arg base "$5" '
     [.[].workflow_runs[]
@@ -109,6 +124,7 @@ release_merge_ci_outcome() {
     | sort_by(.created_at, .id) | last
     | if . == null then "none" elif .conclusion == null then "running" else .conclusion end' \
     <<<"$runs") || return 2
+  release_merge_ci_conclusion=$conclusion
   case "$conclusion" in
     success) return 0 ;;
     none) return 1 ;;
@@ -121,16 +137,19 @@ release_merge_ci_outcome() {
 # in <repo> that targets <base> and whose head commit has passed CI. A head with no CI run yet, or
 # one still running, is left out with a line on stderr saying why: its own CI completion triggers
 # the merge. A head whose latest CI run failed is left out with a warning annotation. A PR whose CI
-# lookup fails is left out too, but the sweep goes on with the others and exits non-zero at the end,
-# so a 403 or an outage turns the job red instead of reading as "nothing to merge". The body is a
-# subshell with pipefail, so a failed PR list fails the sweep whatever
-# options the caller set.
+# lookup fails is left out too, with an error annotation naming the PR, but the sweep goes on with
+# the others and exits non-zero at the end, so a 403 or an outage turns the job red instead of
+# reading as "nothing to merge". A failed PR list is its own error annotation and fails the sweep.
+# The body is a subshell, so the sweep fails whatever options the caller set.
 release_merge_sweep() (
   set -o pipefail
-  local number sha ref ci_status
-  gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" \
-    | jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
-        and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' \
+  local number sha ref ci_status open_prs
+  open_prs=$(gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" | jq -c '.') || {
+    echo "::error title=Release PR sweep failed::cannot list the open release PRs" >&2
+    return 1
+  }
+  jq -r --arg repo "$1" '.[] | select(.state == "open" and .head.repo.full_name == $repo
+        and (.head.ref | startswith("release-please--"))) | "\(.number) \(.head.sha) \(.head.ref)"' <<<"$open_prs" \
     | {
         local lookup_failed=0
         while read -r number sha ref; do
@@ -142,9 +161,9 @@ release_merge_sweep() (
             3) echo "Skipping PR #$number at $sha: CI is still running;" \
                  "its completion triggers the merge." >&2 ;;
             4) printf '%s%s\n' "::warning title=Release PR #$number not merged::" \
-                 "CI did not succeed at $sha; fix it or rerun CI." >&2 ;;
+                 "CI concluded ${release_merge_ci_conclusion//\%/%25} at $sha; fix it or rerun CI." >&2 ;;
             *)
-              echo "Cannot read the CI runs of PR #$number at $sha; rerun this job later." >&2
+              echo "::error title=Release PR #$number not merged::cannot read the CI runs at $sha" >&2
               lookup_failed=1 ;;
           esac
         done
@@ -188,7 +207,7 @@ release_merge_fail() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 did_merge=0 pr files raw problems problem
+  local number=$1 tested_sha=$2 did_merge=0 pr files raw listed problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file" || return 1
@@ -204,8 +223,10 @@ release_merge_pr_if_gate_passes() {
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files" || return 1
 
+  listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
+    || release_merge_fail "$number" "cannot count the changed files" || return 1
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") \
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
     || release_merge_fail "$number" "cannot check the gate" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning

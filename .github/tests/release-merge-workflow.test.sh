@@ -73,6 +73,15 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
+# The tests source the lib by their own path; this ties that path to the one the workflow sources,
+# so a move that updates one side only (the tests, or the workflow and its fixture) fails here.
+test_the_file_the_merge_step_sources_is_the_lib_the_tests_exercise() {
+  local sourced
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  [[ "$REPO_ROOT/$sourced" -ef "$RELEASE_MERGE_LIB" ]] \
+    || fail "the merge step sources $sourced, which is not the lib the tests source"
+}
+
 # YAML reads a lone CR as a line break, which a text reader of the file would not.
 test_the_workflow_contains_no_carriage_return() {
   local got
@@ -131,7 +140,7 @@ test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
 # comment on a merge line is stripped, so a flag named only in that comment does not count. Each
 # line gets one trailing space, so a flag at the end of the line matches the ' --flag ' patterns.
 merge_commands() {
-  grep -E '^[[:space:]]*gh pr merge ' "$HARNESS_DIR/release-merge-lib.sh" \
+  grep -E '^[[:space:]]*gh pr merge ' "$RELEASE_MERGE_LIB" \
     | sed -e "s/[[:space:]]#.*$//" -e "s/$/ /"
 }
 
@@ -288,7 +297,7 @@ test_the_check_fails_a_merge_job_without_its_environment() {
 # AQA run 6: bash expands BASH_ENV (command substitution included) before the script runs, so a
 # workflow-level env can rewrite the sourced lib before the step sources it.
 test_the_check_fails_a_workflow_level_bash_env_that_rewrites_the_gate() {
-  refuses_variant 'o.replace("permissions: {}\n", "permissions: {}\n\nenv:\n  BASH_ENV: \x27$(perl -pi -e \"s/^release_merge_problems\\\\(\\\\) \\\\{/release_merge_problems() { return 0; }\\\\nzz() {/\" .github/tests/release-merge-lib.sh)\x27\n", 1)' \
+  refuses_variant 'o.replace("permissions: {}\n", "permissions: {}\n\nenv:\n  BASH_ENV: \x27$(perl -pi -e \"s/^release_merge_problems\\\\(\\\\) \\\\{/release_merge_problems() { return 0; }\\\\nzz() {/\" .github/scripts/release-merge-lib.sh)\x27\n", 1)' \
     'a workflow-level env sets BASH_ENV to a command that neuters release_merge_problems'
 }
 
