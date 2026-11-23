@@ -6,7 +6,7 @@
   "jobs": {
     "merge": {
       "environment": "release",
-      "if": "(\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.event == 'pull_request'\n  && github.event.workflow_run.head_repository.full_name == github.repository\n  && startsWith(github.event.workflow_run.head_branch, 'release-please--')\n) || (\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.name == 'Release Please'\n  && github.event.workflow_run.event == 'push'\n  && github.event.workflow_run.head_branch == github.event.repository.default_branch\n)",
+      "if": "(\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.event == 'pull_request'\n  && github.event.workflow_run.head_repository.full_name == github.repository\n  && startsWith(github.event.workflow_run.head_branch, 'release-please--')\n  && github.event.workflow_run.path == '.github/workflows/ci.yml'\n) || (\n  github.event.workflow_run.conclusion == 'success'\n  && github.event.workflow_run.name == 'Release Please'\n  && github.event.workflow_run.event == 'push'\n  && github.event.workflow_run.head_branch == github.event.repository.default_branch\n)",
       "permissions": {
         "actions": "read"
       },

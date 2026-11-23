@@ -90,7 +90,8 @@ specific to this repo.
     yet, or one still running, is skipped (its own CI completion merges it). A CI lookup that fails
     turns the job red instead of reading as "no run yet". "Succeeded" means the latest run whose
     `pr-record` names the PR into `main`. The gate always checks one run's record, a required third
-    argument: the CI-completion path passes the triggering run (`CI_RUN_ID`), and the sweep passes
+    argument: the CI-completion path (which the job `if` limits to a run of
+    `.github/workflows/ci.yml`, as the sweep's lookup does) passes the triggering run (`CI_RUN_ID`), and the sweep passes
     the run it chose (it prints `<number> <sha> <run-id>`), so a swept PR's record is downloaded
     twice. An empty id is refused. The gate also still refuses a release PR while another open PR has
     the same head branch (for example a PR from the release branch into another base).

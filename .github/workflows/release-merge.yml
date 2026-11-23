@@ -60,6 +60,7 @@ jobs:
         && github.event.workflow_run.event == 'pull_request'
         && github.event.workflow_run.head_repository.full_name == github.repository
         && startsWith(github.event.workflow_run.head_branch, 'release-please--')
+        && github.event.workflow_run.path == '.github/workflows/ci.yml'
       ) || (
         github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.name == 'Release Please'
