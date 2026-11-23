@@ -49,7 +49,19 @@ specific to this repo.
     by the App, at the commit CI tested, and change only the manifest and each package's changelog,
     version file and extra-files, and the files API must have listed every file the PR changes
     (it stops at 3000, so the PR's `changed_files` must match the count listed and be at most
-    3000). Anything else waits for a person.
+    3000). A CI run counts only if its `pr-record` artifact names this PR into `main` (next
+    bullet). Anything else waits for a person.
+  - The CI run record: `ci.yml`'s `pr-record` job (pull_request runs only) uploads an artifact
+    `pr-record` holding `{"number": N, "base": "<ref>"}`, taken from the run's own event through
+    `env:`. The runs API's `pull_requests` is no longer used: it lists every open PR at the head, and
+    omits one that has closed. The gate counts a run only if its record names the release PR with
+    base `main`. A run with no record, an expired or unreadable one, or one naming another PR does
+    not count, and the PR is refused (CI path, with a warning annotation) or skipped (sweep, with
+    the reason per run on stderr). A failed artifact lookup or download turns the job red ("cannot
+    check the gate"); it never reads as a refusal. Records live 30 days, so a release PR whose CI is
+    older than that needs a CI rerun. The remaining limit: a base branch whose `ci.yml` was edited
+    by someone with write access can write any record it likes. The author, SHA and allowlist
+    checks still apply.
   - Where the code lives: the gate, the sweep and the merge step all live in
     `.github/scripts/release-merge-lib.sh` (production code, so not under `.github/tests/`). The
     workflow step only sources it and calls `release_merge_run`. The tests find it through
@@ -68,12 +80,12 @@ specific to this repo.
     reruns on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its
     current head succeeded and sends each through the same gate and merge. A head with no CI run
     yet, or one still running, is skipped (its own CI completion merges it). A CI lookup that fails
-    turns the job red instead of reading as "no run yet". A run's `pull_requests` lists every open
-    PR at its head, not just the one that triggered it, so the gate still refuses a release PR
-    while another open PR has the same head branch (for example a PR from the release branch into
-    another base).
-  - Tokens: the sweep reads CI runs with the workflow's own `GITHUB_TOKEN` (job permission
-    `actions: read`), because the App token has no Actions access; the PR list, the gate and the
+    turns the job red instead of reading as "no run yet". "Succeeded" means the latest run whose
+    `pr-record` names the PR into `main`; the CI-completion path checks the triggering run's record
+    the same way (`CI_RUN_ID`). The gate also still refuses a release PR while another open PR has
+    the same head branch (for example a PR from the release branch into another base).
+  - Tokens: the gate reads CI runs and their `pr-record` artifacts with the workflow's own
+    `GITHUB_TOKEN` (job permission `actions: read`), because the App token has no Actions access; the PR list, the gate and the
     merge use the App token. The private key is `RELEASE_APP_PRIVATE_KEY` in the `release`
     environment, limited to `main` (both token-minting jobs set `environment: release`), so a
     branch workflow cannot mint a token.
@@ -90,9 +102,11 @@ specific to this repo.
 - `ci.yml` runs on `pull_request` only for PRs into `main` (`branches: [main]`, pinned by
   `ci-trigger.test.sh`), so an ordinary PR into another base produces no CI run. That is not a
   guarantee: a run takes its workflow file from the PR's merge commit, so a base branch whose
-  `ci.yml` has no filter can still put a run on a release head. Only someone with write access can
-  create such a base, and the gate's author, SHA and file-allowlist checks still apply; #117 stays
-  open for tying a run to its triggering PR. The cost: PRs into a base other than `main`, including
+  `ci.yml` has no filter can still put a run on a release head. The release gate no longer trusts
+  the run for that: it reads the run's `pr-record` (see "The CI run record" above), so such a decoy
+  run names another PR and does not count (#117). A base branch whose `ci.yml` writes a forged
+  record is the one thing left, and only someone with write access can create it; the gate's author,
+  SHA and file-allowlist checks still apply. The cost: PRs into a base other than `main`, including
   the upper layers of a native stack, get no CI until GitHub retargets them to `main`.
 - Each plugin has its own `README.md` covering its mechanism, settings, and log fields. The root
   README keeps only the plugin table.
