@@ -792,4 +792,111 @@ test_the_record_check_returns_1_for_a_record_padded_with_nul_bytes_past_4096() {
   assert_record_check 7 '1 has an unreadable pr-record'
 }
 
+# record_check_leftovers <run-id> [failing-mktemp-call]: the files the record check leaves in work_dir
+# for PR 111 into main, as the workflow step runs it. The optional argument makes that numbered mktemp
+# call fail.
+record_check_leftovers() {
+  mkdir -p "$TEST_DIR/work"
+  echo 0 >"$TEST_DIR/mktemp-calls"
+  (
+    stub_gh
+    set -o pipefail
+    work_dir=$TEST_DIR/work
+    FAILING_MKTEMP_CALL=${2:-}
+    mktemp() {
+      local n; n=$(( $(<"$TEST_DIR/mktemp-calls") + 1 )); echo "$n" >"$TEST_DIR/mktemp-calls"
+      [[ "$n" != "$FAILING_MKTEMP_CALL" ]] || return 1
+      command mktemp "$@"
+    }
+    release_merge_run_record_verdict "$REPO" "$1" 111 main
+  ) >/dev/null 2>&1
+  ls -A "$TEST_DIR/work" | paste -sd, -
+}
+
+assert_record_check_leaves_no_temp_file() {
+  local got
+  got=$(record_check_leftovers "$@")
+  [[ -z "$got" ]] || fail "left [$got]"
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_record_names_the_pr() {
+  write_record 7 111
+  assert_record_check_leaves_no_temp_file 7
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_record_names_another_pr() {
+  write_record 7 999
+  assert_record_check_leaves_no_temp_file 7
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_record_is_longer_than_4096_bytes() {
+  write_record 7 111
+  write_padded_record 5007 20 4097
+  assert_record_check_leaves_no_temp_file 7
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_record_is_padded_with_nul_bytes() {
+  write_record 7 111
+  write_padded_record 5007 00 100
+  assert_record_check_leaves_no_temp_file 7
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_zip_is_corrupt() {
+  write_record 7 corrupt
+  assert_record_check_leaves_no_temp_file 7
+}
+
+test_the_record_check_leaves_no_temp_file_when_the_record_cannot_be_downloaded() {
+  write_record 7 111
+  : >"$TEST_DIR/record-5007.error"
+  assert_record_check_leaves_no_temp_file 7
+}
+
+# A jq that skips NUL bytes would read a record padded with them as the plain record, so the check
+# compares the byte count with the count after tr strips the NULs. This jq stand-in strips them first
+# from the file it is given last.
+test_the_record_check_returns_1_for_a_record_padded_with_nul_bytes_within_4096_even_when_jq_skips_them() {
+  local got
+  write_record 7 111
+  write_padded_record 5007 00 100
+  got=$(
+    stub_gh
+    jq() { if [[ "$1" == -sc ]]; then command jq "${@:1:$#-1}" < <(tr -d '\000' <"${*: -1}"); else command jq "$@"; fi; }
+    release_merge_run_record_verdict "$REPO" 7 111 main 2>/dev/null && code=0 || code=$?
+    echo "$code $release_merge_run_record_detail")
+  [[ "$got" == '1 has an unreadable pr-record' ]] || fail "got [$got]"
+}
+
+test_the_record_check_returns_2_when_it_cannot_create_the_zip_temp_file() {
+  write_record 7 111
+  assert_record_check_with_failing_mktemp 1
+}
+
+test_the_record_check_returns_2_and_removes_the_zip_when_it_cannot_create_the_record_temp_file() {
+  write_record 7 111
+  assert_record_check_with_failing_mktemp 2
+  assert_record_check_leaves_no_temp_file 7 2
+}
+
+# assert_record_check_with_failing_mktemp <n>: with the n-th mktemp call failing, the record check
+# returns 2 and says it cannot create a temp file.
+assert_record_check_with_failing_mktemp() {
+  local got
+  mkdir -p "$TEST_DIR/work"
+  echo 0 >"$TEST_DIR/mktemp-calls"
+  got=$(
+    stub_gh
+    work_dir=$TEST_DIR/work
+    FAILING_MKTEMP_CALL=$1
+    mktemp() {
+      local n; n=$(( $(<"$TEST_DIR/mktemp-calls") + 1 )); echo "$n" >"$TEST_DIR/mktemp-calls"
+      [[ "$n" != "$FAILING_MKTEMP_CALL" ]] || return 1
+      command mktemp "$@"
+    }
+    release_merge_run_record_verdict "$REPO" 7 111 main >/dev/null 2>&1 && code=0 || code=$?
+    echo "$code $release_merge_run_record_detail"
+  )
+  [[ "$got" == '2 cannot create a temp file for the pr-record of CI run 7' ]] || fail "got [$got]"
+}
+
 run_tests "$@"

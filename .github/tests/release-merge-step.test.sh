@@ -687,4 +687,49 @@ test_a_ci_triggered_run_holds_for_a_newer_running_run_with_an_unreadable_record(
   assert_out_has "(latest: run 300)"
 }
 
+# step_with_failing_mktemp <n> <trigger>: release_merge_run as the workflow step runs it, with the
+# n-th mktemp call failing, so the record check cannot make its temp file.
+step_with_failing_mktemp() {
+  mkdir -p "$TEST_DIR/work"
+  echo 0 >"$TEST_DIR/mktemp-calls"
+  FAILING_MKTEMP_CALL=$1
+  run_merge_step with_nth_mktemp_failing env_step "$2"
+}
+
+with_nth_mktemp_failing() {
+  mktemp() {
+    local n; n=$(( $(<"$TEST_DIR/mktemp-calls") + 1 )); echo "$n" >"$TEST_DIR/mktemp-calls"
+    [[ "$n" != "$FAILING_MKTEMP_CALL" ]] || return 1
+    command mktemp "$@"
+  }
+  "$@"
+}
+
+env_step() {
+  TRIGGER=$1 BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 release_merge_run
+}
+
+test_a_ci_triggered_run_fails_without_merging_when_the_record_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  step_with_failing_mktemp 2 CI
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "cannot create a temp file for the pr-record of CI run 211"
+}
+
+test_a_sweep_run_fails_without_merging_when_the_record_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  step_with_failing_mktemp 2 'Release Please'
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "cannot create a temp file for the pr-record of CI run 211"
+}
+
+test_a_ci_triggered_run_merges_when_no_temp_file_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  step_with_failing_mktemp 999 CI
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
+}
+
 run_tests "$@"
