@@ -245,3 +245,56 @@ describe('a /resume that moved the session after the note was submitted as a pro
     expect(world.effects).not.toContain(`log:${handedOffMessage('old-session')}`)
   })
 })
+
+// A /resume runs while the append is refused, before the note is submitted: the note goes into the resumed session,
+// which is the session the person is in, so nothing moved.
+const resumeWhileAppendRefused = async ($: Engine, on: On) => {
+  const world = install($, on)
+  await startSession($)
+  Object.defineProperty(world, 'appendDenied', {
+    get: () => {
+      world.sessionId = 'resumed-elsewhere'
+      return true
+    },
+  })
+  return runHandoff($, world)
+}
+
+describe('a /resume that runs between the refused append and the note submit', () => {
+  test('It records no session_moved for a note submitted into the session the person is in', async ($, on) => {
+    const world = await resumeWhileAppendRefused($, on)
+    expect(lastRecord(world).trigger_values.note).toBe('submitted')
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+    expect(lastRecord(world).trigger_values.delivery_session_id).toBeUndefined()
+  })
+
+  test('It shows the handed-off line, not the note-elsewhere line', async ($, on) => {
+    const world = await resumeWhileAppendRefused($, on)
+    expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
+    expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
+  })
+})
+
+// Nothing carries the note (append refused, submit throws, box fill refused), and a /resume runs during the failed submit.
+const notCarriedThenResume = async ($: Engine, on: On) => {
+  const world = install($, on)
+  await startSession($)
+  world.appendDenied = true
+  world.submitThrows = true
+  world.fillRefusal = 'dialog'
+  world.submitHooks = [
+    () => {
+      world.sessionId = 'resumed-elsewhere'
+    },
+  ]
+  return runHandoff($, world)
+}
+
+describe('a /resume that moved the session after nothing could carry the note', () => {
+  test('It records no session_moved for a note that is in no transcript', async ($, on) => {
+    const world = await notCarriedThenResume($, on)
+    expect(lastRecord(world).trigger_values.note).toBe('not_carried')
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+    expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
+  })
+})
