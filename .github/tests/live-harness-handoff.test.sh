@@ -126,18 +126,30 @@ test_clear_resume_passes_one_person_clear_that_names_the_session_and_the_mode() 
 }
 
 test_clear_resume_accepts_a_person_clear_that_ran_ahead_of_the_handoffs_during_the_compaction() {
-  run_judge cleared_by_first_clear 2 '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"person","compacted_before_clear":true,"effective_mode":"ask"}}'
+  run_judge cleared_by_whichever_ran_first 2 '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"person","compacted_before_clear":true,"effective_mode":"ask"}}'
   assert_exit_code 0
   assert_out_has 'PASS  case: the compaction ran and the clear that ran first is named (cleared_by person)'
 }
 
+test_clear_resume_accepts_a_handoff_clear_that_ran_ahead_of_the_persons_during_the_compaction() {
+  run_judge cleared_by_whichever_ran_first 2 '{"action":"cleared","session_id":"old1","trigger_values":{"cleared_by":"handoff","compacted_before_clear":true,"effective_mode":"ask"}}'
+  assert_exit_code 0
+  assert_out_has 'PASS  case: the compaction ran and the clear that ran first is named (cleared_by handoff)'
+}
+
+test_clear_resume_fails_a_first_clear_whose_compaction_did_not_run() {
+  run_judge cleared_by_whichever_ran_first 2 "$(cleared_record old1 person)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the compaction ran and the clear that ran first is named (cleared_by person)'
+}
+
 test_clear_resume_accepts_a_skipped_clear_as_an_end_with_no_note() {
-  qa_judge show_ending_path 2 1 none yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"person_command","effective_mode":"ask"}}'
+  qa_judge show_ending_path 2 1 none yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"turn_running","effective_mode":"ask"}}'
   assert_exit_code 0
 }
 
 test_clear_resume_fails_a_skipped_clear_whose_note_reached_a_transcript() {
-  qa_judge show_ending_path 2 1 fresh yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"person_command","effective_mode":"ask"}}'
+  qa_judge show_ending_path 2 1 fresh yes '{"action":"none","session_id":"old1","trigger_values":{"reason":"compaction_failed","clear_skipped":"turn_running","effective_mode":"ask"}}'
   assert_exit_code 1
   assert_out_has 'FAIL  case: the handoff note'
 }
@@ -250,7 +262,7 @@ run_case_calls() {
     decision_lines() { echo 0; }; settle_until() { :; }; show_case() { :; }
     judge_case() { echo "ENDS AT TYPING $COMPACTION_ENDS_AT_TYPING"; }
     wait_for() { echo "CALL wait $*"; WAITED="$WAITED|$1"; }
-    run_case label c1 '"$1"' /clear cleared_by_first_clear 2
+    run_case label c1 '"$1"' /clear cleared_by_whichever_ran_first 2
     check done none true; live_verdict s'
 }
 
@@ -261,7 +273,7 @@ test_run_case_raises_an_error_when_the_log_is_unreadable_at_typing() {
     handoff_start() { :; }; start_waiting_handoff() { :; }; say_apple() { :; }
     submit() { :; }; decision_lines() { echo 0; }; wait_for() { :; }
     judge_case() { echo "JUDGED"; }
-    run_case label c1 compaction /clear cleared_by_first_clear 2
+    run_case label c1 compaction /clear cleared_by_whichever_ran_first 2
     check done none true; live_verdict s'
   assert_exit_code 2
   assert_out_has 'could not be read'
@@ -274,7 +286,7 @@ test_run_case_raises_an_error_when_the_log_is_unreadable_before_the_handoff_is_t
     mkdir "$(debug_log_of c1)"
     handoff_start() { :; }; say_apple() { :; }; decision_lines() { echo 0; }
     submit() { echo "TYPED $2"; }; wait_for() { :; }
-    run_case label c1 compaction /clear cleared_by_first_clear 2
+    run_case label c1 compaction /clear cleared_by_whichever_ran_first 2
     check done none true; live_verdict s'
   assert_exit_code 2
   assert_out_has 'could not be read'
@@ -321,6 +333,7 @@ test_settle_until_returns_after_its_limit_when_the_condition_never_holds() {
 
 # qa_judge <expectation> <expected-ends> <session.end lines in the debug log> <note file or none>
 # <old transcript present: yes|no> <records>
+# PANE_STUB, when set, is shell text run before the judge: a `pane() { ...; }` that replaces reading the tmux pane.
 qa_judge() {
   local expectation=$1 ends=$2 end_lines=$3 note_file=$4 old=$5 records=$6
   printf '%s\n' "$records" > "$TEST_DIR/decisions"
@@ -335,8 +348,28 @@ qa_judge() {
     [[ "'"$note_file"'" == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/'"$note_file"'.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
+    '"${PANE_STUB:-}"'
     judge_case c '"$expectation"' '"$ends"'
     live_verdict s'
+}
+
+session_moved_record() { echo '{"action":"cleared","session_id":"old1","trigger_values":{"reason":"session_moved","cleared_by":"handoff","delivery_session_id":"fresh","effective_mode":"ask"}}'; }
+
+test_a_session_moved_ending_whose_pane_shows_handed_off_is_a_fail() {
+  PANE_STUB='pane() { echo "Handed off."; }' qa_judge show_ending_path 2 1 fresh yes "$(session_moved_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the resumed session shows no handed-off line'
+}
+
+test_a_session_moved_ending_whose_pane_cannot_be_read_is_a_fail() {
+  PANE_STUB='pane() { return 1; }' qa_judge show_ending_path 2 1 fresh yes "$(session_moved_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the resumed session shows no handed-off line'
+}
+
+test_a_session_moved_ending_whose_pane_shows_no_handed_off_line_passes_that_check() {
+  PANE_STUB='pane() { echo "a resumed session"; }' qa_judge show_ending_path 2 1 fresh yes "$(session_moved_record)"
+  assert_out_has 'PASS  case: the resumed session shows no handed-off line'
 }
 
 test_a_session_ended_abandon_with_the_note_in_a_fresh_transcript_is_a_fail() {

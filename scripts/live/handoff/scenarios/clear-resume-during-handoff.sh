@@ -26,7 +26,7 @@
 # A `compaction_failed` record is not a failure here: during the wait, the command typed in the turn is
 # queued and runs the moment the turn ends, so the handoff's compaction meets "a turn is in flight" (seen
 # on 2.1.302). Before #89 the handoff then went on to its clear. Since #89 it skips the clear and ends with
-# a `none` record (`reason` compaction_failed, `clear_skipped` person_command), which counts as the ending
+# a `none` record (`reason` compaction_failed, `clear_skipped` turn_running), which counts as the ending
 # record with no note in any transcript; a `/clear` that wins instead ends it as `cleared_by` person. A
 # `/resume` that moves the person off the session holding the note ends with reason `session_moved`, and
 # then the resumed session's pane must not say "Handed off.". Which path ran is printed, not judged.
@@ -34,7 +34,7 @@
 # The `/resume` target is a session of its own that has had one turn and has exited.
 
 SLEEP_TASK='Run `sleep 14` in the foreground, then reply with the word done.'
-ENDING_RECORD='.action == "cleared" or (.action == "none" and (.trigger_values.reason == "session_ended" or .trigger_values.clear_skipped == "person_command"))'
+ENDING_RECORD='.action == "cleared" or (.action == "none" and (.trigger_values.reason == "session_ended" or .trigger_values.clear_skipped == "turn_running"))'
 FAILURE_RECORD='.action == "none" and (.trigger_values.reason as $reason | ["clear_failed", "handoff_failed", "no_handoff_written"] | index($reason) != null)'
 CASE_BASE=0
 CASE_ID=''
@@ -51,7 +51,7 @@ scenario_run() {
   handoff_prepare '{"compactBeforeClear": true, "handoffContextTokens": 20000}'
   start_peer_messenger b
   start_resume_target r
-  run_case 'clear during the compaction' c1 compaction '/clear' cleared_by_first_clear 2
+  run_case 'clear during the compaction' c1 compaction '/clear' cleared_by_whichever_ran_first 2
   run_case 'resume during the compaction' c2 compaction "/resume $RESUME_TARGET_ID" show_ending_path 2
   run_case 'clear during the wait' c3 wait '/clear' cleared_by_person 1
   run_case 'resume during the wait' c4 wait "/resume $RESUME_TARGET_ID" show_ending_path 2
@@ -119,7 +119,7 @@ ends_expected() {
 }
 # A session_ended abandon, or a handoff whose own clear was skipped (#89: the compaction met a turn the person's command started).
 ended_without_a_clear() {
-  [[ "$(ending_field .trigger_values.reason)" == session_ended || "$(ending_field .trigger_values.clear_skipped)" == person_command ]]
+  [[ "$(ending_field .trigger_values.reason)" == session_ended || "$(ending_field .trigger_values.clear_skipped)" == turn_running ]]
 }
 session_ends() { log_count "$1" 'handoff@inline session\.end settled'; }
 session_ends_reach() { (($(session_ends "$1") >= $2)); }
@@ -192,10 +192,10 @@ no_failure_record() { [[ -z "$(records_after "$CASE_BASE" "$FAILURE_RECORD")" ]]
 
 # A person's /clear typed during the compaction runs either side of the handoff's own clear (#43: the order varies), and the
 # record names whichever ran first (#89): person when it ran ahead, handoff when it ran behind. Either way the compaction ran.
-cleared_by_first_clear() {
+cleared_by_whichever_ran_first() {
   check "$CASE_LABEL: the compaction ran and the clear that ran first is named (cleared_by $(ending_field .trigger_values.cleared_by))" \
     "the ending record: $(ending_records | tr '\n' ' ')" \
-    ending_is_compacted_clear_by_either
+    ending_is_compacted_clear
 }
 cleared_by_person() {
   check "$CASE_LABEL: the person's clear ended it (cleared_by person)" "the ending record: $(ending_records | tr '\n' ' ')" \
@@ -204,7 +204,7 @@ cleared_by_person() {
 ending_is_cleared_by() {
   [[ "$(ending_field .action)" == cleared && "$(ending_field .trigger_values.cleared_by)" == "$1" ]]
 }
-ending_is_compacted_clear_by_either() {
+ending_is_compacted_clear() {
   { ending_is_cleared_by handoff || ending_is_cleared_by person; } && [[ "$(ending_field .trigger_values.compacted_before_clear)" == true ]]
 }
 # Which path the engine took is printed, not judged: ENDING_RECORD already admits only the correct ends. When a /resume moved
@@ -214,8 +214,13 @@ show_ending_path() {
     "$(ending_field .trigger_values.reason)" "$(ending_field .trigger_values.cleared_by)" "$(ending_field .trigger_values.clear_skipped)" \
     "$(ending_field .trigger_values.continued)"
   if [[ "$(ending_field .trigger_values.reason)" == session_moved ]]; then
-    check "$CASE_LABEL: the resumed session shows no handed-off line" "the pane: $(pane "$1" | grep -c 'Handed off\.') line(s) say 'Handed off.'" \
+    check "$CASE_LABEL: the resumed session shows no handed-off line" "the pane: $(pane_count "$1" 'Handed off\.') line(s) say 'Handed off.'" \
       pane_lacks_handed_off "$1"
   fi
 }
-pane_lacks_handed_off() { ! pane "$1" | grep -q 'Handed off\.'; }
+# Not `! pane | grep -q` (or `! pane_has`): a pane that cannot be read, or a producer SIGPIPE'd under pipefail, must not pass.
+pane_lacks_handed_off() {
+  local screen
+  screen=$(pane "$1") || return 1
+  ! text_matches 'Handed off\.' "$screen"
+}
