@@ -36,7 +36,12 @@ Until then every scenario stops with ERROR at the trust dialog and prints this i
 Exit status: `0` PASS, `1` FAIL (the plugin misbehaved), `2` ERROR (the harness could not reach the
 state it needed: a timeout, a missing tool, a missed timing window, the trust dialog, a scenario
 that ran no checks, a decision log that exists but cannot be read as JSON lines, or any harness
-command that failed before a verdict). A FAIL or ERROR keeps the run directory and prints its path:
+command that failed before a verdict). A run whose setup did not hold exits `3` and prints `SETUP:` with the step that did not
+hold (`SETUP` is not a FAIL, and not an ERROR: nothing was judged, and the plugin is not at fault). Today that is
+the wait setup of the handoff scenarios (`start_waiting_handoff`): the peer's turn must start and show its
+`Bash(sleep` call (in the debug log or on the screen) within `LIVE_SETUP_TIMEOUT` seconds (30 by default);
+a model that answers without the call ends the run as `SETUP` instead of a 90 s timeout.
+A FAIL, ERROR or SETUP keeps the run directory and prints its path:
 `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
 
 A run can show home paths, transcript session ids and, in a pane excerpt, the welcome banner. Pipe

@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/live-harness-lib.sh"
 test_start_waiting_handoff_types_the_peer_message_before_it_presses_the_band_and_sends_it_after() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"
     handoff_start() { echo "CALL start $*"; }; say_apple() { echo "CALL apple $1"; }
-    wait_for() { echo "CALL wait $1"; }
+    wait_for() { echo "CALL wait $1"; }; wait_for_setup() { echo "CALL wait $1"; }
     type_text() { echo "CALL type $1"; }; press() { echo "CALL press $*"; }
     start_waiting_handoff a b "do the task"'
   assert_exit_code 0
@@ -19,12 +19,46 @@ test_start_waiting_handoff_types_the_peer_message_before_it_presses_the_band_and
 
 test_start_waiting_handoff_allows_the_tools_a_scenario_names_instead_of_the_default() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"
-    handoff_start() { echo "CALL start $*"; }; say_apple() { :; }; wait_for() { :; }
+    handoff_start() { echo "CALL start $*"; }; say_apple() { :; }; wait_for() { :; }; wait_for_setup() { :; }
     type_text() { :; }; press() { :; }; session_of() { echo s; }
     WAITING_HANDOFF_TOOLS="Agent,Bash(sleep *)" start_waiting_handoff a b "do the task" --session-id x'
   assert_exit_code 0
   assert_out_has 'CALL start a --allowedTools Agent,Bash(sleep *) --session-id x'
   assert_out_lacks 'CALL start a --allowedTools Bash(sleep *) '
+}
+
+# run_waiting_setup <debug-log-lines>: start_waiting_handoff with the sessions stubbed and the debug
+# log of 'a' fixed.
+run_waiting_setup() {
+  printf '%s\n' "$1" > "$TEST_DIR/debug-a.log"
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init; LIVE_SETUP_TIMEOUT=1
+    handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
+    pane_has() { [[ "$2" != *Bash* ]]; }; log_has() { grep -qE -- "$2" '"$TEST_DIR"'/debug-a.log; }
+    start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
+}
+
+test_start_waiting_handoff_passes_when_the_turn_runs_the_sleep() {
+  run_waiting_setup 'ui.press handoff/handoff
+cc_turn_origin=peer
+Bash(sleep 14)'
+  assert_exit_code 0
+  assert_out_has 'SETUP_HELD'
+}
+
+test_start_waiting_handoff_ends_as_setup_when_the_turn_never_runs_the_sleep() {
+  run_waiting_setup 'ui.press handoff/handoff
+cc_turn_origin=peer'
+  assert_exit_code 3
+  assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'
+}
+
+test_start_waiting_handoff_skips_the_tool_call_check_when_the_evidence_pattern_is_empty() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
+    handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
+    pane_has() { [[ "$2" != *Bash* ]]; }; log_has() { [[ "$2" == *cc_turn_origin* || "$2" == *ui* ]]; }
+    WAITING_HANDOFF_TURN_EVIDENCE="" start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
+  assert_exit_code 0
+  assert_out_has 'SETUP_HELD'
 }
 
 # run_restore_order <screen> <debug-log-lines>: the scenario with the screen, the debug log and one
