@@ -143,8 +143,9 @@ release_merge_run_record_verdict() {
   record=$(set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4096) || read_status=1
   rm -f "$zip_path"
   if (( read_status == 0 )); then
-    record=$(jq -c 'if type == "object" and (.number | type) == "number" and (.base | type) == "string"
-                    then {number, base} else error("not a record") end' <<<"$record" 2>/dev/null) || read_status=1
+    record=$(jq -sc 'if length == 1 then .[0] else error("not a record") end
+                     | if type == "object" and (.number | type) == "number" and (.base | type) == "string"
+                       then {number, base} else error("not a record") end' <<<"$record" 2>/dev/null) || read_status=1
   fi
   # jq given only whitespace prints nothing and exits 0, so an empty record is unreadable too.
   [[ -n "$record" ]] || read_status=1

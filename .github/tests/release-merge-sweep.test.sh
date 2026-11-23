@@ -649,6 +649,13 @@ test_the_record_check_returns_1_when_the_record_is_not_json() {
   assert_record_check 7 '1 has an unreadable pr-record'
 }
 
+# jq reads every document, so a record holding the right one and a second would pass as either.
+test_the_record_check_returns_1_when_the_record_holds_two_documents() {
+  write_record 7 111
+  write_raw_record 5007 '{"number":999,"base":"main"}{"number":111,"base":"main"}'
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
 # Only the first 4096 bytes are read, so a longer record is cut mid-string and does not parse.
 test_the_record_check_returns_1_when_the_record_is_longer_than_4096_bytes() {
   local padding
