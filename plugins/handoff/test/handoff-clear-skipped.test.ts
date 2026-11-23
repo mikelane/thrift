@@ -31,11 +31,11 @@ describe('a compaction that failed because a turn took the session', () => {
     expect(world.effects.filter(effect => effect === 'compact')).toHaveLength(1)
   })
 
-  test('It records clear_skipped person_command on the record that ends the handoff', COMPACTING, async ($, on) => {
+  test('It records clear_skipped turn_running on the record that ends the handoff', COMPACTING, async ($, on) => {
     const world = await compactionPreemptedByATurn($, on)
     expect(lastRecord(world)).toMatchObject({
       action: 'none',
-      trigger_values: { reason: 'compaction_failed', clear_skipped: 'person_command', held_groups: 0 },
+      trigger_values: { reason: 'compaction_failed', clear_skipped: 'turn_running', held_groups: 0 },
     })
   })
 

@@ -154,7 +154,7 @@ export function abandonAfterWait(
     case 'clear_failed':
       return abandon(settledHandoff, 'clear_failed', clearFailedMessage(hasCompactedBeforeClear), oldId)
     case 'compaction_preempted':
-      return abandon(settledHandoff, 'compaction_failed', CLEAR_SKIPPED_MESSAGE, oldId, 'person_command')
+      return abandon(settledHandoff, 'compaction_failed', CLEAR_SKIPPED_MESSAGE, oldId, 'turn_running')
     default: {
       const unhandled: never = cause
       return unhandled

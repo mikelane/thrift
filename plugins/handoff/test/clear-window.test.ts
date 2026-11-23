@@ -179,11 +179,11 @@ describe('abandonAfterWait', () => {
     expect(calls).toMatchObject([{ reason: 'clear_failed', settled: { trigger: settledHandoff.trigger } }])
   })
 
-  test('It abandons with compaction_failed, the clear-skipped message, and clear_skipped person_command', async () => {
+  test('It abandons with compaction_failed, the clear-skipped message, and clear_skipped turn_running', async () => {
     const { calls, done } = abandoning('compaction_preempted')
     await done
     expect(calls).toEqual([
-      { settled: settledHandoff, reason: 'compaction_failed', message: CLEAR_SKIPPED_MESSAGE, sessionId: 'old-session', clearSkipCause: 'person_command' },
+      { settled: settledHandoff, reason: 'compaction_failed', message: CLEAR_SKIPPED_MESSAGE, sessionId: 'old-session', clearSkipCause: 'turn_running' },
     ])
   })
 

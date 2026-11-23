@@ -11,8 +11,8 @@ export type { DecisionReason }
 // Who ran the clear that a `cleared` record follows: the person's own /clear during the wait, or the handoff's.
 export type ClearedBy = 'person' | 'handoff'
 
-// Why the handoff ended without its own clear: the compaction before it failed because a turn, started by the person's command, took the session.
-export type ClearSkipCause = 'person_command'
+// Why the handoff ended without its own clear: the compaction before it failed while a turn was running. The plugin sees the turn, not who started it.
+export type ClearSkipCause = 'turn_running'
 
 export type DecisionAction = 'none' | 'advised' | 'cleared' | 'compacted' | 'untested_engine'
 
