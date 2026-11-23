@@ -165,8 +165,8 @@ release_merge_run_record_verdict() {
 # at the run's head, "not necessarily the pull requests that triggered the run", and omits a PR
 # that has since closed. A run with no readable record, or a record naming another PR, counts for
 # none; its reason goes to release_merge_ci_skip_reasons, one line per run. The one exception is a run
-# still going with no record yet, which may be this PR's: the lookup returns 3 for it rather than
-# count an older run. Of two runs created in the
+# with no record yet that is still going or did not succeed, which may be this PR's: the lookup
+# returns 3 or 4 for it rather than count an older run. Of two runs created in the
 # same second the higher id is the later. Returns 0 on success, 1 when no run counts, 3 when the
 # latest run is still going, and 4 when it failed (a success older than a later failure is a
 # failure). A lookup that fails (API error, unreadable response, the record lookup) returns 2, so
@@ -193,9 +193,13 @@ release_merge_ci_outcome() {
   while read -r run_id run_conclusion <&3; do
     [[ -n "$run_id" ]] || continue
     release_merge_run_record_verdict "$1" "$run_id" "$4" "$5" && record_status=0 || record_status=$?
-    # A run still going with no record yet may be this PR's: wait for it rather than count an
-    # older run (fail closed). A finished run with no record is skipped, as one naming another PR is.
-    [[ "$record_status" != 3 || "$run_conclusion" != running ]] || { release_merge_ci_conclusion=running; break; }
+    # A run with no record yet may be this PR's, so an older run must not stand in for it (fail
+    # closed): one still going holds the PR, and a finished one that did not succeed reports its
+    # conclusion. A finished successful run with no record is skipped, as one naming another PR is.
+    if [[ "$record_status" == 3 && "$run_conclusion" != success ]]; then
+      release_merge_ci_conclusion=$run_conclusion
+      break
+    fi
     case "$record_status" in
       0) release_merge_ci_conclusion=$run_conclusion; break ;;
       1|3) release_merge_ci_skip_reasons+="run $run_id $release_merge_run_record_detail"$'\n' ;;

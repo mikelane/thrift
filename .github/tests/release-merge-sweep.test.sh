@@ -381,11 +381,35 @@ test_a_sweep_counts_a_successful_run_whose_record_names_the_pr_even_when_pull_re
   [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
 }
 
-test_the_ci_lookup_skips_a_newer_run_without_a_record_and_counts_the_older_one_that_has_one() {
+test_the_ci_lookup_skips_a_newer_successful_run_without_a_record_and_counts_the_older_one_that_has_one() {
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 2 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
+}
+
+# A finished run with no record that did not succeed may be this PR's failed run, so an older
+# success must not stand in for it (fail closed). Such a decoy holds the PR for a person.
+test_the_ci_lookup_returns_4_when_a_newer_failed_run_has_no_record_ahead_of_an_older_success() {
   write_runs "$SHA_A" \
     'CI completed failure 2026-10-18T11:00:00Z - - - 111 2 none' \
     'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
-  [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
+  [[ "$(ci_status)" == 4 ]] || fail "got $(ci_status)"
+}
+
+test_the_ci_lookup_returns_4_when_a_newer_cancelled_run_has_no_record_ahead_of_an_older_success() {
+  write_runs "$SHA_A" \
+    'CI completed cancelled 2026-10-18T11:00:00Z - - - 111 2 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 4 ]] || fail "got $(ci_status)"
+}
+
+test_a_sweep_warns_with_the_conclusion_of_a_newer_failed_run_that_has_no_record() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 2 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  assert_sweep_warns_ci_failed 111 "$SHA_A"
 }
 
 # A running run uploads its record partway through, so a newer run with none yet may still be this
