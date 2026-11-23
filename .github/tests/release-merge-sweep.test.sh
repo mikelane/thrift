@@ -465,6 +465,23 @@ test_the_ci_lookup_skips_a_newer_running_run_whose_record_names_another_pr() {
   [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
 }
 
+# A run whose record cannot be read may be this PR's own (a zip cut short by the network downloads
+# fine), so it is treated like a run with no record: a running one holds the PR, a finished one that
+# did not succeed stops the walk. Only a record that names another PR is skipped.
+test_the_ci_lookup_returns_4_when_a_newer_failed_run_has_an_unreadable_record_ahead_of_an_older_success() {
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 2 corrupt' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 4 ]] || fail "got $(ci_status)"
+}
+
+test_the_ci_lookup_returns_3_when_a_newer_running_run_has_an_unreadable_record_ahead_of_an_older_success() {
+  write_runs "$SHA_A" \
+    'CI in_progress null 2026-10-18T11:00:00Z - - - 111 2 corrupt' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 3 ]] || fail "got $(ci_status)"
+}
+
 test_the_ci_lookup_returns_2_when_the_artifact_list_cannot_be_read() {
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
   : >"$TEST_DIR/artifacts-1.error"
@@ -690,6 +707,23 @@ test_the_record_check_returns_1_when_the_record_is_longer_than_4096_bytes() {
   padding=$(printf '%5000s' '' | tr ' ' x)
   write_record 7 111
   write_raw_record 5007 "{\"number\":111,\"base\":\"main\",\"pad\":\"$padding\"}"
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+# spaces <n>: n spaces.
+spaces() { printf "%${1}s" ''; }
+
+# Cutting the record at 4096 bytes is not the same as refusing it: when the cut lands after a
+# complete document, what is left would parse.
+test_the_record_check_returns_1_when_a_record_longer_than_4096_bytes_ends_in_garbage() {
+  write_record 7 111
+  write_raw_record 5007 "{\"number\":111,\"base\":\"main\"}$(spaces 4100)garbage"
+  assert_record_check 7 '1 has an unreadable pr-record'
+}
+
+test_the_record_check_returns_1_when_a_second_document_starts_past_byte_4096() {
+  write_record 7 111
+  write_raw_record 5007 "{\"number\":111,\"base\":\"main\"}$(spaces 4100){\"number\":999,\"base\":\"main\"}"
   assert_record_check 7 '1 has an unreadable pr-record'
 }
 

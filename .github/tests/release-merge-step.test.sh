@@ -352,6 +352,18 @@ test_a_sweep_run_passes_the_chosen_runs_id_to_the_gate() {
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 --repo $REPO --admin --squash --match-head-commit $SHA_A"
 }
 
+# A newer failed run whose record cannot be read may be this PR's, so the sweep must not hand the
+# gate the older success.
+test_a_sweep_run_does_not_merge_a_pr_whose_newer_failed_run_has_an_unreadable_record() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 2 corrupt' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
 test_the_merge_step_refuses_a_pr_whose_run_id_is_empty() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" ''

@@ -141,8 +141,12 @@ release_merge_run_record_verdict() {
     return 2
   }
   # pipefail here, whatever the caller set: a failed unzip must not hide behind head's success.
-  record=$(set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4096) || read_status=1
+  # One byte past the limit tells a record that fits from one that was cut. The trailing x keeps
+  # command substitution from stripping a final newline that counts toward the length.
+  record=$(set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4097 && printf x) || read_status=1
   rm -f "$zip_path"
+  record=${record%x}
+  (( $(printf %s "$record" | LC_ALL=C wc -c) <= 4096 )) || read_status=1
   if (( read_status == 0 )); then
     record=$(jq -sc 'if length == 1 then .[0] else error("not a record") end
                      | if type == "object" and (.number | type) == "number" and (.base | type) == "string"
@@ -203,10 +207,12 @@ release_merge_ci_outcome() {
   while read -r run_id run_conclusion <&3; do
     [[ -n "$run_id" ]] || continue
     release_merge_run_record_verdict "$1" "$run_id" "$4" "$5" && record_status=0 || record_status=$?
-    # A run with no record yet may be this PR's, so an older run must not stand in for it (fail
-    # closed): one still going holds the PR, and a finished one that did not succeed reports its
-    # conclusion. A finished successful run with no record is skipped, as one naming another PR is.
-    if [[ "$record_status" == 3 && "$run_conclusion" != success ]]; then
+    # A run with no record yet, or one whose record cannot be read (a download cut short), may be
+    # this PR's, so an older run must not stand in for it (fail closed): one still going holds the
+    # PR, and a finished one that did not succeed reports its conclusion. A finished successful run
+    # with no usable record is skipped, as one naming another PR is.
+    if { [[ "$record_status" == 3 ]] || [[ "$record_status" == 1 && -z "$release_merge_run_record_named" ]]; } \
+       && [[ "$run_conclusion" != success ]]; then
       release_merge_ci_conclusion=$run_conclusion
       release_merge_ci_run_id=$run_id
       break
