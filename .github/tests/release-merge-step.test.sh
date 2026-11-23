@@ -429,4 +429,20 @@ test_a_sweep_run_stays_green_when_the_gate_refuses_a_pr() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# The pull request files API stops at 3000 files, so the files it listed may not be all the PR changes.
+test_the_merge_step_does_not_merge_a_pr_that_changes_more_files_than_the_files_api_listed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.changed_files = 3001'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_does_not_merge_a_pr_that_changes_files_when_the_files_api_listed_none() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.changed_files = 1'
+  echo '[]' >"$TEST_DIR/files-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
 run_tests "$@"

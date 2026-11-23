@@ -340,4 +340,15 @@ test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
   assert_sweep_skips 111 "$SHA_A"
 }
 
+# gh exits 0 but the open-PR list is not JSON: the sweep names the failed lookup and fails.
+test_a_sweep_names_an_unparseable_pr_list_as_the_failed_lookup() {
+  local status
+  stub_gh
+  echo 'not json' >"$TEST_DIR/pulls.json"
+  release_merge_sweep "$REPO" main >"$TEST_DIR/sweep-out" 2>"$TEST_DIR/sweep-err"
+  status=$?
+  [[ "$status" != 0 ]] || fail 'the sweep succeeded on an unparseable PR list'
+  assert_file_has "$TEST_DIR/sweep-err" '::error title=Release PR sweep failed::cannot list the open release PRs'
+}
+
 run_tests "$@"

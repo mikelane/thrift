@@ -47,21 +47,24 @@ release_merge_changed_files() {
 # not a reason on stdout: a refusal is a policy decision, and a failed lookup is not one.
 release_merge_sibling_problem() {
   local siblings
-  siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
+  siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$(jq -rn --arg v "$2" '$v|@uri')&per_page=100" \
     | jq -r --arg repo "$1" --arg ref "$2" --argjson number "$3" '.[]
         | select(.number != $number and .head.ref == $ref and .head.repo.full_name == $repo)
         | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2" >&2; return 1; }
   [[ -z "$siblings" ]] || echo "another open PR shares the branch $2: $siblings"
 }
 
-# release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha>:
+# release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha> <listed>:
 # prints one line per reason the PR must not be merged, and nothing when it may be.
-# <pr.json> is the REST pull request object, <changed-files> lists one path per line. A lookup that
+# <pr.json> is the REST pull request object, <changed-files> lists one path per line, and <listed>
+# is how many files the files API listed (its .filename entries, not the lines of <changed-files>,
+# which a rename makes two). The API lists at most 3000 files, so a PR whose changed_files differs
+# from <listed>, or is over 3000, has files the allowlist never saw. A lookup that
 # fails (the open PR list, the allowlist, the changed-files list) returns 1 with its reason on
 # stderr and prints no reason, so the caller fails the job instead of reading it as a refusal.
 release_merge_problems() {
-  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 allowed file
-  local pr_state pr_base_ref head_repo head_ref pr_author head_sha
+  local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 listed=$8 allowed file
+  local pr_state pr_base_ref head_repo head_ref pr_author head_sha changed_files
   pr_state=$(jq -r '.state' "$pr")
   [[ "$pr_state" == open ]] || echo "the PR is $pr_state, not open"
   [[ "$(jq -r '.draft // false' "$pr")" == false ]] || echo "the PR is a draft"
@@ -75,6 +78,13 @@ release_merge_problems() {
   [[ "$pr_author" == "$bot" ]] || echo "the PR author is $pr_author, not $bot"
   head_sha=$(jq -r '.head.sha' "$pr")
   [[ "$head_sha" == "$tested_sha" ]] || echo "the PR head is $head_sha but CI tested $tested_sha"
+  changed_files=$(jq -r '.changed_files | if type == "number" then . else "" end' "$pr")
+  if [[ -z "$changed_files" ]]; then
+    echo "the PR does not say how many files it changes"
+  else
+    (( changed_files <= 3000 )) || echo "the PR changes $changed_files files, more than the 3000 the files API lists"
+    (( changed_files == listed )) || echo "the PR changes $changed_files files but the files API listed $listed"
+  fi
   release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")" || return 1
   allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config" >&2; return 1; }
   # A failed `<"$files"` skips the loop and prints no problem, which would pass every file.
@@ -134,7 +144,7 @@ release_merge_ci_outcome() {
 release_merge_sweep() (
   set -o pipefail
   local number sha ref ci_status open_prs
-  open_prs=$(gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100") || {
+  open_prs=$(gh api --paginate --method GET "repos/$1/pulls?state=open&base=$2&per_page=100" | jq -c '.') || {
     echo "::error title=Release PR sweep failed::cannot list the open release PRs" >&2
     return 1
   }
@@ -197,7 +207,7 @@ release_merge_fail() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 did_merge=0 pr files raw problems problem
+  local number=$1 tested_sha=$2 did_merge=0 pr files raw listed problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file" || return 1
@@ -213,8 +223,10 @@ release_merge_pr_if_gate_passes() {
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files" || return 1
 
+  listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
+    || release_merge_fail "$number" "cannot count the changed files" || return 1
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha") \
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
     || release_merge_fail "$number" "cannot check the gate" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning

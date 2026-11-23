@@ -47,7 +47,9 @@ specific to this repo.
     `gh run rerun <CI run id>`.
   - The merge gate: the PR must be open, from a `release-please--*` branch in this repo, authored
     by the App, at the commit CI tested, and change only the manifest and each package's changelog,
-    version file and extra-files. Anything else waits for a person.
+    version file and extra-files, and the files API must have listed every file the PR changes
+    (it stops at 3000, so the PR's `changed_files` must match the count listed and be at most
+    3000). Anything else waits for a person.
   - Where the code lives: the gate, the sweep and the merge step all live in
     `.github/scripts/release-merge-lib.sh` (production code, so not under `.github/tests/`). The
     workflow step only sources it and calls `release_merge_run`. The tests find it through
