@@ -171,29 +171,6 @@ describe('continuing after a handoff', () => {
     expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_moved' })
   })
 
-  test('It reads no session id after the clear when the setting is off', NOT_CONTINUING, async ($, on) => {
-    const world = install($, on)
-    world.onClearEnded = async () => {
-      world.sessionIdDenials = 1
-    }
-    await startSession($)
-    await handedOffFromWeakBand($, world)
-    expect(world.sessionIdDenials).toBe(1)
-    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'off' })
-  })
-
-  test('It reads no session id after the clear when the plugin runs in off', CONTINUING_OFF, async ($, on) => {
-    const world = install($, on)
-    world.onClearEnded = async () => {
-      world.sessionIdDenials = 1
-    }
-    await startSession($)
-    await runCommand($, 'handoff')
-    await world.clock.settle()
-    expect(world.sessionIdDenials).toBe(1)
-    expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'off' })
-  })
-
   test('It submits no continue prompt and logs held_prompt_sent when a prompt that arrived after the clear was sent', CONTINUING, async ($, on) => {
     const world = install($, on)
     await startSession($)

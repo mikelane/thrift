@@ -60,6 +60,10 @@ export const noteInBoxMessage = (oldSessionId: string): string =>
 export const noteNotCarriedMessage = (oldSessionId: string): string =>
   `The handoff note could not be added to this session. To reopen the full previous conversation: ${resumeCommand(oldSessionId)}`
 
+// Shown instead of the handed-off line when a /resume moved the person off the session the note was delivered to.
+export const noteElsewhereMessage = (deliverySessionId: string): string =>
+  `Handoff note is in session ${deliverySessionId}; it was not delivered here.`
+
 export const FINAL_MESSAGES: Record<NoteDelivery, (oldSessionId: string) => string> = {
   appended: handedOffMessage,
   submitted: handedOffMessage,
