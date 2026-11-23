@@ -40,9 +40,12 @@ run_waiting_setup() {
     start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
 }
 
-test_start_waiting_handoff_passes_when_the_turn_runs_the_sleep() {
-  run_waiting_setup 'ui.press handoff/handoff' 'cc_turn_origin=peer
-Bash(sleep 14)'
+# A debug-log line for one Bash tool dispatch, in the format Claude Code 2.1.330 writes (the command text is not logged).
+TOOL_DISPATCH='2026-11-23T05:26:01.863Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=toolu_01Xf permissionDecisionMs=4'
+
+test_start_waiting_handoff_passes_when_the_turn_dispatches_a_bash_tool_call_after_the_baseline() {
+  run_waiting_setup 'ui.press handoff/handoff' "cc_turn_origin=peer
+$TOOL_DISPATCH"
   assert_exit_code 0
   assert_out_has 'SETUP_HELD'
 }
@@ -53,10 +56,9 @@ test_start_waiting_handoff_ends_as_setup_when_the_turn_never_runs_the_sleep() {
   assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'
 }
 
-test_start_waiting_handoff_ends_as_setup_when_the_debug_log_only_had_the_permission_rule_before_the_turn() {
-  run_waiting_setup 'ui.press handoff/handoff
-Bash(sleep *)
-cc_turn_origin=peer'
+test_start_waiting_handoff_ends_as_setup_when_the_only_tool_dispatch_predates_the_baseline() {
+  run_waiting_setup "ui.press handoff/handoff
+$TOOL_DISPATCH" 'cc_turn_origin=peer'
   assert_exit_code 3
   assert_out_has 'SETUP: the setup step did not hold: timed out after 1s waiting for the peer turn in '"'"'a'"'"' to run its sleep'
 }
@@ -64,17 +66,17 @@ cc_turn_origin=peer'
 test_start_waiting_handoff_passes_when_only_the_screen_shows_the_sleep() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
     handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
-    pane_has() { true; }; log_has() { [[ "$2" != *Bash* ]]; }
+    pane_has() { [[ "$2" != *Bash* ]] || [[ "$2" == "Bash\(sleep" ]]; }; log_has() { [[ "$2" != *Bash* ]]; }
     start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
   assert_exit_code 0
   assert_out_has 'SETUP_HELD'
 }
 
-test_start_waiting_handoff_skips_the_tool_call_check_when_the_evidence_pattern_is_empty() {
+test_start_waiting_handoff_skips_the_tool_call_check_when_it_is_off() {
   run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
     handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
     pane_has() { [[ "$2" != *Bash* ]]; }; log_has() { [[ "$2" == *cc_turn_origin* || "$2" == *ui* ]]; }
-    WAITING_HANDOFF_TOOL_CALL_PATTERN="" start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
+    WAITING_HANDOFF_TOOL_CALL_CHECK=off start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
   assert_exit_code 0
   assert_out_has 'SETUP_HELD'
 }

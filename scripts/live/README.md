@@ -39,9 +39,10 @@ that ran no checks, a decision log that exists but cannot be read as JSON lines,
 command that failed before a verdict). A run whose setup did not hold exits `3` and prints `SETUP:`
 with the step that did not hold (`SETUP` is not a FAIL, and not an ERROR: nothing was judged, and the
 plugin is not at fault). Today that is the wait setup of the handoff scenarios
-(`start_waiting_handoff`): the peer's turn must start and show its `Bash(sleep` call (in the debug log
-or on the screen) within `LIVE_SETUP_TIMEOUT` seconds (30 by default); a model that answers without the
-call ends the run as `SETUP` instead of a 90 s timeout.
+(`start_waiting_handoff`): the peer's turn must start and make a Bash tool call within
+`LIVE_SETUP_TIMEOUT` seconds (30 by default), seen either as a `tool_dispatch_start tool=Bash` line in the
+debug log past the baseline or as `Bash(sleep` on the screen; a model that answers without the call ends
+the run as `SETUP` instead of a 90 s timeout. `WAITING_HANDOFF_TOOL_CALL_CHECK=off` skips the check.
 A FAIL, ERROR or SETUP keeps the run directory and prints its path:
 `debug-<session>.log`, `thrift/decisions.jsonl`, `settings.json`, and the plugin copy.
 
