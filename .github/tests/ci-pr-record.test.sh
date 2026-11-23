@@ -30,7 +30,7 @@ test_the_pr_record_job_runs_only_for_pull_request_events() {
   assert_record_job '.if' 'the job condition' '"github.event_name == '"'"'pull_request'"'"'"'
 }
 
-test_the_pr_record_job_holds_no_token_permission_but_contents_read() {
+test_the_pr_record_job_grants_only_contents_read() {
   assert_record_job '.permissions' 'the job permissions' '{"contents":"read"}'
 }
 

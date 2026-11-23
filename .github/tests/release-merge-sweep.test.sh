@@ -314,7 +314,7 @@ test_a_sweep_counts_the_newer_of_two_ci_runs_created_in_the_same_second() {
   assert_sweep_warns_ci_failed 111 "$SHA_A"
 }
 
-test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
+test_a_sweep_ignores_a_successful_run_whose_record_names_a_different_pr_into_main() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 999'
   assert_sweep_skips 111 "$SHA_A"
@@ -326,7 +326,7 @@ test_a_sweep_ignores_a_successful_run_from_a_different_pr_number_into_main() {
 # open, every run at that head lists both PRs, the run PR 999 triggered included. The lib reads only
 # each run's pr-record: PR 999's run records 999, so its success must not stand in for the release
 # PR's own CI run, whose record names 111 and which failed.
-test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
+test_a_sweep_ignores_another_bases_run_whose_record_names_another_pr() {
   write_pulls "$(open_pr 111 $SHA_A)"
   write_runs "$SHA_A" \
     'CI completed success 2026-10-18T11:00:00Z - - - 999@old-feature,111 2 999@old-feature' \
@@ -453,14 +453,14 @@ test_the_ci_lookup_returns_2_when_the_newest_runs_record_lookup_fails_ahead_of_a
   [[ "$(ci_status)" == 2 ]] || fail "got $(ci_status)"
 }
 
-# record_check <run-id>: "<code> <reason>" from release_merge_run_record_status for PR 111 into
+# record_check <run-id>: "<code> <reason>" from release_merge_run_record_verdict for PR 111 into
 # main, run with pipefail as the workflow step runs it. The reason is read in the same shell.
 record_check() {
   stub_gh
   (
     set -o pipefail
-    release_merge_run_record_status "$REPO" "$1" 111 main && code=0 || code=$?
-    echo "$code $release_merge_record_reason"
+    release_merge_run_record_verdict "$REPO" "$1" 111 main && code=0 || code=$?
+    echo "$code $release_merge_run_record_detail"
   )
 }
 
@@ -548,7 +548,7 @@ test_the_record_check_returns_2_and_names_unzip_when_unzip_is_missing() {
   mkdir "$TEST_DIR/empty-path"
   # shellcheck disable=SC2123 # an empty PATH is the point: unzip must not be found
   got=$(stub_gh; PATH=$TEST_DIR/empty-path
-    release_merge_run_record_status "$REPO" 7 111 main 2>"$TEST_DIR/record-err" && echo 0 || echo $?)
+    release_merge_run_record_verdict "$REPO" 7 111 main 2>"$TEST_DIR/record-err" && echo 0 || echo $?)
   [[ "$got" == 2 ]] || fail "got [$got]"
   assert_file_has "$TEST_DIR/record-err" "unzip is not installed, so the pr-record of CI run 7 cannot be read"
 }

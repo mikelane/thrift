@@ -142,7 +142,7 @@ jobs:
           jq -n --argjson number "$PR_NUMBER" --arg base "$PR_BASE" '{number: $number, base: $base}' \
             > "$RUNNER_TEMP/pr-record/pr-record.json"
 
-      - name: Upload the record
+      - name: Upload the pr-record artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-record

@@ -95,64 +95,64 @@ release_merge_problems() {
   done <"$files"
 }
 
-# release_merge_run_record_status <repo> <run-id> <number> <base>: reports, as its return code, whether
+# release_merge_run_record_verdict <repo> <run-id> <number> <base>: reports, as its return code, whether
 # the CI run <run-id> recorded that it ran for pull request <number> into <base>. ci.yml's pr-record
 # job writes the record from the run's own pull_request event (issue #117); the runs API's
 # pull_requests cannot say which PR triggered a run. Returns 0 when the record names that PR and
 # base. Returns 1 when it does not count (an unreadable record, one naming another PR or base, or
 # no run id) and 3 when the run has no unexpired pr-record artifact (a run still going may not have
-# uploaded it yet, so release_merge_ci_outcome waits on it); both set release_merge_record_reason
+# uploaded it yet, so release_merge_ci_outcome waits on it); both set release_merge_run_record_detail
 # to why, as a phrase that follows "run <id> " or "the CI run <id> ". Returns 2 when a lookup fails (the artifact list, the
 # download, a temp file, or no unzip), which the caller must not read as "does not count", and
-# sets release_merge_record_reason to a whole phrase naming the lookup and the run. Reads with
+# sets release_merge_run_record_detail to a whole phrase naming the lookup and the run. Reads with
 # $RUNS_TOKEN, as release_merge_ci_outcome does.
 # SAFETY: a base branch's own ci.yml could write any record it likes. Only someone with write
 # access can create that branch, and the gate's author, SHA and file-allowlist checks still apply.
-release_merge_run_record_status() {
-  local artifact record zip status=0
-  release_merge_record_reason=
+release_merge_run_record_verdict() {
+  local artifact_id record zip_path read_status=0
+  release_merge_run_record_detail=
   if [[ -z "$2" ]]; then
-    release_merge_record_reason="is unknown (no run id)"
+    release_merge_run_record_detail="is unknown (no run id)"
     return 1
   fi
   command -v unzip >/dev/null || {
-    release_merge_record_reason="unzip is not installed, so the pr-record of CI run $2 cannot be read"
-    echo "$release_merge_record_reason" >&2
+    release_merge_run_record_detail="unzip is not installed, so the pr-record of CI run $2 cannot be read"
+    echo "$release_merge_run_record_detail" >&2
     return 2
   }
-  artifact=$(set -o pipefail
+  artifact_id=$(set -o pipefail
     GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs/$2/artifacts?name=pr-record&per_page=100" \
       | jq -rs '[.[].artifacts[] | select(.name == "pr-record" and (.expired | not))] | sort_by(.id) | last | .id // empty') || {
-    release_merge_record_reason="cannot list the artifacts of CI run $2"
+    release_merge_run_record_detail="cannot list the artifacts of CI run $2"
     return 2
   }
-  if [[ -z "$artifact" ]]; then
-    release_merge_record_reason="has no pr-record artifact"
+  if [[ -z "$artifact_id" ]]; then
+    release_merge_run_record_detail="has no pr-record artifact"
     return 3
   fi
-  zip=$(mktemp) || { release_merge_record_reason="cannot create a temp file for the pr-record of CI run $2"; return 2; }
-  GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$artifact/zip" >"$zip" || {
-    rm -f "$zip"
-    release_merge_record_reason="cannot download the pr-record (artifact $artifact) of CI run $2"
+  zip_path=$(mktemp) || { release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"; return 2; }
+  GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$artifact_id/zip" >"$zip_path" || {
+    rm -f "$zip_path"
+    release_merge_run_record_detail="cannot download the pr-record (artifact $artifact_id) of CI run $2"
     return 2
   }
   # pipefail here, whatever the caller set: a failed unzip must not hide behind head's success.
-  record=$(set -o pipefail; unzip -p "$zip" pr-record.json 2>/dev/null | head -c 4096) || status=1
-  rm -f "$zip"
-  if (( status == 0 )); then
+  record=$(set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4096) || read_status=1
+  rm -f "$zip_path"
+  if (( read_status == 0 )); then
     record=$(jq -c 'if type == "object" and (.number | type) == "number" and (.base | type) == "string"
-                    then {number, base} else error("not a record") end' <<<"$record" 2>/dev/null) || status=1
+                    then {number, base} else error("not a record") end' <<<"$record" 2>/dev/null) || read_status=1
   fi
   # jq given only whitespace prints nothing and exits 0, so an empty record is unreadable too.
-  [[ -n "$record" ]] || status=1
-  if (( status != 0 )); then
-    release_merge_record_reason="has an unreadable pr-record"
+  [[ -n "$record" ]] || read_status=1
+  if (( read_status != 0 )); then
+    release_merge_run_record_detail="has an unreadable pr-record"
     return 1
   fi
   if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$record" >/dev/null; then
     return 0
   fi
-  release_merge_record_reason="has a pr-record naming $record"
+  release_merge_run_record_detail="has a pr-record naming $record"
   return 1
 }
 
@@ -161,10 +161,10 @@ release_merge_run_record_status() {
 # when it is the workflow file .github/workflows/ci.yml (not a workflow that merely has the display
 # name CI), ran for a head in <repo> itself (not a fork that pushed the same commit), on branch
 # <head-ref>, as a pull_request event, and its pr-record artifact names <number> and <base> (see
-# release_merge_run_record_status). The runs API's pull_requests is not used: it lists every open PR
+# release_merge_run_record_verdict). The runs API's pull_requests is not used: it lists every open PR
 # at the run's head, "not necessarily the pull requests that triggered the run", and omits a PR
 # that has since closed. A run with no readable record, or a record naming another PR, counts for
-# none; its reason goes to release_merge_ci_skipped, one line per run. The one exception is a run
+# none; its reason goes to release_merge_ci_skip_reasons, one line per run. The one exception is a run
 # still going with no record yet, which may be this PR's: the lookup returns 3 for it rather than
 # count an older run. Of two runs created in the
 # same second the higher id is the later. Returns 0 on success, 1 when no run counts, 3 when the
@@ -172,16 +172,16 @@ release_merge_run_record_status() {
 # failure). A lookup that fails (API error, unreadable response, the record lookup) returns 2, so
 # it is not mistaken for "no run yet". Sets release_merge_ci_conclusion to what the latest run
 # concluded, for the caller that reports a return of 4. On a return of 2 from a record lookup,
-# release_merge_record_reason names it (it is empty when the runs lookup itself failed).
+# release_merge_run_record_detail names it (it is empty when the runs lookup itself failed).
 # The lookup reads with $RUNS_TOKEN (the workflow's own token, actions: read), not the App token,
 # whose permissions do not include Actions.
 release_merge_ci_outcome() {
-  local runs candidates run_id run_conclusion record_status
+  local runs candidate_runs run_id run_conclusion record_status
   release_merge_ci_conclusion=
-  release_merge_ci_skipped=
-  release_merge_record_reason=
+  release_merge_ci_skip_reasons=
+  release_merge_run_record_detail=
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
-  candidates=$(jq -rs --arg repo "$1" --arg ref "$3" '
+  candidate_runs=$(jq -rs --arg repo "$1" --arg ref "$3" '
     [.[].workflow_runs[]
      | select(.path == ".github/workflows/ci.yml"
               and .head_repository.full_name == $repo
@@ -192,16 +192,16 @@ release_merge_ci_outcome() {
   # The list comes in on fd 3, so nothing the record lookup runs (gh, unzip) can read it from stdin.
   while read -r run_id run_conclusion <&3; do
     [[ -n "$run_id" ]] || continue
-    release_merge_run_record_status "$1" "$run_id" "$4" "$5" && record_status=0 || record_status=$?
+    release_merge_run_record_verdict "$1" "$run_id" "$4" "$5" && record_status=0 || record_status=$?
     # A run still going with no record yet may be this PR's: wait for it rather than count an
     # older run (fail closed). A finished run with no record is skipped, as one naming another PR is.
     [[ "$record_status" != 3 || "$run_conclusion" != running ]] || { release_merge_ci_conclusion=running; break; }
     case "$record_status" in
       0) release_merge_ci_conclusion=$run_conclusion; break ;;
-      1|3) release_merge_ci_skipped+="run $run_id $release_merge_record_reason"$'\n' ;;
+      1|3) release_merge_ci_skip_reasons+="run $run_id $release_merge_run_record_detail"$'\n' ;;
       *) release_merge_ci_conclusion=; return 2 ;;
     esac
-  done 3<<<"$candidates"
+  done 3<<<"$candidate_runs"
   case "$release_merge_ci_conclusion" in
     success) return 0 ;;
     none) return 1 ;;
@@ -235,13 +235,13 @@ release_merge_sweep() (
             0) echo "$number $sha" ;;
             1) echo "Skipping PR #$number at $sha: no CI run at that head whose pr-record names it" \
                  "(none yet, or the run has no record naming this PR into $2)." >&2
-               [[ -z "$release_merge_ci_skipped" ]] || sed 's/^/  - /' <<<"${release_merge_ci_skipped%$'\n'}" >&2 ;;
+               [[ -z "$release_merge_ci_skip_reasons" ]] || sed 's/^/  - /' <<<"${release_merge_ci_skip_reasons%$'\n'}" >&2 ;;
             3) echo "Skipping PR #$number at $sha: CI is still running;" \
                  "its completion triggers the merge." >&2 ;;
             4) printf '%s%s\n' "::warning title=Release PR #$number not merged::" \
                  "CI concluded ${release_merge_ci_conclusion//\%/%25} at $sha; fix it or rerun CI." >&2 ;;
             *)
-              echo "::error title=Release PR #$number not merged::cannot read the CI runs at $sha${release_merge_record_reason:+ (${release_merge_record_reason//\%/%25})}" >&2
+              echo "::error title=Release PR #$number not merged::cannot read the CI runs at $sha${release_merge_run_record_detail:+ (${release_merge_run_record_detail//\%/%25})}" >&2
               lookup_failed=1 ;;
           esac
         done
@@ -310,11 +310,11 @@ release_merge_pr_if_gate_passes() {
     "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
     || release_merge_fail "$number" "cannot check the gate" || return 1
   if (( $# >= 3 )); then
-    release_merge_run_record_status "$REPO" "$3" "$number" "$BASE" && record_status=0 || record_status=$?
+    release_merge_run_record_verdict "$REPO" "$3" "$number" "$BASE" && record_status=0 || record_status=$?
     case "$record_status" in
       0) ;;
-      1|3) problems+=${problems:+$'\n'}"the CI run ${3:+$3 }$release_merge_record_reason" ;;
-      *) release_merge_fail "$number" "cannot check the gate: $release_merge_record_reason" || return 1 ;;
+      1|3) problems+=${problems:+$'\n'}"the CI run ${3:+$3 }$release_merge_run_record_detail" ;;
+      *) release_merge_fail "$number" "cannot check the gate: $release_merge_run_record_detail" || return 1 ;;
     esac
   fi
   rm -f "$pr" "$files" "$raw"
