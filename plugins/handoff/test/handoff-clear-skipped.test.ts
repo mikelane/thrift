@@ -39,6 +39,12 @@ describe('a compaction that failed because a turn took the session', () => {
     })
   })
 
+  test('It writes one compaction_failed record for the handoff, the one that ends it', COMPACTING, async ($, on) => {
+    const world = await compactionPreemptedByATurn($, on)
+    const failed = world.records.filter(record => record.trigger_values.reason === 'compaction_failed')
+    expect(failed.map(record => record.trigger_values.clear_skipped)).toEqual(['turn_running'])
+  })
+
   test('It says the handoff did not clear', COMPACTING, async ($, on) => {
     const world = await compactionPreemptedByATurn($, on)
     expect(world.effects).toContain(`log:${CLEAR_SKIPPED_MESSAGE}`)
@@ -51,6 +57,17 @@ describe('a compaction that failed because a turn took the session', () => {
 })
 
 describe('a compaction that failed with no turn in flight', () => {
+  test('It writes the compaction_failed record when the compaction fails, since the handoff goes on to clear', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.compact = async () => {
+      throw new Error('compaction failed')
+    }
+    await startSession($)
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.records.filter(record => record.trigger_values.reason === 'compaction_failed')).toHaveLength(1)
+  })
+
   test('It still clears and leaves clear_skipped off', COMPACTING, async ($, on) => {
     const world = install($, on)
     world.compact = async () => {

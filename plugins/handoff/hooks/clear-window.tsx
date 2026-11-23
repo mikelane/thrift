@@ -62,7 +62,8 @@ export async function compactBeforeClearing(
     // Read before the first await below, so the record write cannot change it.
     const isCompactionPreempted = state.isTurnRunning
     debug($, `compaction before the clear failed: ${String(error)}`)
-    await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
+    // A preempted compaction ends the handoff, and the record that ends it carries compaction_failed: one record, not two.
+    if (!isCompactionPreempted) await writeRecord($, state, { ...trigger, action: 'none', reason: 'compaction_failed', sessionId })
     return { isCompacted: false, isCompactionPreempted }
   }
   return { isCompacted: false, isCompactionPreempted: false }
@@ -135,7 +136,7 @@ export async function waitForClearWindow(
 
 export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'compaction_preempted'
 
-// Abandons a handoff after the wait: the session ended, background work was running, or the clear failed.
+// Abandons a handoff after the wait: the session ended, background work was running, a turn preempted the compaction, or the clear failed.
 // No clear starts here, so the no-await rule on waitForClearWindow does not apply.
 export function abandonAfterWait(
   abandon: AbandonHandoff,
