@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { BandState } from '../types'
 import { WRITING, WRITING_STATUS } from './band-text'
 import { redrawBand, takeDownBand } from './band-controller'
-import { CLEARED_BY, abandonAfterWait, type AbandonHandoff, waitForClearWindow } from './clear-window'
+import { abandonAfterWait, type AbandonHandoff, waitForClearWindow } from './clear-window'
 import {
   heldGroupFields,
   leftoverStripFields,
@@ -25,7 +25,9 @@ import {
   beginNoteWindow,
   beginSending,
   claimPending,
+  clearedByFor,
   endHandoff,
+  hasSecondClear,
   takeHeldPrompts,
   type SessionState,
 } from './session-state'
@@ -150,8 +152,11 @@ async function runHandoff(
     if (!isCleared) {
       return await abandonAfterWait(abandon, settledHandoff, 'clear_failed', hasCompactedBeforeClear, prepared.oldId)
     }
-    const clearedBy = state.didForeignClearFinishFirst ? 'person' : CLEARED_BY[outcome]
-    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, hasTurnAfterNote, clearedBy)
+    await continueInFreshSession($, state, settledHandoff, prepared.oldId, prepared.note, {
+      hasTurnAfterNote,
+      clearedBy: clearedByFor(state, outcome),
+      hasSecondClear: hasSecondClear(state, outcome),
+    })
   } finally {
     endHandoff(state)
     state.pending = null

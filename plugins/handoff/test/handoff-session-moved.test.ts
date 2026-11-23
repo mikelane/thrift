@@ -34,6 +34,13 @@ const handoffThenResume = async ($: Engine, on: On) => {
 
 const handoffThatStays = async ($: Engine, on: On) => runHandoff($, await startedWorld($, on))
 
+describe('a handoff that stays in the session it delivered to', () => {
+  test('It leaves delivery_session_id off the record', async ($, on) => {
+    const world = await handoffThatStays($, on)
+    expect(lastRecord(world).trigger_values.delivery_session_id).toBeUndefined()
+  })
+})
+
 describe('a /resume that switched sessions after the clear', () => {
   test('It logs exactly one line naming the session that holds the note', async ($, on) => {
     const world = await handoffThenResume($, on)
@@ -49,6 +56,11 @@ describe('a /resume that switched sessions after the clear', () => {
   test('It leaves the handed-off line out of the resumed session', async ($, on) => {
     const world = await handoffThenResume($, on)
     expect(world.effects).not.toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
+  })
+
+  test('It records delivery_session_id, the session that holds the note', async ($, on) => {
+    const world = await handoffThenResume($, on)
+    expect(lastRecord(world).trigger_values.delivery_session_id).toBe('new-session')
   })
 
   test('It records reason session_moved and keeps the delivery fields', async ($, on) => {

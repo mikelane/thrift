@@ -1,8 +1,10 @@
-import { expect, test } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import {
   beginBeforeClear,
   beginOwnClear,
+  clearedByFor,
+  hasSecondClear,
   forgetForeignClear,
   markOwnClearReturned,
   recordForeignClear,
@@ -259,4 +261,44 @@ test('It forgets a returned own clear and a run-ahead foreign clear from endHand
   markOwnClearReturned(state)
   endHandoff(state)
   expect(state).toMatchObject({ hasOwnClearReturned: false, didForeignClearFinishFirst: false })
+})
+
+describe('clearedByFor', () => {
+  test('It names the handoff when it cleared and no foreign clear finished first', () => {
+    expect(clearedByFor(createState(settings), 'clear')).toBe('handoff')
+  })
+
+  test('It names the person when the person cleared before the handoff issued its clear', () => {
+    expect(clearedByFor(createState(settings), 'deliver_to_person_clear')).toBe('person')
+  })
+
+  test('It names the person when a foreign clear finished before the handoff clear', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(clearedByFor(state, 'clear')).toBe('person')
+  })
+
+  test('It names the person when a foreign clear finished first and the person had cleared too', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(clearedByFor(state, 'deliver_to_person_clear')).toBe('person')
+  })
+})
+
+describe('hasSecondClear', () => {
+  test('It is true when the handoff cleared after a foreign clear finished first', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(hasSecondClear(state, 'clear')).toBe(true)
+  })
+
+  test('It is false when the handoff cleared and nothing cleared before it', () => {
+    expect(hasSecondClear(createState(settings), 'clear')).toBe(false)
+  })
+
+  test('It is false when the person cleared and the handoff issued no clear of its own', () => {
+    const state = createState(settings)
+    state.didForeignClearFinishFirst = true
+    expect(hasSecondClear(state, 'deliver_to_person_clear')).toBe(false)
+  })
 })

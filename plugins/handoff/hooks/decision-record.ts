@@ -35,6 +35,8 @@ export type TriggerValues = {
   held_restore?: GroupDelivery
   leftover_strips?: number
   cleared_by?: ClearedBy
+  second_clear?: true
+  delivery_session_id?: string
   clear_skipped?: ClearSkipCause
   compacted_before_clear?: true
   late_turn?: true
@@ -80,6 +82,8 @@ export type Evaluation = Trigger & {
   forkReason?: ForkReason
   note?: NoteDelivery
   clearedBy?: ClearedBy
+  hasSecondClear?: boolean
+  noteSessionId?: string
   clearSkipCause?: ClearSkipCause
   compactedBeforeClear?: boolean
   lateTurn?: boolean
@@ -147,7 +151,7 @@ export const recordFromEvaluation = (
   now: number,
   sessionId: string,
 ): DecisionRecord => {
-  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, clearSkipCause, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
+  const { action, point, signal, isBusy, contextTokens, cacheReadTokens, effectiveMode, reason, floorTokens, forkReason, note, clearedBy, hasSecondClear, noteSessionId, clearSkipCause, compactedBeforeClear, lateTurn, continueFields, heldFields } = evaluation
   const compactedFields: Pick<TriggerValues, 'compacted_before_clear'> = compactedBeforeClear ? { compacted_before_clear: true } : {}
   const lateTurnFields: Pick<TriggerValues, 'late_turn'> = lateTurn ? { late_turn: true } : {}
   return decisionRecord({
@@ -169,6 +173,8 @@ export const recordFromEvaluation = (
       ...(forkReason ? { fork_reason: forkReason } : {}),
       ...(note ? { note } : {}),
       ...(clearedBy ? { cleared_by: clearedBy } : {}),
+      ...(hasSecondClear ? { second_clear: true as const } : {}),
+      ...(noteSessionId ? { delivery_session_id: noteSessionId } : {}),
       ...(clearSkipCause ? { clear_skipped: clearSkipCause } : {}),
       ...compactedFields,
       ...lateTurnFields,

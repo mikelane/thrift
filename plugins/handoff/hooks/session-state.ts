@@ -1,5 +1,6 @@
 import type { PromptOrigin } from 'claude-code'
 import type { Offer } from '../types'
+import type { ClearedBy } from './decision-record'
 import type { Button, Mode } from './signals'
 
 type Settings = {
@@ -44,6 +45,23 @@ export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
 
 export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted' | 'deliver_to_person_clear' | 'clear'
+
+// The outcomes that end in a cleared session, whoever cleared it.
+export type ClearingOutcome = Extract<PreClearOutcome, 'deliver_to_person_clear' | 'clear'>
+
+// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
+const CLEARED_BY = {
+  clear: 'handoff',
+  deliver_to_person_clear: 'person',
+} as const satisfies Record<ClearingOutcome, ClearedBy>
+
+// "Person" means any clear this plugin did not issue: another plugin's or a scheduled one counts too.
+export const clearedByFor = (state: Pick<SessionState, 'didForeignClearFinishFirst'>, outcome: ClearingOutcome): ClearedBy =>
+  state.didForeignClearFinishFirst ? 'person' : CLEARED_BY[outcome]
+
+// The handoff's own clear ran after a foreign one had already cleared the session.
+export const hasSecondClear = (state: Pick<SessionState, 'didForeignClearFinishFirst'>, outcome: ClearingOutcome): boolean =>
+  outcome === 'clear' && state.didForeignClearFinishFirst
 
 const assertNever = (value: never): never => {
   throw new Error(`unhandled value: ${String(value)}`)

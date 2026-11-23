@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BandState } from '../types'
 import { WAITING, WAITING_STATUS } from './band-text'
-import type { ClearSkipCause, ClearedBy, DecisionReason, HandoffRequest, SettledHandoff, Trigger } from './decision-record'
+import type { ClearSkipCause, DecisionReason, HandoffRequest, SettledHandoff, Trigger } from './decision-record'
 import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
@@ -19,12 +19,6 @@ export type AbandonHandoff = (
   sessionId: string,
   clearSkipCause?: ClearSkipCause,
 ) => Promise<void>
-
-// Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
-export const CLEARED_BY = {
-  clear: 'handoff',
-  deliver_to_person_clear: 'person',
-} as const satisfies Record<Exclude<PreClearOutcome, 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted'>, ClearedBy>
 
 type ClearWindow = {
   outcome: PreClearOutcome

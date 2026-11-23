@@ -1,7 +1,7 @@
 import { describe, expect, test, type Engine } from 'claude-code/testing'
 
 import { WAITING as WAITING_BAND } from '../hooks/band-text'
-import { CLEARED_BY, abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
+import { abandonAfterWait, type AbandonCause } from '../hooks/clear-window'
 import type { ClearSkipCause, SettledHandoff } from '../hooks/decision-record'
 import { CLEAR_SKIPPED_MESSAGE } from '../hooks/handoff-note'
 import { agentIn, compacted, completeTurn, lastRecord, mountBand, startTurn, type World } from './helpers'
@@ -47,16 +47,6 @@ const abandoning = (cause: AbandonCause) => {
   }
   return { calls, done: abandonAfterWait(abandon, settledHandoff, cause, false, 'old-session') }
 }
-
-describe('CLEARED_BY', () => {
-  test('It names the handoff as the one that ran its own clear', () => {
-    expect(CLEARED_BY.clear).toBe('handoff')
-  })
-
-  test('It names the person as the one that ran the clear before the note was delivered', () => {
-    expect(CLEARED_BY.deliver_to_person_clear).toBe('person')
-  })
-})
 
 describe('showWaitingStatus', () => {
   test('It shows the waiting status on the band while a turn runs', async ($, on) => {

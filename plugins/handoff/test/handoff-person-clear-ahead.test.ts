@@ -142,6 +142,21 @@ describe('a person clear queued ahead of the handoff clear', () => {
   })
 })
 
+describe('second_clear', () => {
+  test('It records second_clear true when the person clear ran first and the handoff clear ran too', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    personClearsThenTurnRuns(world, $)
+    await finishNote()
+    expect(lastRecord(world).trigger_values).toMatchObject({ cleared_by: 'person', second_clear: true })
+  })
+
+  test('It leaves second_clear off when the handoff clear ran alone', async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await finishNote()
+    expect(lastRecord(world).trigger_values.second_clear).toBeUndefined()
+  })
+})
+
 describe('a person clear in flight when the handoff clear is queued, ending first', () => {
   test('It records cleared_by person because the in-flight person clear ended before the handoff clear', async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)

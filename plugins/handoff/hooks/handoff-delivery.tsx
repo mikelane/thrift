@@ -274,14 +274,16 @@ async function submitContinuePrompt(
   })
 }
 
+// What the clear that came before the delivery looked like: who ran it, and whether the handoff's own clear ran after another.
+type ClearContext = { hasTurnAfterNote: boolean; clearedBy: ClearedBy; hasSecondClear: boolean }
+
 export async function continueInFreshSession(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
   oldId: string,
   note: string,
-  hasTurnAfterNote: boolean,
-  clearedBy: ClearedBy,
+  { hasTurnAfterNote, clearedBy, hasSecondClear }: ClearContext,
 ): Promise<void> {
   // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
@@ -306,10 +308,11 @@ export async function continueInFreshSession(
   await writeRecord($, state, {
     ...settledHandoff.trigger,
     action: 'cleared',
-    ...(hasSessionMoved ? { reason: 'session_moved' as const } : {}),
+    ...(hasSessionMoved ? { reason: 'session_moved' as const, noteSessionId } : {}),
     sessionId: oldId,
     note: noteDelivery,
     clearedBy,
+    hasSecondClear,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     lateTurn: hasLateTurn,
     continueFields,
