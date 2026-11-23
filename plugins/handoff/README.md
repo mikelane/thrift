@@ -700,7 +700,12 @@ These need a live terminal and have not been watched yet:
   `cleared_by` is now `person` then). Also fixed in #89: after a `/resume` the handed-off line and toast
   stay out of the resumed session (`reason: session_moved`), a compaction that met a turn in flight skips
   the handoff's clear (`clear_skipped: turn_running`), and the continue prompt is skipped after the
-  person's clear (`continue_skip: cleared_by_person`). The live scenario has not confirmed these yet.
+  person's clear (`continue_skip: cleared_by_person`). Only the tests confirm these. The live scenario
+  `clear-resume-during-handoff` ran against this head and its 28 checks passed, but it prints the clear order and the
+  `/resume` path rather than judging them, and it checks only the invariants: the "Handed off." line stays out of the
+  resumed pane, and `clear_skipped: turn_running` carries no note. Not confirmed live: that `cleared_by` names the clear
+  that ran first, that `continue_skip: cleared_by_person` follows a person's clear, and that the note lands in the session
+  `delivery_session_id` names.
 - Anything with a bridge or SDK client, such as a prompt refused for its attachment, a remote
   prompt held through an abandon, and what the sender sees as the drop reason. The harness cannot
   stand in for a client.
