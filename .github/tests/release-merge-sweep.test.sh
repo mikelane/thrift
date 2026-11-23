@@ -124,7 +124,7 @@ test_a_sweep_skips_a_pr_whose_ci_is_still_running_at_its_head() {
 test_a_sweep_skips_a_pr_with_no_ci_run_at_its_head() {
   write_pulls "$(open_pr 111 $SHA_A)"
   assert_sweep_skips 111 "$SHA_A"
-  assert_file_has "$TEST_DIR/sweep-err" "no CI run for it alone at that head"
+  assert_file_has "$TEST_DIR/sweep-err" "no CI run at that head whose pr-record names it"
 }
 
 test_a_sweep_skips_a_pr_whose_ci_succeeded_only_at_an_older_sha() {
@@ -338,6 +338,89 @@ test_a_sweep_ignores_another_bases_run_that_lists_the_release_pr_too() {
     'CI completed success 2026-10-18T11:00:00Z - - - 999@old-feature,111 2' \
     'CI completed failure 2026-10-18T10:00:00Z - - - 999@old-feature,111 1'
   assert_sweep_skips 111 "$SHA_A"
+}
+
+# issue #117, the closed decoy: PR 999 (this release branch into a base whose ci.yml has no branch
+# filter) was closed, so its run's pull_requests lists only the release PR into main. The run's own
+# pr-record still names 999, so its success must not stand in for the release PR's failed CI run.
+test_a_sweep_ignores_a_successful_run_of_a_closed_pr_into_another_base() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" \
+    'CI completed success 2026-10-18T11:00:00Z - - - 111 2 999@old-feature' \
+    'CI completed failure 2026-10-18T10:00:00Z - - - 111 1'
+  assert_sweep_warns_ci_failed 111 "$SHA_A"
+}
+
+test_a_sweep_ignores_a_successful_run_whose_record_names_this_pr_into_another_base() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 111@old-feature'
+  assert_sweep_skips 111 "$SHA_A"
+}
+
+test_a_sweep_ignores_a_successful_run_with_no_record_and_says_why() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 none'
+  assert_sweep_skips 111 "$SHA_A"
+  assert_file_has "$TEST_DIR/sweep-err" "run 1 has no pr-record artifact"
+}
+
+test_a_sweep_ignores_a_successful_run_with_an_unreadable_record_and_says_why() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 corrupt'
+  assert_sweep_skips 111 "$SHA_A"
+  assert_file_has "$TEST_DIR/sweep-err" "run 1 has an unreadable pr-record"
+}
+
+test_a_sweep_says_what_a_mismatched_record_names() {
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1 999@old-feature'
+  assert_sweep_skips 111 "$SHA_A"
+  assert_file_has "$TEST_DIR/sweep-err" 'run 1 has a pr-record naming {"number":999,"base":"old-feature"}'
+}
+
+# The record, not pull_requests, ties a run to the PR: a run listing no PR at all still counts.
+test_a_sweep_counts_a_successful_run_whose_record_names_the_pr_even_when_pull_requests_is_empty() {
+  local got
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - none 1 111'
+  got=$(sweep)
+  [[ "$got" == "111 $SHA_A" ]] || fail "got [$got]"
+}
+
+test_the_ci_lookup_skips_a_newer_run_without_a_record_and_counts_the_older_one_that_has_one() {
+  write_runs "$SHA_A" \
+    'CI completed failure 2026-10-18T11:00:00Z - - - 111 2 none' \
+    'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  [[ "$(ci_status)" == 0 ]] || fail "got $(ci_status)"
+}
+
+test_the_ci_lookup_returns_2_when_the_artifact_list_cannot_be_read() {
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  : >"$TEST_DIR/artifacts-1.error"
+  [[ "$(ci_status)" == 2 ]] || fail "got $(ci_status)"
+}
+
+test_the_ci_lookup_returns_2_when_the_record_cannot_be_downloaded() {
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  : >"$TEST_DIR/record-5001.error"
+  [[ "$(ci_status)" == 2 ]] || fail "got $(ci_status)"
+}
+
+test_a_sweep_fails_and_names_the_pr_when_a_record_cannot_be_read() {
+  local status
+  write_pulls "$(open_pr 111 $SHA_A)"
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  : >"$TEST_DIR/artifacts-1.error"
+  sweep >"$TEST_DIR/sweep-out" 2>"$TEST_DIR/sweep-err"
+  status=$?
+  [[ "$status" != 0 ]] || fail "the sweep succeeded"
+  assert_file_has "$TEST_DIR/sweep-err" "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
+}
+
+test_the_ci_lookup_reads_records_with_the_runs_token() {
+  write_runs "$SHA_A" 'CI completed success 2026-10-18T10:00:00Z - - - 111 1'
+  RUNS_TOKEN=runs-tok ci_status >/dev/null
+  [[ "$(cat "$TEST_DIR/runs-token")" == runs-tok ]] || fail "got $(cat "$TEST_DIR/runs-token")"
 }
 
 # gh exits 0 but the open-PR list is not JSON: the sweep names the failed lookup and fails.

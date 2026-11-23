@@ -279,15 +279,74 @@ test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_raw_temp_fi
 
 test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" \
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 0
   assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"
 }
 
+# The CI path merges at the commit CI tested, so it checks the triggering run's own pr-record: a run
+# whose record does not name this PR into main (a decoy from another base, issue #117) merges nothing.
+run_ci_path() {
+  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 run_merge_step release_merge_run
+}
+
+test_a_ci_triggered_run_refuses_a_run_whose_record_names_another_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_record 211 999@old-feature
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "::warning title=Release PR #111 not merged::the CI run 211 has a pr-record naming"
+}
+
+test_a_ci_triggered_run_refuses_a_run_with_no_record() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_record 211 none
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "the CI run 211 has no pr-record artifact"
+}
+
+test_a_ci_triggered_run_refuses_a_run_with_an_unreadable_record() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  write_record 211 corrupt
+  run_ci_path
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "the CI run 211 has an unreadable pr-record"
+}
+
+test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_lookup_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/artifacts-211.error"
+  run_ci_path
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+}
+
+test_a_ci_triggered_run_fails_instead_of_refusing_when_the_record_download_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/record-5211.error"
+  run_ci_path
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+}
+
+test_a_ci_triggered_run_refuses_when_the_triggering_run_id_is_unknown() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID= run_merge_step release_merge_run
+  assert_exit_code 0
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_has "the CI run is unknown"
+}
+
 test_a_ci_triggered_run_with_no_open_pr_from_the_branch_merges_nothing_and_succeeds() {
   write_pulls
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" \
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
@@ -297,7 +356,7 @@ test_a_ci_triggered_run_with_no_open_pr_from_the_branch_merges_nothing_and_succe
 test_a_ci_triggered_run_fails_when_the_gate_cannot_fetch_the_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" \
+  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
@@ -415,7 +474,7 @@ test_a_sweep_run_does_not_merge_a_pr_whose_problem_check_fails() {
 
 test_a_run_triggered_by_a_workflow_that_only_contains_release_please_takes_the_single_pr_path() {
   write_pulls
-  TRIGGER='Release Please Dry Run' BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" \
+  TRIGGER='Release Please Dry Run' BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 0
   assert_out_has "No open PR from $RELEASE_BRANCH in $REPO. Nothing to merge."

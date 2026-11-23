@@ -37,6 +37,7 @@
             "BASE": "${{ github.event.repository.default_branch }}",
             "BOT_LOGIN": "${{ steps.app-token.outputs.app-slug }}[bot]",
             "BRANCH": "${{ github.event.workflow_run.head_branch }}",
+            "CI_RUN_ID": "${{ github.event.workflow_run.id }}",
             "CI_TESTED_SHA": "${{ github.event.workflow_run.head_sha }}",
             "GH_TOKEN": "${{ steps.app-token.outputs.token }}",
             "OWNER": "${{ github.repository_owner }}",
