@@ -65,7 +65,7 @@ test_start_waiting_handoff_skips_the_tool_call_check_when_the_evidence_pattern_i
   run_live 'source "$LIVE_DIR/handoff/common.sh"; live_init
     handoff_start() { :; }; say_apple() { :; }; type_text() { :; }; press() { :; }; session_of() { echo s; }
     pane_has() { [[ "$2" != *Bash* ]]; }; log_has() { [[ "$2" == *cc_turn_origin* || "$2" == *ui* ]]; }
-    WAITING_HANDOFF_TURN_EVIDENCE="" start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
+    WAITING_HANDOFF_TOOL_CALL_PATTERN="" start_waiting_handoff a b "do the task"; LIVE_VERDICT_REACHED=1; echo SETUP_HELD'
   assert_exit_code 0
   assert_out_has 'SETUP_HELD'
 }

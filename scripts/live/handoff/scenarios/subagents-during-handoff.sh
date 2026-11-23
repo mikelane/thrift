@@ -229,7 +229,7 @@ FOREGROUND_AGENTS='CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1'
 foreground_agent_during_the_wait() {
   local name=$1 peer=$2
   # The sleeps run in the subagent, whose tool calls the main session's log may not show: no check.
-  LIVE_SESSION_ENV=$FOREGROUND_AGENTS WAITING_HANDOFF_TOOLS=$SUBAGENT_TOOLS WAITING_HANDOFF_TURN_EVIDENCE='' start_waiting_handoff "$name" "$peer" \
+  LIVE_SESSION_ENV=$FOREGROUND_AGENTS WAITING_HANDOFF_TOOLS=$SUBAGENT_TOOLS WAITING_HANDOFF_TOOL_CALL_PATTERN='' start_waiting_handoff "$name" "$peer" \
     "Use the Agent tool with this prompt: $(agent_prompt "$SLEEP_CALLS_STEP_3") When the Agent call returns, reply with the word done." \
     --session-id "$STEP_3_ID"
   settle_for session_has_record "$STEP_3_ID" "$ENDS_THE_WAIT"

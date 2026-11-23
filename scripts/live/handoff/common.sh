@@ -117,20 +117,20 @@ start_waiting_handoff() {
   wait_for 'the band to press hand off' log_has "$name" 'ui\.press handoff/handoff'
   press "$peer" Enter
   wait_for_setup "the peer turn to start in '$name'" "$LIVE_SETUP_TIMEOUT" log_has "$name" 'cc_turn_origin=peer'
-  confirm_waiting_turn_runs "$name"
+  require_waiting_turn_tool_call "$name"
   wait_for 'the handoff to wait for the running turn' pane_has "$name" 'continues when the current turn ends'
 }
 
 # The tool call the peer's task depends on. The model sometimes answers without making it (#178), and
 # then the turn ends before the note does and the handoff never waits. An empty value skips the check.
-WAITING_HANDOFF_TURN_EVIDENCE_DEFAULT='Bash\(sleep'
-# the_turn_made_its_tool_call <name> <pattern>: the call shows in the debug log or on the screen.
-the_turn_made_its_tool_call() { log_has "$1" "$2" || pane_has "$1" "$2"; }
-# confirm_waiting_turn_runs <name>: ends the run as SETUP when the peer turn shows no tool call in time.
-confirm_waiting_turn_runs() {
-  local pattern=${WAITING_HANDOFF_TURN_EVIDENCE-$WAITING_HANDOFF_TURN_EVIDENCE_DEFAULT}
+WAITING_HANDOFF_TOOL_CALL_PATTERN_DEFAULT='Bash\(sleep'
+# turn_has_tool_call <name> <pattern>: the call shows in the debug log or on the screen.
+turn_has_tool_call() { log_has "$1" "$2" || pane_has "$1" "$2"; }
+# require_waiting_turn_tool_call <name>: ends the run as SETUP when the peer turn shows no tool call in time.
+require_waiting_turn_tool_call() {
+  local pattern=${WAITING_HANDOFF_TOOL_CALL_PATTERN-$WAITING_HANDOFF_TOOL_CALL_PATTERN_DEFAULT}
   [[ -n "$pattern" ]] || return 0
-  wait_for_setup "the peer turn in '$1' to run its sleep (no /$pattern/ in the debug log or on the screen)" "$LIVE_SETUP_TIMEOUT" the_turn_made_its_tool_call "$1" "$pattern"
+  wait_for_setup "the peer turn in '$1' to run its sleep (no /$pattern/ in the debug log or on the screen)" "$LIVE_SETUP_TIMEOUT" turn_has_tool_call "$1" "$pattern"
 }
 
 # The abandon of a handoff that waits for a turn: a `none` record with reason background_busy. The reason
