@@ -372,7 +372,7 @@ test_a_sweep_run_fails_when_the_ci_lookup_fails_and_nothing_else_is_a_candidate(
   : >"$TEST_DIR/runs-$SHA_A.error"
   TRIGGER='Release Please' run_merge_step release_merge_run
   assert_exit_code 1
-  assert_out_has "Cannot read the CI runs of PR #111 at $SHA_A;"
+  assert_out_has "::error title=Release PR #111 not merged::cannot read the CI runs at $SHA_A"
 }
 
 test_a_sweep_run_that_failed_reports_the_failure_instead_of_nothing_to_merge() {
