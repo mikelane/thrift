@@ -49,6 +49,10 @@ export const clearFailedMessage = (hasCompacted: boolean): string =>
 export const busyRefusalMessage = (hasCompacted: boolean): string =>
   `Background work is running, and its results would reach a fresh session without this conversation. ${sessionLeftLine(hasCompacted)} Type /handoff to hand off anyway.`
 
+// The compaction failed because a turn took the session (the person's command), so a clear would only drop uncompacted history.
+export const CLEAR_SKIPPED_MESSAGE =
+  'A command you typed took the session while the handoff compacted it, so the handoff did not clear. This session is unchanged. Type /handoff to try again.'
+
 export const resumeCommand = (sessionId: string): string => `claude --resume ${sessionId}`
 
 export const handedOffMessage = (oldSessionId: string): string =>

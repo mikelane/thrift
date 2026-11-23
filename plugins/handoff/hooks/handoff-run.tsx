@@ -7,6 +7,7 @@ import { CLEARED_BY, abandonAfterWait, type AbandonHandoff, waitForClearWindow }
 import {
   heldGroupFields,
   leftoverStripFields,
+  type ClearSkipped,
   type DecisionReason,
   type HandoffRequest,
   type SettledHandoff,
@@ -48,6 +49,7 @@ async function abandonHandoff(
   message: string,
   sessionId?: string,
   forkReason?: ForkReason,
+  clearSkipped?: ClearSkipped,
 ) {
   // Before the first await, as in continueInFreshSession: the caller took the held prompts in the same synchronous run, so a
   // prompt that arrives while they are restored is held until they, and every prompt that arrived meanwhile, are back.
@@ -62,6 +64,7 @@ async function abandonHandoff(
     action: 'none',
     reason,
     forkReason,
+    clearSkipped,
     compactedBeforeClear: settledHandoff.hasCompactedBeforeClear,
     heldFields: {
       ...heldGroupFields(groupHeldPrompts([...settledHandoff.heldGroups, ...late.prompts])),
@@ -126,11 +129,13 @@ async function runHandoff(
     const prepared = await prepareHandoff($, state, request)
     if (prepared === null) return
     const redraw = (band: BandState) => redrawBand($, state, band)
-    const abandon: AbandonHandoff = (settled, reason, message, sessionId) => abandonHandoff($, state, settled, reason, message, sessionId)
+    const abandon: AbandonHandoff = (settled, reason, message, sessionId, clearSkipped) =>
+      abandonHandoff($, state, settled, reason, message, sessionId, undefined, clearSkipped)
     const { outcome, hasCompactedBeforeClear, hasTurnAfterNote, clearing } = await waitForClearWindow($, state, request, prepared.oldId, redraw)
     const settleAfterWait = () => ({ ...settleHandoff(state, request), hasCompactedBeforeClear })
     if (outcome === 'abandon_session_ended') return await abandonAfterWait(abandon, settleAfterWait(), 'session_ended', hasCompactedBeforeClear, prepared.oldId)
     if (outcome === 'abandon_busy') return await abandonAfterWait(abandon, settleAfterWait(), 'busy', hasCompactedBeforeClear, prepared.oldId)
+    if (outcome === 'abandon_clear_skipped') return await abandonAfterWait(abandon, settleAfterWait(), 'clear_skipped', hasCompactedBeforeClear, prepared.oldId)
     // The person already cleared: the fresh session they made takes the note, and no second clear runs.
     let isCleared = true
     if (clearing !== null) {

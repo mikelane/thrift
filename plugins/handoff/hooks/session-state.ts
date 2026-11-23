@@ -43,21 +43,23 @@ export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 // What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
 
-export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'deliver_to_person_clear' | 'clear'
+export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_clear_skipped' | 'deliver_to_person_clear' | 'clear'
 
 const assertNever = (value: never): never => {
   throw new Error(`unhandled value: ${String(value)}`)
 }
 
-// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons.
-export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean): PreClearOutcome => {
+// A session end outranks busy work: the person's clear wins over busy by decision, and any other end abandons. A compaction that
+// a turn preempted comes last: it only keeps the handoff from clearing when nothing else decided the outcome.
+export const preClearOutcome = (sessionEnd: SessionEndBeforeClear | null, isBusy: boolean, isCompactionPreempted = false): PreClearOutcome => {
   switch (sessionEnd) {
     case 'other':
       return 'abandon_session_ended'
     case 'cleared_by_person':
       return 'deliver_to_person_clear'
     case null:
-      return isBusy ? 'abandon_busy' : 'clear'
+      if (isBusy) return 'abandon_busy'
+      return isCompactionPreempted ? 'abandon_clear_skipped' : 'clear'
     default:
       return assertNever(sessionEnd)
   }
