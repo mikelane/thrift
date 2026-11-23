@@ -145,25 +145,31 @@ test_every_problem_is_reported() {
     || fail "got [$got]"
 }
 
-test_an_unreadable_config_blocks_the_merge() {
-  local dir got
+test_an_unreadable_config_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local dir got status
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
   echo 'plugins/handoff/CHANGELOG.md' >"$dir/files"
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
-  got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
-  [[ "$got" == "cannot read the allowlist from $dir/missing.json" ]] || fail "got [$got]"
+  got=$(release_merge_problems "$dir/pr.json" "$dir/files" "$dir/missing.json" "$REPO" main "$BOT" "$SHA" 2>"$dir/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed allowlist lookup returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$dir/err" "cannot read the allowlist from $dir/missing.json"
 }
 
-test_an_unreadable_changed_files_list_blocks_the_merge() {
-  local dir got
+test_an_unreadable_changed_files_list_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local dir got status
   dir=$TEST_DIR
   write_pr "$dir/pr.json"
   stub_gh
   write_pulls "$(open_pr 111 "$SHA")"
-  got=$(release_merge_problems "$dir/pr.json" "$dir/missing-files" "$CONFIG" "$REPO" main "$BOT" "$SHA" 2>/dev/null)
-  [[ "$got" == "cannot read the changed files from $dir/missing-files" ]] || fail "got [$got]"
+  got=$(release_merge_problems "$dir/pr.json" "$dir/missing-files" "$CONFIG" "$REPO" main "$BOT" "$SHA" 2>"$dir/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed changed-files read returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$dir/err" "cannot read the changed files from $dir/missing-files"
 }
 
 # The inline `gh` behaves like the real one when `gh api` gets fields (-f) and no --method: it
@@ -275,12 +281,14 @@ test_an_open_pr_from_another_branch_is_not_a_sibling() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
-test_a_failed_open_pr_lookup_blocks_the_merge() {
-  local got
+test_a_failed_open_pr_lookup_fails_the_gate_instead_of_reading_as_a_refusal() {
+  local got status
   touch "$TEST_DIR/pulls.error"
-  got=$(gate_problems . 2>/dev/null)
-  [[ "$got" == 'cannot list the open PRs from release-please--branches--main--components--handoff' ]] \
-    || fail "got [$got]"
+  got=$(gate_problems . 2>"$TEST_DIR/err")
+  status=$?
+  [[ "$status" != 0 ]] || fail 'a failed PR list returned 0, which reads as "no problems" or a refusal'
+  [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
+  assert_file_has "$TEST_DIR/err" 'cannot list the open PRs from release-please--branches--main--components--handoff'
 }
 
 test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {

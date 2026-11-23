@@ -43,19 +43,22 @@ release_merge_changed_files() {
 # release_merge_sibling_problem <repo> <head-ref> <number>: prints a reason when an open PR other than
 # <number> has <head-ref> as its head in <repo> (head=<owner>:<branch> matches only this repository,
 # and the jq filter checks again). A run's pull_requests cannot say which PR triggered it, so with a
-# sibling no CI run can be tied to one PR. A lookup that fails prints a reason too: fail closed.
+# sibling no CI run can be tied to one PR. A lookup that fails returns 1 with its reason on stderr,
+# not a reason on stdout: a refusal is a policy decision, and a failed lookup is not one.
 release_merge_sibling_problem() {
   local siblings
   siblings=$(set -o pipefail; gh api --paginate --method GET "repos/$1/pulls?state=open&head=${1%%/*}:$2&per_page=100" \
     | jq -r --arg repo "$1" --arg ref "$2" --argjson number "$3" '.[]
         | select(.number != $number and .head.ref == $ref and .head.repo.full_name == $repo)
-        | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2"; return; }
+        | "#\(.number)"' | paste -sd, -) || { echo "cannot list the open PRs from $2" >&2; return 1; }
   [[ -z "$siblings" ]] || echo "another open PR shares the branch $2: $siblings"
 }
 
 # release_merge_problems <pr.json> <changed-files> <config> <repo> <base> <bot-login> <tested-sha>:
 # prints one line per reason the PR must not be merged, and nothing when it may be.
-# <pr.json> is the REST pull request object, <changed-files> lists one path per line.
+# <pr.json> is the REST pull request object, <changed-files> lists one path per line. A lookup that
+# fails (the open PR list, the allowlist, the changed-files list) returns 1 with its reason on
+# stderr and prints no reason, so the caller fails the job instead of reading it as a refusal.
 release_merge_problems() {
   local pr=$1 files=$2 config=$3 repo=$4 base=$5 bot=$6 tested_sha=$7 allowed file
   local pr_state pr_base_ref head_repo head_ref pr_author head_sha
@@ -72,10 +75,10 @@ release_merge_problems() {
   [[ "$pr_author" == "$bot" ]] || echo "the PR author is $pr_author, not $bot"
   head_sha=$(jq -r '.head.sha' "$pr")
   [[ "$head_sha" == "$tested_sha" ]] || echo "the PR head is $head_sha but CI tested $tested_sha"
-  release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")"
-  allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config"; return; }
+  release_merge_sibling_problem "$repo" "$head_ref" "$(jq -r '.number' "$pr")" || return 1
+  allowed=$(release_merge_allowlist "$config") || { echo "cannot read the allowlist from $config" >&2; return 1; }
   # A failed `<"$files"` skips the loop and prints no problem, which would pass every file.
-  [[ -r "$files" ]] || { echo "cannot read the changed files from $files"; return; }
+  [[ -r "$files" ]] || { echo "cannot read the changed files from $files" >&2; return 1; }
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     grep -qxF -- "$file" <<<"$allowed" || echo "$file is not a file a release PR changes"

@@ -167,6 +167,34 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_gate_cannot_be_checked() {
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# with_config <path> <command>...: runs the command with the allowlist read from <path>.
+with_config() {
+  RELEASE_MERGE_CONFIG=$1
+  shift
+  "$@"
+}
+
+# The next two run the real gate: a lookup that fails inside it must fail the step (the job turns
+# red) and still not merge, not read as a refusal that leaves the job green.
+test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/pulls.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_lacks "Not merging PR"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A"
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_lacks "Not merging PR"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
 test_the_merge_step_does_not_log_a_merged_line_after_a_lost_race() {
   stage_release_pr 111 "$SHA_A" handoff success
   jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" \
