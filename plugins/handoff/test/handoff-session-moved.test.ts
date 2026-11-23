@@ -213,3 +213,35 @@ describe('a /resume that moved the session after the note went to the prompt box
     expect(world.effects).toContain(`${LOG_PREFIX}${noteInBoxMessage('old-session')}`)
   })
 })
+
+// The append is refused, the note goes in as a prompt to the fresh session, and a /resume queued
+// behind the clear runs once the prompt has entered. The session id reads 'resumed-elsewhere' from then on.
+const submittedNoteThenResume = async ($: Engine, on: On) => {
+  const world = install($, on)
+  await startSession($)
+  world.appendDenied = true
+  let currentSessionId = world.sessionId
+  Object.defineProperty(world, 'sessionId', {
+    get: () => (world.effects.some(effect => effect.startsWith('entered:')) ? 'resumed-elsewhere' : currentSessionId),
+    set: (value: string) => {
+      currentSessionId = value
+    },
+  })
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  return world
+}
+
+describe('a /resume that moved the session after the note was submitted as a prompt', () => {
+  test('It records session_moved and names the session the note was submitted to', async ($, on) => {
+    const world = await submittedNoteThenResume($, on)
+    expect(lastRecord(world).trigger_values.note).toBe('submitted')
+    expect(lastRecord(world).trigger_values.reason).toBe('session_moved')
+    expect(lastRecord(world).trigger_values.delivery_session_id).toBe('new-session')
+  })
+
+  test('It does not show the handed-off line in the resumed session, which does not hold the note', async ($, on) => {
+    const world = await submittedNoteThenResume($, on)
+    expect(world.effects).not.toContain(`log:${handedOffMessage('old-session')}`)
+  })
+})

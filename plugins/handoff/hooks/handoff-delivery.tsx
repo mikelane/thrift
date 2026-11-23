@@ -165,17 +165,19 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
 
 type NoteDeliveryResult = { noteDelivery: NoteDelivery; noteSessionId: string | undefined }
 
-// The session id is read straight before the append, with nothing awaited between: a /clear or /resume queued behind the
-// handoff's clear may run while the delivery registers its command, and the note then goes to the session the person is in.
+// The session id is read straight before the append, and again straight before the prompt submit when the append is refused,
+// with nothing awaited between a read and its send: a /clear or /resume queued behind the handoff's clear may run while the
+// delivery registers its command or the append is refused, and the note then goes to the session the person is in.
 async function deliverNote(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
   message: string,
 ): Promise<NoteDeliveryResult> {
-  const noteSessionId = await readSessionId($, 'delivery')
-  if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId }
-  return { noteDelivery: await deliverNoteAsPrompt($, state, settledHandoff, message), noteSessionId }
+  const appendSessionId = await readSessionId($, 'delivery')
+  if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId: appendSessionId }
+  const submitSessionId = await readSessionId($, 'delivery')
+  return { noteDelivery: await deliverNoteAsPrompt($, state, settledHandoff, message), noteSessionId: submitSessionId }
 }
 
 async function deliverNoteAsPrompt(
@@ -318,9 +320,10 @@ export async function continueInFreshSession(
   // The session the note is delivered to; the continue prompt and the handed-off line compare against it.
   const { noteDelivery, noteSessionId } = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
   if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
-  // Only a note appended to a transcript is in the session whose id was read. A note in the prompt box, or one that never
-  // entered, is not in that session, so there is no session to point the person at.
-  const hasSessionMoved = noteDelivery === 'appended' && (await hasSessionMovedFrom($, noteSessionId))
+  // Only a note appended or submitted to a transcript is in the session whose id was read. A note in the prompt box, or one
+  // that never entered, is not in that session, so there is no session to point the person at.
+  const isInTranscript = noteDelivery === 'appended' || noteDelivery === 'submitted'
+  const hasSessionMoved = isInTranscript && (await hasSessionMovedFrom($, noteSessionId))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
