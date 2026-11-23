@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { handedOffMessage, noteInOtherSessionMessage } from '../hooks/handoff-note'
+import { handedOffMessage, noteInBoxMessage, noteInOtherSessionMessage } from '../hooks/handoff-note'
 import { install, lastRecord, runCommand, startSession, writingTheNote } from './helpers'
 
 const LOG_PREFIX = 'log:'
@@ -181,5 +181,35 @@ describe('a person session change that runs before the note is appended', () => 
   test('It shows the handed-off line in the resumed session that holds the note', async ($, on) => {
     const world = await personResumeInDeliveryGap($, on)
     expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
+  })
+})
+
+describe('a /resume that moved the session after the note went to the prompt box', () => {
+  const handoffWhoseNoteGoesToTheBox = async ($: Engine, on: On) => {
+    const world = await startedWorld($, on)
+    world.appendDenied = true
+    world.submitDropped = true
+    world.onFill = async () => {
+      world.onFill = undefined
+      world.sessionId = 'resumed-elsewhere'
+    }
+    return runHandoff($, world)
+  }
+
+  test('It does not say the note went to another session', async ($, on) => {
+    const world = await handoffWhoseNoteGoesToTheBox($, on)
+    expect(lastRecord(world).trigger_values.note).toBe('in_box')
+    expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
+  })
+
+  test('It records no session_moved reason or delivery_session_id', async ($, on) => {
+    const world = await handoffWhoseNoteGoesToTheBox($, on)
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+    expect(lastRecord(world).trigger_values.delivery_session_id).toBeUndefined()
+  })
+
+  test('It tells the person the note is in the prompt box, as it does without a move', async ($, on) => {
+    const world = await handoffWhoseNoteGoesToTheBox($, on)
+    expect(world.effects).toContain(`${LOG_PREFIX}${noteInBoxMessage('old-session')}`)
   })
 })

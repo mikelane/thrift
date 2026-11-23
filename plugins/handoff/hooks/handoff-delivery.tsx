@@ -318,7 +318,9 @@ export async function continueInFreshSession(
   // The session the note is delivered to; the continue prompt and the handed-off line compare against it.
   const { noteDelivery, noteSessionId } = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
   if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
-  const hasSessionMoved = await hasSessionMovedFrom($, noteSessionId)
+  // Only a note appended to a transcript is in the session whose id was read. A note in the prompt box, or one that never
+  // entered, is not in that session, so there is no session to point the person at.
+  const hasSessionMoved = noteDelivery === 'appended' && (await hasSessionMovedFrom($, noteSessionId))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)
