@@ -18,7 +18,10 @@ specific to this repo.
     - `dash`: three live-harness tests run the session command under a POSIX `sh`.
     - `ruby`: the release-merge workflow test parses `release-merge.yml` with Psych and compares
       the merge job as data. `ubuntu-latest` has Ruby.
-    - `python3`: the same test builds its workflow variants with it.
+    - `python3`: the same test builds its workflow variants with it, and the release-merge stubs
+      build the `pr-record` zips with it.
+    - `unzip`: the release-merge gate reads each CI run's `pr-record` artifact with it, in the
+      tests and in the workflow. `ubuntu-latest` and macOS have it.
   - It runs on bash 3.2 and 5.
   - Pass part of a test function's name (not a file name) to run only matching tests:
     `.github/tests/canary-report.sh [name-fragment]`. A fragment that matches no test exits 1.
