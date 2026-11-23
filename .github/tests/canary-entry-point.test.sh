@@ -103,6 +103,18 @@ test_a_test_file_exits_2_and_names_dash_when_dash_is_not_on_path() {
   assert_out_has 'The harness needs dash on PATH'
 }
 
+# The release-merge gate reads each pr-record zip with unzip, so a machine without it stops at the
+# prerequisite check with a message naming unzip, not with failures deep in the gate tests.
+test_a_test_file_exits_2_and_names_unzip_when_unzip_is_not_on_path() {
+  mkdir -p "$TEST_DIR/no-unzip"
+  ln -s "$(command -v dirname)" "$(command -v jq)" "$(command -v openssl)" "$(command -v dash)" \
+    "$(command -v ruby)" "$(command -v python3)" "$TEST_DIR/no-unzip/"
+  EXIT_CODE=0
+  PATH=$TEST_DIR/no-unzip "$BASH" "$HARNESS_DIR/trim-output.test.sh" > "$OUTPUT" 2>&1 || EXIT_CODE=$?
+  assert_exit_code 2
+  assert_out_has 'The harness needs unzip on PATH'
+}
+
 # Every test file honors the name fragment: a file that ignores it runs all its tests under a fragment
 # meant for another file, and the entry point cannot tell (#78).
 # The real entry point over the real test files: any file that runs a test makes it exit 0, not 1.

@@ -19,8 +19,9 @@ RELEASE_MERGE_LIB=$REPO_ROOT/.github/scripts/release-merge-lib.sh
 
 # dash: three live-harness tests run the session command under a POSIX sh. ruby: the release-merge
 # workflow test and the ci-trigger test parse workflow files with Psych. python3: the release-merge workflow test builds
-# its workflow variants with it.
-for tool in jq openssl dash ruby python3; do
+# its workflow variants with it, and the release-merge stubs build the pr-record zips with it. unzip: the release-merge
+# gate reads each CI run's pr-record zip with it.
+for tool in jq openssl dash ruby python3 unzip; do
   command -v "$tool" > /dev/null || { echo "The harness needs $tool on PATH. Install it, then run the harness again." >&2; exit 2; }
 done
 
