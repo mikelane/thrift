@@ -57,6 +57,7 @@ const defaultWorld = (clock: MockClock): World => ({
   onClearIssued: undefined,
   onClearEnded: undefined,
   onCommandRegistered: undefined,
+  onAppended: undefined,
   clearOrigins: [],
   answersPersonClear: false,
   box: { text: '', cursor: 0 },

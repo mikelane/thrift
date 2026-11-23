@@ -107,7 +107,7 @@ describe('continuing after a handoff', () => {
 
   test('It submits nothing and logs session_moved when the person moved to another session', CONTINUING, async ($, on) => {
     const world = install($, on)
-    world.onCommandRegistered = async () => {
+    world.onAppended = async () => {
       world.sessionId = 'resumed-elsewhere'
     }
     await startSession($)

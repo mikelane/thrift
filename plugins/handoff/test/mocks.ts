@@ -40,6 +40,8 @@ export type World = {
   // Runs after a clear ended the session, before the clear's run returns: what the engine ran next, in the fresh session.
   onClearEnded: (() => Promise<void>) | undefined
   onCommandRegistered: (() => Promise<void>) | undefined
+  // Runs inside an append that went through, after the note is in the transcript: what the engine ran once the note was in.
+  onAppended: (() => Promise<void>) | undefined
   // The origin kind and name of every clear that reached the mock, so a test can see whose clear ran.
   clearOrigins: string[]
   // A hook beneath the plugin answers a person's /clear in its place: no clear runs and no session ends.
@@ -112,12 +114,14 @@ export const installSessionMocks = (on: On, world: World) => {
     world.effects.push('compact')
     return world.compact()
   })
-  on('session.append', (_$, e, next) => {
+  on('session.append', async (_$, e, next) => {
     const first = e.message.content[0]
     world.effects.push('append')
     if (world.appendDenied) return { deny: 'refused' }
     world.appended.push(first?.type === 'text' ? String(first.text) : '')
-    return next(e)
+    const result = await next(e)
+    await world.onAppended?.()
+    return result
   })
 }
 

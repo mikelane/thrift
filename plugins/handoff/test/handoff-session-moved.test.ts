@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { handedOffMessage, noteInOtherSessionMessage } from '../hooks/handoff-note'
-import { install, lastRecord, runCommand, startSession } from './helpers'
+import { install, lastRecord, runCommand, startSession, writingTheNote } from './helpers'
 
 const LOG_PREFIX = 'log:'
 const TOAST_PREFIX = 'toast:'
@@ -22,11 +22,10 @@ const runHandoff = async ($: Engine, world: ReturnType<typeof install>) => {
   return world
 }
 
-// A /resume queued behind the clear switches the session once the note is in. Set after the session start, so only the
-// command registration that follows the clear sees it.
+// A /resume queued behind the clear switches the session once the note is in.
 const handoffThenResume = async ($: Engine, on: On) => {
   const world = await startedWorld($, on)
-  world.onCommandRegistered = async () => {
+  world.onAppended = async () => {
     world.sessionId = 'resumed-elsewhere'
   }
   return runHandoff($, world)
@@ -122,10 +121,9 @@ describe('a session id that cannot be read after the clear', () => {
 describe('a session id that cannot be read once the note is in, for hasSessionMovedFrom', () => {
   test('It shows the handed-off line and records no reason because the current session cannot be told', async ($, on) => {
     const world = await startedWorld($, on)
-    // The delivery registers /handoff straight after it reads the fresh id, so a denial set there hits only the read once the
-    // note is in. The hook removes itself, so the later registration from the clear's session-end tick sets no denial.
-    world.onCommandRegistered = async () => {
-      world.onCommandRegistered = undefined
+    // The delivery reads the id before the append, so a denial set once the note is in hits only the move check.
+    world.onAppended = async () => {
+      world.onAppended = undefined
       world.sessionIdDenials = 1
     }
     await runHandoff($, world)
@@ -134,5 +132,54 @@ describe('a session id that cannot be read once the note is in, for hasSessionMo
     expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
     expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+})
+
+// A person's /clear or /resume queued behind the handoff's clear runs before the note is appended, so the note goes into
+// the session the person is in, and that is the session the record and the lines must name.
+describe('a person session change that runs before the note is appended', () => {
+  const personClearInDeliveryGap = async ($: Engine, on: On) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      world.nextSessionId = 'person-session'
+      await runCommand($, 'clear')
+    }
+    await finishNote()
+    return world
+  }
+
+  const personResumeInDeliveryGap = async ($: Engine, on: On) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    world.onCommandRegistered = async () => {
+      world.onCommandRegistered = undefined
+      world.sessionId = 'resumed-elsewhere'
+    }
+    await finishNote()
+    return world
+  }
+
+  test('It does not record session_moved when a person clear put the note in the session the person is in', async ($, on) => {
+    const world = await personClearInDeliveryGap($, on)
+    expect(world.appended).toHaveLength(1)
+    expect(world.sessionId).toBe('person-session')
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
+  test('It does not point at a session that does not hold the note after a person clear', async ($, on) => {
+    const world = await personClearInDeliveryGap($, on)
+    expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
+  })
+
+  test('It does not record session_moved when a person resume put the note in the resumed session', async ($, on) => {
+    const world = await personResumeInDeliveryGap($, on)
+    expect(world.appended).toHaveLength(1)
+    expect(world.sessionId).toBe('resumed-elsewhere')
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
+  test('It shows the handed-off line in the resumed session that holds the note', async ($, on) => {
+    const world = await personResumeInDeliveryGap($, on)
+    expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
   })
 })

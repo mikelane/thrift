@@ -163,13 +163,27 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
+type NoteDeliveryResult = { noteDelivery: NoteDelivery; noteSessionId: string | undefined }
+
+// The session id is read straight before the append, with nothing awaited between: a /clear or /resume queued behind the
+// handoff's clear may run while the delivery registers its command, and the note then goes to the session the person is in.
 async function deliverNote(
   $: EngineInterface,
   state: SessionState,
   settledHandoff: SettledHandoff,
   message: string,
+): Promise<NoteDeliveryResult> {
+  const noteSessionId = await readSessionId($, 'delivery')
+  if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId }
+  return { noteDelivery: await deliverNoteAsPrompt($, state, settledHandoff, message), noteSessionId }
+}
+
+async function deliverNoteAsPrompt(
+  $: EngineInterface,
+  state: SessionState,
+  settledHandoff: SettledHandoff,
+  message: string,
 ): Promise<NoteDelivery> {
-  if (await appendNote($, message)) return 'appended'
   const sameOriginGroup = groupJoiningNote(settledHandoff.heldGroups, settledHandoff.isUnattended)
   const origin = sameOriginGroup?.origin ?? noteOrigin(settledHandoff.isUnattended)
   // SAFETY: the joined group is a scheduled one, and only a prompt typed at the composer leaves a copy in the box, so boxCopy is
@@ -298,12 +312,11 @@ export async function continueInFreshSession(
   // Before the first await, so no prompt passes unheld after settleHandoff took the held ones: from here a prompt that
   // arrives is held until the note, the held prompts, and every prompt that arrived meanwhile have been delivered.
   beginSending(state)
-  // The session the note is delivered to, read straight after the clear; the continue prompt and the handed-off line compare against it.
-  const noteSessionId = await readSessionId($, 'delivery')
   await registerHandoffCommand($)
   // Read once the clear has run: a turn the clear let in ahead of itself started in the old session after the last check.
   const hasLateTurn = state.hasLateTurn
-  const noteDelivery = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
+  // The session the note is delivered to; the continue prompt and the handed-off line compare against it.
+  const { noteDelivery, noteSessionId } = await deliverNote($, state, settledHandoff, handoffMessage(oldId, note, hasTurnAfterNote || hasLateTurn))
   if (noteTookGroupAlong(settledHandoff.heldGroups, settledHandoff.isUnattended, noteDelivery)) releaseCarried(state)
   const hasSessionMoved = await hasSessionMovedFrom($, noteSessionId)
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
