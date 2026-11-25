@@ -27,6 +27,25 @@ test_start_waiting_handoff_allows_the_tools_a_scenario_names_instead_of_the_defa
   assert_out_lacks 'CALL start a --allowedTools Bash(sleep *) '
 }
 
+# The peer's message is not a typed prompt, so the waiting session must be told to follow it (#182).
+test_start_waiting_handoff_starts_its_session_with_the_peer_named_as_the_source_of_steps() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"
+    handoff_start() { echo "CALL start $1 peer-steps=$LIVE_PEER_STEPS_SESSION"; }; say_apple() { :; }
+    wait_for() { :; }; wait_for_setup() { :; }; type_text() { :; }; press() { :; }; session_of() { echo "s-$1"; }
+    start_waiting_handoff a b "do the task"'
+  assert_exit_code 0
+  assert_out_has 'CALL start a peer-steps=s-b'
+}
+
+test_start_waiting_handoff_leaves_no_peer_steps_for_the_sessions_started_after_it() {
+  run_live 'source "$LIVE_DIR/handoff/common.sh"
+    handoff_start() { :; }; say_apple() { :; }; wait_for() { :; }; wait_for_setup() { :; }
+    type_text() { :; }; press() { :; }; session_of() { echo "s-$1"; }
+    start_waiting_handoff a b "do the task"; echo "AFTER peer-steps=${LIVE_PEER_STEPS_SESSION:-none}"'
+  assert_exit_code 0
+  assert_out_has 'AFTER peer-steps=none'
+}
+
 # run_waiting_setup <debug-log-lines> [peer-turn-lines]: start_waiting_handoff with the sessions stubbed and the
 # debug log of 'a' fixed. The peer-turn lines are appended when the peer is sent Enter, as the turn's own log.
 run_waiting_setup() {
