@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { type World, lastRecord, runCommand } from './helpers'
-import { FOREIGN_CLEAR_WAIT_MS } from '../hooks/handoff-delivery'
+import { FOREIGN_CLEAR_TIMEOUT_MS } from '../hooks/handoff-delivery'
 import { waitingForATurn } from './wait-for-turn-helpers'
 
 type Engine = Parameters<typeof runCommand>[0]
@@ -48,7 +48,7 @@ describe('a person clear that returns before the wait runs out', () => {
     const world = await waitingForATurn($, on)
     const { finishClear } = await personClearStillFinishing($, world)
     await finishClear()
-    await world.clock.advance(FOREIGN_CLEAR_WAIT_MS)
+    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
     expect(world.debugLines.filter(line => line.includes('did not return within'))).toEqual([])
   })
 })
@@ -57,21 +57,21 @@ describe('a person clear that never returns', () => {
   test('It delivers to the session the engine names once the bounded wait ran out', async ($, on) => {
     const world = await waitingForATurn($, on)
     await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_WAIT_MS)
+    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
     expect(world.appendedTo).toEqual(['old-session'])
   })
 
   test('It writes a debug line saying the clear did not return in time', async ($, on) => {
     const world = await waitingForATurn($, on)
     await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_WAIT_MS)
-    expect(world.debugLines).toContain(`handoff: a clear did not return within ${FOREIGN_CLEAR_WAIT_MS} ms, so the note goes to the session the engine names now`)
+    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
+    expect(world.debugLines).toContain(`handoff: a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
   })
 
   test('It holds the note back until the wait ran out', async ($, on) => {
     const world = await waitingForATurn($, on)
     await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_WAIT_MS - 1)
+    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS - 1)
     expect(world.appendedTo).toEqual([])
   })
 })

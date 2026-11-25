@@ -32,7 +32,7 @@ import {
   releaseCarriedGroup,
   removeResubmittedPrompt,
   takeLateArrivalsOrEndSending,
-  waitForForeignClears,
+  whenForeignClearsSettled,
   type BoxPlacement,
   type HeldPrompt,
   type HeldPromptGroup,
@@ -165,18 +165,18 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
 }
 
 // A clear that never returns must not hold the note back for good.
-export const FOREIGN_CLEAR_WAIT_MS = 5000
+export const FOREIGN_CLEAR_TIMEOUT_MS = 5000
 
 // The person's /clear can still be switching to the fresh session when the handoff resumes. The engine then still reports the
 // id of the cleared session, which the clear is about to empty. Wait for the clear to return, then read the id.
-async function waitForRunningForeignClears($: EngineInterface, state: SessionState): Promise<void> {
+async function waitForForeignClearsOrTimeOut($: EngineInterface, state: SessionState): Promise<void> {
   let timer: { cancel: () => void } | undefined
   const timedOut = new Promise<boolean>(resolve => {
-    timer = $.clock.after(FOREIGN_CLEAR_WAIT_MS, () => resolve(true))
+    timer = $.clock.after(FOREIGN_CLEAR_TIMEOUT_MS, () => resolve(true))
   })
-  const hasTimedOut = await Promise.race([waitForForeignClears(state).then(() => false), timedOut])
+  const hasTimedOut = await Promise.race([whenForeignClearsSettled(state).then(() => false), timedOut])
   timer?.cancel()
-  if (hasTimedOut) debug($, `a clear did not return within ${FOREIGN_CLEAR_WAIT_MS} ms, so the note goes to the session the engine names now`)
+  if (hasTimedOut) debug($, `a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
 }
 
 type NoteDeliveryResult = { noteDelivery: NoteDelivery; noteSessionId: string | undefined }
@@ -190,7 +190,7 @@ async function deliverNote(
   settledHandoff: SettledHandoff,
   message: string,
 ): Promise<NoteDeliveryResult> {
-  await waitForRunningForeignClears($, state)
+  await waitForForeignClearsOrTimeOut($, state)
   const appendSessionId = await readSessionId($, 'delivery (append)')
   if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId: appendSessionId }
   const submitSessionId = await readSessionId($, 'delivery (submit)')
