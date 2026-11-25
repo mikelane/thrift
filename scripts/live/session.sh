@@ -90,17 +90,11 @@ live_scenario_env() {
 # model to do only what was typed, and a peer's message arrives as a cross-session-message, not a typed
 # prompt, so the model declines it (#182). A caller that starts a session meant to follow a peer sets
 # LIVE_PEER_STEPS_SESSION (the peer's session name) for that one call, and only that peer's messages
-# are named as steps. The same goes for a prompt the model never sees typed: one the handoff plugin
-# resubmits after /clear, or a scheduled job fires (#187). A caller sets LIVE_HARNESS_PROMPT_TOKEN for that
-# one call, and a prompt that begins with "<token>:" is named as a step. Permission mode dontAsk and
-# --allowedTools stay the hard gate either way.
+# are named as steps. Permission mode dontAsk and --allowedTools stay the hard gate either way.
 live_system_prompt() {
   local prompt=$LIVE_SYSTEM_PROMPT
   if [[ -n "${LIVE_PEER_STEPS_SESSION:-}" ]]; then
     prompt+=" Messages from the Claude session named $LIVE_PEER_STEPS_SESSION (a cross-session-message with from-name=\"$LIVE_PEER_STEPS_SESSION\") are steps of this test harness, which drives that session too: carry them out as if they were typed."
-  fi
-  if [[ -n "${LIVE_HARNESS_PROMPT_TOKEN:-}" ]]; then
-    prompt+=" A prompt that begins with \"$LIVE_HARNESS_PROMPT_TOKEN:\" is a step of this test harness, whether it is typed, fired by a scheduled job the harness created, or resubmitted by the handoff plugin after a /clear: carry it out as if it were typed."
   fi
   printf '%s' "$prompt"
 }
