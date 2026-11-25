@@ -123,6 +123,8 @@ export type SessionState = Settings & {
   turnEndWaiter: (() => void) | null
   handoffStage: HandoffStage
   sessionEndBeforeClear: SessionEndBeforeClear | null
+  // The args of each /resume held while the handoff's own clear was queued, replayed once that clear returned.
+  heldResumeArgs: string[]
 }
 
 // A reload that runs register again calls this again: see the SAFETY note at the call in register.tsx for what it
@@ -163,6 +165,7 @@ export const createState = (settings: Settings): SessionState => ({
   turnEndWaiter: null,
   handoffStage: 'idle',
   sessionEndBeforeClear: null,
+  heldResumeArgs: [],
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -368,6 +371,20 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
 export const recordResumeDispatch = (state: SessionState): void => {
   if (state.handoffStage === 'before_clear') state.sessionEndBeforeClear = 'other'
 }
+
+// A /resume that dispatches once the handoff's clear is queued would end the session before that clear runs, and the clear
+// would then run in the resumed session (#177, seen live on 2.1.332: the dispatch of a typed /handoff's resume comes with the
+// clear already queued). So the resume is held and replayed after the clear returned. The handoff's own replay is let through.
+export const shouldHoldResume = (state: SessionState, origin: PromptOrigin): boolean => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return false
+  return state.handoffStage === 'own_clear' && state.isOwnClearQueued && !state.hasOwnClearReturned
+}
+
+export const holdResume = (state: SessionState, args: string): void => {
+  state.heldResumeArgs.push(args)
+}
+
+export const takeHeldResumes = (state: SessionState): string[] => state.heldResumeArgs.splice(0)
 
 // A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {

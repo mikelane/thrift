@@ -261,6 +261,30 @@ test('It does not clear the session the person is resuming when the resume was d
   expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', action: 'none', trigger_values: { reason: 'session_ended' } })
 })
 
+test('It holds a resume dispatched while its clear is queued, then replays it after the clear returned', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.onClearIssued = async () => {
+    await $.command.run({ command: 'resume', args: 'abc', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.effects.filter(effect => effect === 'clear' || effect.startsWith('resume:'))).toEqual(['clear', 'resume:abc'])
+})
+
+test('It logs a replayed resume that throws and still ends the handoff', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  world.resumeThrows = true
+  await startSession($)
+  world.onClearIssued = async () => {
+    await $.command.run({ command: 'resume', args: 'abc', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(world.debugLines.some(line => line.includes('/resume replay failed'))).toBe(true)
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared' })
+})
+
 test('It logs the cleared record against the handoff session after compacting', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)

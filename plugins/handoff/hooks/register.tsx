@@ -39,7 +39,9 @@ import {
   forgetForeignClear,
   recordForeignClear,
   recordForeignClearReturned,
+  holdResume,
   recordResumeDispatch,
+  shouldHoldResume,
   recordSessionEnd,
   releaseTurnEndWaiter,
   resetForNewSession,
@@ -205,7 +207,13 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
   }).catch(($, e, next) => next(e))
 
   // Seen at dispatch, so a /resume the person typed during the compaction is known before the handoff queues its clear.
+  // A resume that dispatches with the handoff's clear already queued is answered here and replayed after the clear returned
+  // (replayHeldResumes in clear-window.tsx), so the clear runs in the session the handoff started in.
   on('command.run', { command: 'resume' }, ($, e, next) => {
+    if (shouldHoldResume(state, e.origin)) {
+      holdResume(state, e.args)
+      return { text: 'The handoff is clearing this session first; your /resume runs right after.' }
+    }
     recordResumeDispatch(state)
     return next(e)
   }).catch(($, e, next) => next(e))

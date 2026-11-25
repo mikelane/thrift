@@ -7,7 +7,7 @@ import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
 import { writeRecord } from './record-writer'
-import { beginOwnClear, markOwnClearReturned, preClearOutcome, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
+import { beginOwnClear, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
@@ -124,9 +124,28 @@ export async function waitForClearWindow(
   beginOwnClear(state)
   const clearing = clearSession($).then(isCleared => {
     markOwnClearReturned(state)
+    replayHeldResumes($, state)
     return isCleared
   })
   return { ...clearWindow, clearing }
+}
+
+// Each /resume held while the clear was queued runs now, one after another, in a later tick: the engine refuses a command
+// started inside the hook it waits on. A failed replay goes to the debug log, and the rest still run.
+function replayHeldResumes($: EngineInterface, state: SessionState): void {
+  const heldArgs = takeHeldResumes(state)
+  if (heldArgs.length === 0) return
+  $.clock.after(0, () => {
+    void (async () => {
+      for (const args of heldArgs) {
+        try {
+          await $.command.run({ command: 'resume', args })
+        } catch (error) {
+          debug($, `/resume replay failed: ${String(error)}`)
+        }
+      }
+    })()
+  })
 }
 
 export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'compaction_preempted'
