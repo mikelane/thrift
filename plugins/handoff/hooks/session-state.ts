@@ -125,6 +125,8 @@ export type SessionState = Settings & {
   sessionEndBeforeClear: SessionEndBeforeClear | null
   // The args of each /resume held while the handoff's own clear was queued, replayed once that clear returned.
   heldResumeArgs: string[]
+  // True from the clear's return until the held resumes have run: the person is about to leave the fresh session.
+  isResumeReplayPending: boolean
 }
 
 // A reload that runs register again calls this again: see the SAFETY note at the call in register.tsx for what it
@@ -166,6 +168,7 @@ export const createState = (settings: Settings): SessionState => ({
   handoffStage: 'idle',
   sessionEndBeforeClear: null,
   heldResumeArgs: [],
+  isResumeReplayPending: false,
 })
 
 export const resetForNewSession = (state: SessionState): void => {

@@ -60,6 +60,7 @@ test('It returns the settings with a closed gate and an empty session from creat
     handoffStage: 'idle',
     sessionEndBeforeClear: null,
     heldResumeArgs: [],
+    isResumeReplayPending: false,
   })
 })
 

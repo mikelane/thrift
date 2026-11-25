@@ -323,7 +323,8 @@ export async function continueInFreshSession(
   // Only a note appended or submitted to a transcript is in the session whose id was read. A note in the prompt box, or one
   // that never entered, is not in that session, so there is no session to point the person at.
   const isInTranscript = noteDelivery === 'appended' || noteDelivery === 'submitted'
-  const hasSessionMoved = isInTranscript && (await hasSessionMovedFrom($, noteSessionId))
+  // A held /resume still waiting to replay moves the person the moment it runs, so the note's line must not claim this session.
+  const hasSessionMoved = isInTranscript && (state.isResumeReplayPending || (await hasSessionMovedFrom($, noteSessionId)))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)

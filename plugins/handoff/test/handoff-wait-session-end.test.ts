@@ -272,6 +272,18 @@ test('It holds a resume dispatched while its clear is queued, then replays it af
   expect(world.effects.filter(effect => effect === 'clear' || effect.startsWith('resume:'))).toEqual(['clear', 'resume:abc'])
 })
 
+test('It records session_moved and shows no toast when a held resume will move the person off the fresh session', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.onClearIssued = async () => {
+    await $.command.run({ command: 'resume', args: 'abc', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { reason: 'session_moved', delivery_session_id: 'new-session' } })
+  expect(world.effects.filter(effect => effect.startsWith('toast:') && effect.includes('Handed off.'))).toEqual([])
+})
+
 test('It logs a replayed resume that throws and still ends the handoff', COMPACTING, async ($, on) => {
   const world = install($, on)
   world.resumeThrows = true
