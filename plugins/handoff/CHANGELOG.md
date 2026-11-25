@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/mikelane/thrift/compare/handoff-v0.3.3...handoff-v0.3.4) (2026-11-25)
+
+
+### Bug Fixes
+
+* **handoff:** keep the handoff's clear out of a session the person resumed ([#188](https://github.com/mikelane/thrift/issues/188)) ([464c23c](https://github.com/mikelane/thrift/commit/464c23c2bb6f4ab0f6eb4d14bac4e0f589f933dd))
+
 ## [0.3.3](https://github.com/mikelane/thrift/compare/handoff-v0.3.2...handoff-v0.3.3) (2026-11-23)
 
 
