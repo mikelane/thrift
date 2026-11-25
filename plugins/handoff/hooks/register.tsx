@@ -39,6 +39,7 @@ import {
   forgetForeignClear,
   recordForeignClear,
   recordForeignClearReturned,
+  recordResumeDispatch,
   recordSessionEnd,
   releaseTurnEndWaiter,
   resetForNewSession,
@@ -201,6 +202,12 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
       forgetForeignClear(state)
       throw error
     }
+  }).catch(($, e, next) => next(e))
+
+  // Seen at dispatch, so a /resume the person typed during the compaction is known before the handoff queues its clear.
+  on('command.run', { command: 'resume' }, ($, e, next) => {
+    recordResumeDispatch(state)
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('session.end', async ($, e, next) => {

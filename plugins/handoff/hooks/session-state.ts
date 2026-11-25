@@ -360,6 +360,15 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
 
+// A /resume that starts dispatching before the handoff queues its clear will end this session, and the clear queued after it
+// would run in the resumed one (#177). The command.run hook sees the resume at dispatch, so the handoff treats it as the end
+// it will cause. A resume that dispatches after the clear is queued runs behind it: only before_clear is the handoff's business.
+// SAFETY: a resume that then fails or is cancelled leaves the session as it was, and the handoff is abandoned all the same.
+// That costs a note, never a clear in the wrong session.
+export const recordResumeDispatch = (state: SessionState): void => {
+  if (state.handoffStage === 'before_clear') state.sessionEndBeforeClear = 'other'
+}
+
 // A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {
   state.isTurnRunning = true

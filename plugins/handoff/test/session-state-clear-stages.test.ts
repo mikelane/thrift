@@ -6,6 +6,7 @@ import {
   beginOwnClear,
   claimPending,
   recordSessionEnd,
+  recordResumeDispatch,
   createState,
   endHandoff,
 } from '../hooks/session-state'
@@ -127,4 +128,33 @@ test('It refuses a taken pending slot and keeps the first claim from claimPendin
   claimPending(state, 'compact')
   expect(claimPending(state, 'handoff')).toBe(false)
   expect(state.pending).toBe('compact')
+})
+
+test('It records a resume dispatched before the handoff clears as another end in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It lets a resume dispatch outrank an earlier clear by the person in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It ignores a resume dispatched when no handoff is pending in recordResumeDispatch', () => {
+  const state = createState(settings)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It ignores a resume dispatched after the handoff queued its clear in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBeNull()
 })

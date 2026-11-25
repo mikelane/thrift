@@ -248,6 +248,19 @@ test('It logs compaction_vetoed against the session the handoff started in when 
   expect(vetoed.map(record => record.session_id)).toEqual(['old-session'])
 })
 
+test('It does not clear the session the person is resuming when the resume was dispatched during the compaction', COMPACTING, async ($, on) => {
+  const world = install($, on)
+  await startSession($)
+  world.compact = async () => {
+    await runCommand($, 'resume')
+    return compacted(48_000)
+  }
+  await runCommand($, 'handoff')
+  await world.clock.settle()
+  expect(clearCount(world)).toBe(0)
+  expect(lastRecord(world)).toMatchObject({ session_id: 'old-session', action: 'none', trigger_values: { reason: 'session_ended' } })
+})
+
 test('It logs the cleared record against the handoff session after compacting', COMPACTING, async ($, on) => {
   const world = install($, on)
   await startSession($)
