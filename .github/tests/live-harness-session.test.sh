@@ -74,6 +74,24 @@ test_a_session_with_a_peer_gets_exactly_one_system_prompt_flag() {
   assert_file_matches "$OUTPUT" '^1$'
 }
 
+# A prompt the handoff plugin resubmits after /clear, or a scheduled job fires, is not typed either, so
+# the base prompt makes the fresh session refuse it (#187). A caller opts in with a token for one call.
+test_a_session_with_a_prompt_token_is_told_prompts_beginning_with_it_are_harness_steps() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_HARNESS_PROMPT_TOKEN=SCHEDTOKEN live_claude_command a'
+  assert_out_has 'A prompt that begins with "SCHEDTOKEN:" is a step of this test harness, whether it is typed, fired by a scheduled job the harness created, or resubmitted by the handoff plugin after a /clear: carry it out as if it were typed.'
+}
+
+test_a_session_without_a_prompt_token_is_not_told_about_harness_prompts() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; live_claude_command a'
+  assert_out_lacks 'scheduled job the harness created'
+}
+
+test_a_session_with_a_peer_and_a_prompt_token_is_told_both() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_PEER_STEPS_SESSION=live-1-x-b LIVE_HARNESS_PROMPT_TOKEN=SCHEDTOKEN live_claude_command a'
+  assert_out_has 'named live-1-x-b'
+  assert_out_has 'begins with "SCHEDTOKEN:"'
+}
+
 test_the_peer_steps_prompt_reaches_claude_whole_through_a_posix_sh() {
   write_live_stubs
   printf '#!/bin/sh\nfor word in "$@"; do echo "ARG=$word"; done\n' > "$TEST_DIR/bin/claude"
