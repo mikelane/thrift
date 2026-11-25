@@ -7,8 +7,19 @@ source "$(dirname "${BASH_SOURCE[0]}")/live-harness-lib.sh"
 
 CLEARED_CARRIED='{"action":"cleared","trigger_values":{"point":"command","held_groups":1,"held_unattended":true,"handoff_unattended":false,"held_other_delivery":"submitted"}}'
 STRONG_HANDED_OFF='{"action":"cleared","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":63000,"handoff_unattended":true}}'
-SUBMIT_LINE='prompt.submit (handoff): "SCHEDTOKEN: run these Bash commands"'
+SUBMIT_LINE='prompt.submit (handoff): 12 chars'
+CARRIED_TEXT='SCHEDTOKEN: run these Bash commands'
 
+# write_fresh_transcript <texts...>: the fresh session's transcript, one plain user entry per text.
+write_fresh_transcript() {
+  local text
+  : > "$TEST_DIR/fresh.jsonl"
+  for text in "$@"; do
+    jq -nc --arg text "$text" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
+  done
+}
+
+# A test with no fresh transcript touches $TEST_DIR/no-transcript; otherwise one holding the carried prompt is made.
 # run_mode_case <first-cleared-record> <turn-end-record> <debug-log-line> [mode] [fire-offset]: run_mode for
 # the mode (default `ask`) in session a. The first record gets effective_mode set to the mode unless it
 # names one. The fire offset is the seconds from now the stubbed schedule_prompt answers (default: just
@@ -17,6 +28,7 @@ SUBMIT_LINE='prompt.submit (handoff): "SCHEDTOKEN: run these Bash commands"'
 # the turn end writes the second, so each lands after the baseline the scenario took. The job "fires" 2 s
 # past the lead: at 1 s a clock tick before the window check made a loaded run abort as a missed window.
 run_mode_case() {
+  [[ -f "$TEST_DIR/fresh.jsonl" || -f "$TEST_DIR/no-transcript" ]] || write_fresh_transcript "$CARRIED_TEXT"
   printf '%s\n' "$3" > "$TEST_DIR/debug-a.log"
   printf '%s\n' "$1" | jq -c --arg mode "${4:-ask}" '.trigger_values.effective_mode //= $mode' > "$TEST_DIR/first-record"
   printf '%s\n' "$2" > "$TEST_DIR/turn-end-record"
@@ -25,7 +37,9 @@ run_mode_case() {
     live_init
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
     PUSH_REPO=/fixture/work
-    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; }; say_apple() { :; }; submit() { :; }; stop_session() { :; }
+    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; echo "${LIVE_HARNESS_PROMPT_TOKEN:-unset}" > "'"$TEST_DIR"'/prompt-token"; }
+    say_apple() { :; }; submit() { :; }; stop_session() { :; }
+    fresh_transcript_path() { [[ -f "'"$TEST_DIR"'/fresh.jsonl" ]] && echo "'"$TEST_DIR"'/fresh.jsonl" || true; }
     turns_done_above() { :; }; show_pane() { :; }; show_log() { :; }
     schedule_prompt() { echo $(($(date +%s) + '"$offset"')); }
     wait_for() {
@@ -84,10 +98,31 @@ test_it_fails_when_the_held_prompt_was_not_carried_as_an_unattended_group() {
   assert_out_has 'FAIL  [ask] the handoff carried the scheduled prompt as an unattended group'
 }
 
-test_it_fails_when_the_carried_prompt_was_never_submitted_in_the_fresh_session() {
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing submitted'
+test_it_fails_when_the_fresh_transcript_has_no_user_message_with_the_carried_prompt() {
+  write_fresh_transcript 'something else'
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
   assert_exit_code 1
   assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+}
+
+test_it_fails_and_says_so_when_no_fresh_transcript_is_found() {
+  touch "$TEST_DIR/no-transcript"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
+  assert_exit_code 1
+  assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+  assert_out_has 'no fresh session transcript found'
+}
+
+test_it_passes_when_the_carried_prompt_is_in_the_transcript_and_the_log_holds_no_text() {
+  write_fresh_transcript 'say the word apple' "$CARRIED_TEXT"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing logged'
+  assert_exit_code 0
+  assert_out_has 'PASS s (3 checks)'
+}
+
+test_the_session_is_started_with_the_scheduled_token_as_the_harness_prompt_token() {
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
+  assert_file_has "$TEST_DIR/prompt-token" 'SCHEDTOKEN'
 }
 
 test_it_fails_when_the_prompt_was_left_in_the_box_instead_of_submitted() {
@@ -205,8 +240,9 @@ test_it_fails_when_an_advised_turn_end_carries_handoff_unattended() {
   assert_out_has 'FAIL  [ask] the strong turn end after it handed off, as a scheduled turn does'
 }
 
-test_it_fails_when_the_submit_in_the_log_is_not_the_scheduled_prompt() {
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'prompt.submit (handoff): "some other prompt"'
+test_it_fails_when_the_transcript_only_quotes_the_token_inside_another_message() {
+  write_fresh_transcript "I read SCHEDTOKEN: in the note"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
   assert_exit_code 1
   assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
 }

@@ -92,7 +92,10 @@ run_mode() {
   section "mode $mode"
   baseline=$(decision_lines)
   set_mode "$mode"
-  handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C $PUSH_REPO push *),Bash(seq *)"
+  # The fresh session gets the carried prompt from the plugin after /clear, not typed, and the harness's base
+  # system prompt makes it refuse that. The token names it a harness step; dontAsk and --allowedTools stay
+  # the hard gate on what it may run.
+  LIVE_HARNESS_PROMPT_TOKEN=$SCHEDULED_TOKEN handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C $PUSH_REPO push *),Bash(seq *)"
   say_apple "$name"
   fire=$(schedule_prompt "$name")
   wait_for "the scheduling turn of '$name' to end" turns_done_above "$name" 1
@@ -121,7 +124,7 @@ run_mode() {
   check "[$mode] the handoff carried the scheduled prompt as an unattended group" \
     "the cleared record was: $(first_cleared "$baseline")" carried_unattended "$baseline"
   check "[$mode] the carried prompt was submitted in the fresh session" \
-    "the cleared record was: $(first_cleared "$baseline"); the log has no plugin submit of the prompt" carried_prompt_submitted "$baseline" "$name"
+    "the cleared record was: $(first_cleared "$baseline"); $(carried_prompt_evidence "$baseline")" carried_prompt_submitted "$baseline"
   check "[$mode] the strong turn end after it handed off, as a scheduled turn does" \
     "the turn end record was: $(turn_end_record "$after_handoff")" turn_end_handed_off "$after_handoff"
   stop_session "$name"
@@ -140,9 +143,21 @@ show_records_after() {
 carried_unattended() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_groups == 1 and .held_unattended == true and .handoff_unattended == false)' >/dev/null
 }
+# The plugin's debug line no longer carries the submitted text (2.1.332), so the prompt is read from the fresh
+# session's transcript.
+fresh_transcript_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1" | jq -r '.session_id')"; }
 carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
-    && log_has "$2" "prompt\\.submit \\(handoff\\): \"$SCHEDULED_TOKEN"
+    && transcript_has_user_text_starting "$(fresh_transcript_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
+}
+carried_prompt_evidence() {
+  local transcript
+  transcript=$(fresh_transcript_of_first_handoff "$1")
+  if [[ -n "$transcript" ]]; then
+    echo "the fresh session's transcript $transcript has no user message starting with $SCHEDULED_TOKEN:"
+  else
+    echo "no fresh session transcript found for the old session"
+  fi
 }
 # In `act` a person's strong turn end hands off too; handoff_unattended is what says the turn was the scheduled one.
 turn_end_handed_off() { turn_end_record "$1" | jq -e 'select(.action == "cleared" and .trigger_values.handoff_unattended == true)' >/dev/null; }
