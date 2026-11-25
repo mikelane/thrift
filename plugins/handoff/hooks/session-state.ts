@@ -123,6 +123,11 @@ export type SessionState = Settings & {
   turnEndWaiter: (() => void) | null
   handoffStage: HandoffStage
   sessionEndBeforeClear: SessionEndBeforeClear | null
+  // The args of each /resume held while the handoff's own clear was queued, replayed once that clear returned.
+  heldResumeArgs: string[]
+  // From the clear's return until the held resumes have run: resolves true when at least one replayed /resume returned
+  // without throwing (the person left the fresh session), false when every one threw. Never rejects. Null when none is replaying.
+  heldResumeReplay: Promise<boolean> | null
 }
 
 // A reload that runs register again calls this again: see the SAFETY note at the call in register.tsx for what it
@@ -163,6 +168,8 @@ export const createState = (settings: Settings): SessionState => ({
   turnEndWaiter: null,
   handoffStage: 'idle',
   sessionEndBeforeClear: null,
+  heldResumeArgs: [],
+  heldResumeReplay: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -359,6 +366,29 @@ export const recordSessionEnd = (state: SessionState, reason: string): void => {
   if (state.sessionEndBeforeClear === 'other') return
   state.sessionEndBeforeClear = reason === 'clear' ? 'cleared_by_person' : 'other'
 }
+
+// A /resume that starts dispatching before the handoff queues its clear will end this session, and the clear queued after it
+// would run in the resumed one (#177). The command.run hook sees the resume at dispatch, so the handoff treats it as the end
+// it will cause. A resume that dispatches after the clear is queued runs behind it: only before_clear is the handoff's business.
+// SAFETY: a resume that then fails or is cancelled leaves the session as it was, and the handoff is abandoned all the same.
+// That costs a note, never a clear in the wrong session.
+export const recordResumeDispatch = (state: SessionState): void => {
+  if (state.handoffStage === 'before_clear') state.sessionEndBeforeClear = 'other'
+}
+
+// A /resume that dispatches once the handoff's clear is queued would end the session before that clear runs, and the clear
+// would then run in the resumed session (#177, seen live on 2.1.332: the dispatch of a typed /handoff's resume comes with the
+// clear already queued). So the resume is held and replayed after the clear returned. The handoff's own replay is let through.
+export const shouldHoldResume = (state: SessionState, origin: PromptOrigin): boolean => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return false
+  return state.handoffStage === 'own_clear' && state.isOwnClearQueued && !state.hasOwnClearReturned
+}
+
+export const holdResume = (state: SessionState, args: string): void => {
+  state.heldResumeArgs.push(args)
+}
+
+export const takeHeldResumes = (state: SessionState): string[] => state.heldResumeArgs.splice(0)
 
 // A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {

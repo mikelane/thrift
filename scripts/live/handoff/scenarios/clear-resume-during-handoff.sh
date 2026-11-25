@@ -29,7 +29,9 @@
 # a `none` record (`reason` compaction_failed, `clear_skipped` turn_running), which counts as the ending
 # record with no note in any transcript; a `/clear` that wins instead ends it as `cleared_by` person. A
 # `/resume` that moves the person off the session holding the note ends with reason `session_moved`, and
-# then the resumed session's pane must not say "Handed off.". Which path ran is printed, not judged.
+# then the resumed session's pane must not say "Handed off.". Whatever the path, the resumed session's pane must
+# show neither the handoff's `/clear` nor "Handed off." (#177: the handoff's queued clear once ran in the session
+# the person resumed during the compaction). Which path ran is printed, not judged.
 #
 # The `/resume` target is a session of its own that has had one turn and has exited.
 
@@ -213,10 +215,21 @@ show_ending_path() {
   printf '        %s: ended with action %s, reason %s, cleared_by %s, clear_skipped %s, continued %s\n' "$CASE_LABEL" "$(ending_field .action)" \
     "$(ending_field .trigger_values.reason)" "$(ending_field .trigger_values.cleared_by)" "$(ending_field .trigger_values.clear_skipped)" \
     "$(ending_field .trigger_values.continued)"
+  check "$CASE_LABEL: the session the person resumed was not cleared or handed the note (#177)" \
+    "the pane: $(pane_count "$1" "$CLEARED_RESUMED_SESSION_PANE") line(s) show the handoff's /clear or 'Handed off.'" \
+    pane_lacks_the_handoffs_clear "$1"
   if [[ "$(ending_field .trigger_values.reason)" == session_moved ]]; then
     check "$CASE_LABEL: the resumed session shows no handed-off line" "the pane: $(pane_count "$1" 'Handed off\.') line(s) say 'Handed off.'" \
       pane_lacks_handed_off "$1"
   fi
+}
+# What the resumed session's pane shows when the handoff's own /clear ran in it (seen on 2.1.332): the `/clear` as a typed
+# prompt line, and the handoff's closing line.
+CLEARED_RESUMED_SESSION_PANE='^❯ /clear|Handed off\.'
+pane_lacks_the_handoffs_clear() {
+  local screen
+  screen=$(pane "$1") || return 1
+  ! text_matches "$CLEARED_RESUMED_SESSION_PANE" "$screen"
 }
 # Not `! pane | grep -q` (or `! pane_has`): a pane that cannot be read, or a producer SIGPIPE'd under pipefail, must not pass.
 pane_lacks_handed_off() {

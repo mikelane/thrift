@@ -67,6 +67,7 @@ const defaultWorld = (clock: MockClock): World => ({
   fork: async () => answered('The handoff note.'),
   compact: async () => compacted(48_000),
   clearThrows: false,
+  resumeThrows: false,
   appendDenied: false,
   forkPrompts: [],
   registerThrows: false,

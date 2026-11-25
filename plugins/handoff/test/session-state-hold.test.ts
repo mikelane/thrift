@@ -59,6 +59,8 @@ test('It returns the settings with a closed gate and an empty session from creat
     turnEndWaiter: null,
     handoffStage: 'idle',
     sessionEndBeforeClear: null,
+    heldResumeArgs: [],
+    heldResumeReplay: null,
   })
 })
 

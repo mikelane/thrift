@@ -6,6 +6,11 @@ import {
   beginOwnClear,
   claimPending,
   recordSessionEnd,
+  recordResumeDispatch,
+  shouldHoldResume,
+  holdResume,
+  takeHeldResumes,
+  markOwnClearReturned,
   createState,
   endHandoff,
 } from '../hooks/session-state'
@@ -127,4 +132,81 @@ test('It refuses a taken pending slot and keeps the first claim from claimPendin
   claimPending(state, 'compact')
   expect(claimPending(state, 'handoff')).toBe(false)
   expect(state.pending).toBe('compact')
+})
+
+test('It records a resume dispatched before the handoff clears as another end in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It lets a resume dispatch outrank an earlier clear by the person in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  recordSessionEnd(state, 'clear')
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBe('other')
+})
+
+test('It ignores a resume dispatched when no handoff is pending in recordResumeDispatch', () => {
+  const state = createState(settings)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+test('It ignores a resume dispatched after the handoff queued its clear in recordResumeDispatch', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  recordResumeDispatch(state)
+  expect(state.sessionEndBeforeClear).toBeNull()
+})
+
+const PERSON = { kind: 'composer' } as const
+
+test('It holds a resume the person typed while the handoff clear is queued in shouldHoldResume', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  expect(shouldHoldResume(state, PERSON)).toBe(true)
+})
+
+test('It does not hold a resume before the handoff queued its clear in shouldHoldResume', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  expect(shouldHoldResume(state, PERSON)).toBe(false)
+})
+
+test('It does not hold a resume once the handoff clear returned in shouldHoldResume', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  markOwnClearReturned(state)
+  expect(shouldHoldResume(state, PERSON)).toBe(false)
+})
+
+test('It does not hold a resume when no handoff is pending in shouldHoldResume', () => {
+  expect(shouldHoldResume(createState(settings), PERSON)).toBe(false)
+})
+
+test('It does not hold the resume the handoff itself replays in shouldHoldResume', () => {
+  const state = createState(settings)
+  beginBeforeClear(state)
+  beginOwnClear(state)
+  expect(shouldHoldResume(state, { kind: 'plugin', name: 'handoff' })).toBe(false)
+})
+
+test('It returns held resumes in order and forgets them in takeHeldResumes', () => {
+  const state = createState(settings)
+  holdResume(state, 'a')
+  holdResume(state, 'b')
+  expect(takeHeldResumes(state)).toEqual(['a', 'b'])
+  expect(takeHeldResumes(state)).toEqual([])
+})
+
+test('It appends the args to heldResumeArgs in holdResume', () => {
+  const state = createState(settings)
+  holdResume(state, 'a')
+  expect(state.heldResumeArgs).toEqual(['a'])
 })

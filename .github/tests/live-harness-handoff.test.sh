@@ -182,6 +182,7 @@ run_judge() {
     echo "Handoff from the previous session (old1), written by Claude" > "$CLAUDE_CONFIG_DIR/projects/p/${NOTE_FILE:-fresh}.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
+    pane() { echo "a resumed session"; }
     printf "%s" "${COMPACTION_LOG:-}" >> "$(debug_log_of c)"
     CASE_PHASE=${PHASE:-}; COMPACTION_ENDS_AT_TYPING=${ENDS_AT_TYPING:-0}
     judge_case c '"$expectation"' '"$ends"'
@@ -230,7 +231,7 @@ test_clear_resume_fails_a_skipped_clear_whose_note_reached_a_transcript() {
 test_clear_resume_prints_the_path_a_resume_took_without_judging_it() {
   qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
   assert_exit_code 0
-  assert_out_has 'PASS s (6 checks)'
+  assert_out_has 'PASS s (7 checks)'
   assert_out_has 'case: ended with action none, reason session_ended, cleared_by missing'
 }
 
@@ -421,6 +422,7 @@ qa_judge() {
     [[ "'"$note_file"'" == none ]] || echo "Handoff from the previous session (old1), written by Claude" >> "$CLAUDE_CONFIG_DIR/projects/p/'"$note_file"'.jsonl"
     RESUME_TARGET_ID=resumed
     CASE_LABEL=case; CASE_ID=old1; CASE_BASE=0
+    pane() { echo "a resumed session"; }
     '"${PANE_STUB:-}"'
     judge_case c '"$expectation"' '"$ends"'
     live_verdict s'
@@ -443,6 +445,29 @@ test_a_session_moved_ending_whose_pane_cannot_be_read_is_a_fail() {
 test_a_session_moved_ending_whose_pane_shows_no_handed_off_line_passes_that_check() {
   PANE_STUB='pane() { echo "a resumed session"; }' qa_judge show_ending_path 2 1 fresh yes "$(session_moved_record)"
   assert_out_has 'PASS  case: the resumed session shows no handed-off line'
+}
+
+test_a_resumed_session_whose_pane_shows_the_handoffs_clear_is_a_fail() {
+  PANE_STUB='pane() { printf "%s\n" "❯ /clear"; }' qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the session the person resumed was not cleared or handed the note'
+}
+
+test_a_resumed_session_whose_pane_says_handed_off_after_a_session_ended_abandon_is_a_fail() {
+  PANE_STUB='pane() { echo "Handed off."; }' qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the session the person resumed was not cleared or handed the note'
+}
+
+test_a_resumed_session_whose_pane_cannot_be_read_is_a_fail() {
+  PANE_STUB='pane() { return 1; }' qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
+  assert_exit_code 1
+  assert_out_has 'FAIL  case: the session the person resumed was not cleared or handed the note'
+}
+
+test_a_resumed_session_whose_pane_shows_no_handoff_clear_passes_that_check() {
+  qa_judge show_ending_path 2 1 none yes "$(session_ended_record)"
+  assert_out_has 'PASS  case: the session the person resumed was not cleared or handed the note'
 }
 
 test_a_session_ended_abandon_with_the_note_in_a_fresh_transcript_is_a_fail() {

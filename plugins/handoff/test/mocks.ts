@@ -55,6 +55,7 @@ export type World = {
   fork: () => Promise<ModelForkResult>
   compact: () => Promise<SessionCompactResult>
   clearThrows: boolean
+  resumeThrows: boolean
   appendDenied: boolean
   forkPrompts: string[]
   registerThrows: boolean
@@ -171,6 +172,8 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     return ok({ command: e.name })
   })
   on('command.run', async (_$, e) => {
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeThrows) throw new Error('resume refused')
+    if (e.command === 'resume') world.effects.push(`resume:${e.args}`)
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
     if (world.answersPersonClear && e.origin.kind === 'composer') return { text: 'not now' }
