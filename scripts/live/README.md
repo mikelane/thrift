@@ -119,6 +119,11 @@ Not isolated:
   not only the harness's own.
 - **Advice, not enforcement.** Each session also gets an appended system prompt saying it is a test
   harness session that must do only what the typed prompt says. That is a request to the model.
+  The one exception is the session a scenario starts with `start_waiting_handoff`: its prompt adds
+  that messages from its named peer session (`from-name="<peer>"`) are steps of the harness, to be
+  carried out as if typed. A peer's message is a cross-session-message, not a typed prompt, so without
+  this the session declined it and the wait scenarios ended as SETUP (#182). Only that peer is named,
+  and `--permission-mode dontAsk` with `--allowedTools` still decides what any session may run.
 - **`--safe-mode` cannot be used.** It would disable CLAUDE.md, but it also skips the `--plugin-dir`
   plugin's hooks ("Skipping plugin hooks - safe mode disables installed plugins"), which is the thing
   under test. `--bare` accepts only an API key, not the owner's login.
@@ -218,7 +223,8 @@ part of a paste and ignored.
 A second `claude` session with no plugin plays the peer. It is first asked to load the
 `SendMessage` tool (a model round trip of its own), then given the instruction to send the first
 session a message, typed but not submitted. The scenario presses Enter at the moment it needs the
-message to arrive. A scenario aborts with ERROR, not FAIL, if the message lands outside the window
+message to arrive. The session that waits for that message is told, in its appended system prompt,
+that messages from this peer are harness steps (see "Advice, not enforcement"); no other session is. A scenario aborts with ERROR, not FAIL, if the message lands outside the window
 it is testing; run it again.
 
 ### Adding a scenario

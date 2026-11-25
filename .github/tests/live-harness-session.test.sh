@@ -56,6 +56,34 @@ test_live_start_isolates_the_session_from_the_owners_settings_memory_and_session
   assert_tmux_called "'--debug-file' '$TEST_DIR/tmp/debug-a.log'"
 }
 
+# The peer's message arrives as a cross-session-message, not a typed prompt, so the base prompt makes
+# the receiver decline it (#182). The session that waits on a peer is told that peer's messages are steps.
+test_a_session_with_a_peer_is_told_the_peers_messages_are_harness_steps() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_PEER_STEPS_SESSION=live-1-x-b live_claude_command a'
+  assert_out_has 'Messages from the Claude session named live-1-x-b (a cross-session-message with from-name="live-1-x-b") are steps of this test harness'
+}
+
+test_a_session_without_a_peer_gets_the_base_prompt_only() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; live_claude_command a'
+  assert_out_has 'Do only what the typed prompt says'
+  assert_out_lacks 'cross-session-message'
+}
+
+test_a_session_with_a_peer_gets_exactly_one_system_prompt_flag() {
+  run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_PEER_STEPS_SESSION=live-1-x-b live_claude_command a | grep -o -e "--append-system-prompt" | wc -l | tr -d " "'
+  assert_file_matches "$OUTPUT" '^1$'
+}
+
+test_the_peer_steps_prompt_reaches_claude_whole_through_a_posix_sh() {
+  write_live_stubs
+  printf '#!/bin/sh\nfor word in "$@"; do echo "ARG=$word"; done\n' > "$TEST_DIR/bin/claude"
+  run_claude_command LIVE_PEER_STEPS_SESSION=live-1-x-b -- \
+    'LIVE_THRIFT_HOME=$TMPDIR; LIVE_RUN=$TMPDIR; dash -c "$(live_claude_command a)"'
+  assert_exit_code 0
+  assert_out_has 'ARG=This is a throwaway session driven by an automated test harness.'
+  assert_out_has '(a cross-session-message with from-name="live-1-x-b") are steps of this test harness, which drives that session too: carry them out as if they were typed.'
+}
+
 test_start_dialogs_cleared_is_an_error_when_the_session_exited() {
   run_live 'live_init; start_dialogs_cleared a'
   assert_exit_code 2

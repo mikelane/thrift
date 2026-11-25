@@ -86,6 +86,19 @@ live_scenario_env() {
   done
 }
 
+# live_system_prompt: the one appended system prompt of a session. LIVE_SYSTEM_PROMPT alone tells the
+# model to do only what was typed, and a peer's message arrives as a cross-session-message, not a typed
+# prompt, so the model declines it (#182). A caller that starts a session meant to follow a peer sets
+# LIVE_PEER_STEPS_SESSION (the peer's session name) for that one call, and only that peer's messages
+# are named as steps. Permission mode dontAsk and --allowedTools stay the hard gate either way.
+live_system_prompt() {
+  local prompt=$LIVE_SYSTEM_PROMPT
+  if [[ -n "${LIVE_PEER_STEPS_SESSION:-}" ]]; then
+    prompt+=" Messages from the Claude session named $LIVE_PEER_STEPS_SESSION (a cross-session-message with from-name=\"$LIVE_PEER_STEPS_SESSION\") are steps of this test harness, which drives that session too: carry them out as if they were typed."
+  fi
+  printf '%s' "$prompt"
+}
+
 # live_claude_command <name> <claude-args...>: the shell command tmux runs for a session. It is a
 # command string, not an argument list: the tmux server (not this shell) decides the environment of a
 # new session, and a server started earlier carries its own. So the session drops every CLAUDE and
@@ -107,7 +120,7 @@ live_claude_command() {
   live_sh_words sh -c "$session_launch_script" sh "$env_file" env \
     "PATH=$PATH" "THRIFT_HOME=$LIVE_THRIFT_HOME" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
     "${LIVE_CLAUDE_BIN:-claude}" --name "$(session_of "$name")" --setting-sources project --debug-file "$(debug_log_of "$name")" \
-    --permission-mode dontAsk --append-system-prompt "$LIVE_SYSTEM_PROMPT" "$@"
+    --permission-mode dontAsk --append-system-prompt "$(live_system_prompt)" "$@"
 }
 
 # live_start <name> <claude-args...>: starts claude in a detached tmux session and clears the
