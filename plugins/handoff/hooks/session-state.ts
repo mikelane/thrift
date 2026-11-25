@@ -492,8 +492,8 @@ export const settlePostCompactionContext = (state: SessionState, measuredTokens:
   state.floorTokens = measuredTokens
 }
 
-// Counted from a foreign clear's command.run until it returns or throws, whatever the stage: the delivery of a note must not read
-// the session id while the person's clear is still switching sessions. The handoff's own clear is no foreign clear.
+// Counts a foreign clear from the start of its command.run until it returns or throws. A note delivery must not read the
+// session id while the person's clear is still switching sessions. The handoff's own clear is not counted.
 export const recordForeignClearRunning = (state: SessionState, origin: PromptOrigin): void => {
   if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
   state.foreignClearsRunning += 1

@@ -30,9 +30,9 @@ import {
   queueResubmittedPrompt,
   releaseCarried,
   releaseCarriedGroup,
-  waitForForeignClears,
   removeResubmittedPrompt,
   takeLateArrivalsOrEndSending,
+  waitForForeignClears,
   type BoxPlacement,
   type HeldPrompt,
   type HeldPromptGroup,
@@ -167,8 +167,8 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
 // A clear that never returns must not hold the note back for good.
 export const FOREIGN_CLEAR_WAIT_MS = 5000
 
-// The person's /clear can end the session and still be switching to the fresh one when the handoff resumes: the id then names
-// the cleared session, which the clear is about to empty. Wait for it to return, then read the id.
+// The person's /clear can still be switching to the fresh session when the handoff resumes. The engine then still reports the
+// id of the cleared session, which the clear is about to empty. Wait for the clear to return, then read the id.
 async function waitForRunningForeignClears($: EngineInterface, state: SessionState): Promise<void> {
   let timer: { cancel: () => void } | undefined
   const timedOut = new Promise<boolean>(resolve => {
