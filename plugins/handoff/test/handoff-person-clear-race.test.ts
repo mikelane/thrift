@@ -43,6 +43,16 @@ describe('a person clear still finishing when the handoff resumes after the wait
   })
 })
 
+describe('a person clear that returns before the wait runs out', () => {
+  test('It writes no timeout debug line and cancels the wait timer', async ($, on) => {
+    const world = await waitingForATurn($, on)
+    const { finishClear } = await personClearStillFinishing($, world)
+    await finishClear()
+    await world.clock.advance(FOREIGN_CLEAR_WAIT_MS)
+    expect(world.debugLines.filter(line => line.includes('did not return within'))).toEqual([])
+  })
+})
+
 describe('a person clear that never returns', () => {
   test('It delivers to the session the engine names once the bounded wait ran out', async ($, on) => {
     const world = await waitingForATurn($, on)
