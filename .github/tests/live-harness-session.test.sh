@@ -71,8 +71,7 @@ test_a_session_without_a_peer_gets_the_base_prompt_only() {
 
 test_a_session_with_a_peer_gets_exactly_one_system_prompt_flag() {
   run_live 'LIVE_RUN=$TMPDIR; LIVE_THRIFT_HOME=$TMPDIR; LIVE_PEER_STEPS_SESSION=live-1-x-b live_claude_command a | grep -o -e "--append-system-prompt" | wc -l | tr -d " "'
-  assert_file_has "$OUTPUT" '1'
-  assert_out_lacks '2'
+  assert_file_matches "$OUTPUT" '^1$'
 }
 
 test_the_peer_steps_prompt_reaches_claude_whole_through_a_posix_sh() {
