@@ -88,6 +88,8 @@ const defaultWorld = (clock: MockClock): World => ({
   toolResult: {},
   toolMode: 'ok',
   appended: [],
+  appendedTo: [],
+  isSessionIdStaleUntilClearReturns: false,
 })
 
 // The world of the latest install, so submitPerson can leave a dropped prompt's text in its prompt box.

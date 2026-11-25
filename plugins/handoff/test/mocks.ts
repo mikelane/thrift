@@ -75,6 +75,11 @@ export type World = {
   toolResult: unknown
   toolMode: 'ok' | 'error' | 'deny'
   appended: string[]
+  // The session id each appended note was read against: the session the note went to.
+  appendedTo: string[]
+  // Live engines switch to the fresh session after the clear's session end and its transcript rewrite, so the id still names the
+  // cleared session until the clear returns. Off: the id switches before the session end.
+  isSessionIdStaleUntilClearReturns: boolean
 }
 
 const LOG_RECORD_STRINGS = ['ts', 'session_id', 'component', 'mode', 'action', 'engine_version'] as const
@@ -120,6 +125,7 @@ export const installSessionMocks = (on: On, world: World) => {
     world.effects.push('append')
     if (world.appendDenied) return { deny: 'refused' }
     world.appended.push(first?.type === 'text' ? String(first.text) : '')
+    world.appendedTo.push(world.sessionId)
     const result = await next(e)
     await world.onAppended?.()
     return result
@@ -181,9 +187,10 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     world.clearOrigins.push('name' in e.origin ? `${e.origin.kind}:${e.origin.name}` : e.origin.kind)
     await world.onClearIssued?.()
     const ended = world.sessionId
-    world.sessionId = world.nextSessionId
+    if (!world.isSessionIdStaleUntilClearReturns) world.sessionId = world.nextSessionId
     await $.session.end({ reason: 'clear', sessionId: ended, resume: { id: ended } })
     await world.onClearEnded?.()
+    world.sessionId = world.nextSessionId
     // Core names the run it made; an answer in a command's place carries no ref.
     return { ref: 1 }
   })
