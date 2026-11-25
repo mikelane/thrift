@@ -135,19 +135,23 @@ export async function waitForClearWindow(
 function replayHeldResumes($: EngineInterface, state: SessionState): void {
   const heldArgs = takeHeldResumes(state)
   if (heldArgs.length === 0) return
-  // Set before the tick, so the delivery that follows the clear sees the move coming and takes the session_moved path.
-  state.isResumeReplayPending = true
-  $.clock.after(0, () => {
-    void (async () => {
-      for (const args of heldArgs) {
-        try {
-          await $.command.run({ command: 'resume', args })
-        } catch (error) {
-          debug($, `/resume replay failed: ${String(error)}`)
+  // Set before the tick, so the delivery that follows the clear can wait for the outcome: only a replay that ran moved the person.
+  state.resumeReplay = new Promise<boolean>(resolve => {
+    $.clock.after(0, () => {
+      void (async () => {
+        let hasResumed = false
+        for (const args of heldArgs) {
+          try {
+            await $.command.run({ command: 'resume', args })
+            hasResumed = true
+          } catch (error) {
+            debug($, `/resume replay failed: ${String(error)}`)
+          }
         }
-      }
-      state.isResumeReplayPending = false
-    })()
+        state.resumeReplay = null
+        resolve(hasResumed)
+      })()
+    })
   })
 }
 
