@@ -204,3 +204,9 @@ test('It returns held resumes in order and forgets them in takeHeldResumes', () 
   expect(takeHeldResumes(state)).toEqual(['a', 'b'])
   expect(takeHeldResumes(state)).toEqual([])
 })
+
+test('It appends the args to heldResumeArgs in holdResume', () => {
+  const state = createState(settings)
+  holdResume(state, 'a')
+  expect(state.heldResumeArgs).toEqual(['a'])
+})

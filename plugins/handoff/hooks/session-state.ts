@@ -127,7 +127,7 @@ export type SessionState = Settings & {
   heldResumeArgs: string[]
   // From the clear's return until the held resumes have run: resolves true when at least one replayed /resume returned
   // without throwing (the person left the fresh session), false when every one threw. Never rejects. Null when none is replaying.
-  resumeReplay: Promise<boolean> | null
+  heldResumeReplay: Promise<boolean> | null
 }
 
 // A reload that runs register again calls this again: see the SAFETY note at the call in register.tsx for what it
@@ -169,7 +169,7 @@ export const createState = (settings: Settings): SessionState => ({
   handoffStage: 'idle',
   sessionEndBeforeClear: null,
   heldResumeArgs: [],
-  resumeReplay: null,
+  heldResumeReplay: null,
 })
 
 export const resetForNewSession = (state: SessionState): void => {

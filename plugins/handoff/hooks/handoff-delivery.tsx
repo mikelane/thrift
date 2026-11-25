@@ -325,7 +325,7 @@ export async function continueInFreshSession(
   const isInTranscript = noteDelivery === 'appended' || noteDelivery === 'submitted'
   // A held /resume replays right after the clear and moves the person once it runs, so wait for it: a replay that ran means the
   // note's line must not claim this session, and one that failed leaves the person here, where the id check decides.
-  const hasSessionMoved = isInTranscript && ((await state.resumeReplay) === true || (await hasSessionMovedFrom($, noteSessionId)))
+  const hasSessionMoved = isInTranscript && ((await state.heldResumeReplay) === true || (await hasSessionMovedFrom($, noteSessionId)))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)

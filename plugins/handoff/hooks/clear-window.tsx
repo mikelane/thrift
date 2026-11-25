@@ -133,22 +133,22 @@ export async function waitForClearWindow(
 // Each /resume held while the clear was queued runs now, one after another, in a later tick: the engine refuses a command
 // started inside the hook it waits on. A failed replay goes to the debug log, and the rest still run.
 function replayHeldResumes($: EngineInterface, state: SessionState): void {
-  const heldArgs = takeHeldResumes(state)
-  if (heldArgs.length === 0) return
+  const heldResumeArgs = takeHeldResumes(state)
+  if (heldResumeArgs.length === 0) return
   // Set before the tick, so the delivery that follows the clear can wait for the outcome: only a replay that ran moved the person.
-  state.resumeReplay = new Promise<boolean>(resolve => {
+  state.heldResumeReplay = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
         let hasResumed = false
-        for (const args of heldArgs) {
+        for (const resumeArgs of heldResumeArgs) {
           try {
-            await $.command.run({ command: 'resume', args })
+            await $.command.run({ command: 'resume', args: resumeArgs })
             hasResumed = true
           } catch (error) {
             debug($, `/resume replay failed: ${String(error)}`)
           }
         }
-        state.resumeReplay = null
+        state.heldResumeReplay = null
         resolve(hasResumed)
       })()
     })
