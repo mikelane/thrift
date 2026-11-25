@@ -92,10 +92,7 @@ run_mode() {
   section "mode $mode"
   baseline=$(decision_lines)
   set_mode "$mode"
-  # The fresh session gets the carried prompt from the plugin after /clear, not typed, and the harness's base
-  # system prompt makes it refuse that. The token names it a harness step; dontAsk and --allowedTools stay
-  # the hard gate on what it may run.
-  LIVE_HARNESS_PROMPT_TOKEN=$SCHEDULED_TOKEN handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C $PUSH_REPO push *),Bash(seq *)"
+  handoff_start "$name" --allowedTools "CronCreate,ToolSearch,Bash(git -C $PUSH_REPO push *),Bash(seq *)"
   say_apple "$name"
   fire=$(schedule_prompt "$name")
   wait_for "the scheduling turn of '$name' to end" turns_done_above "$name" 1
@@ -119,7 +116,7 @@ run_mode() {
   [[ "$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')" == "$mode" ]] \
     || live_abort "the first handoff's record says the session ran in '$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')', not in $mode: the $mode checks would prove nothing"
   [[ "$(turn_end_field "$after_handoff" signal)" == strong ]] \
-    || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing"
+    || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing. $(carried_prompt_reply_report "$baseline")"
 
   check "[$mode] the handoff carried the scheduled prompt as an unattended group" \
     "the cleared record was: $(first_cleared "$baseline")" carried_unattended "$baseline"
@@ -149,6 +146,30 @@ fresh_transcript_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1
 carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
     && transcript_has_user_text_starting "$(fresh_transcript_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
+}
+# carried_prompt_reply <baseline>: the first 300 characters of the assistant text that follows the carried
+# prompt's user message in the fresh transcript; empty when there is no transcript, no such message or no reply.
+carried_prompt_reply() {
+  local transcript
+  transcript=$(fresh_transcript_of_first_handoff "$1")
+  [[ -f "$transcript" ]] || return 0
+  jq -rs --arg prefix "$SCHEDULED_TOKEN:" '
+    def text: (.message.content // "") | if type == "string" then . else map(select(.type == "text") | .text) | join("") end;
+    . as $entries
+    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | text | startswith($prefix)))) // null) as $at
+    | if $at == null then ""
+      else ($entries[$at + 1:] | map(select(.type == "assistant") | text | select(length > 0)) | first // "") | .[0:300] end' "$transcript"
+}
+# carried_prompt_reply_report <baseline>: says whether the model answered the carried prompt or declined it, so a
+# refusal shows in an abort instead of reading as a context-size miss.
+carried_prompt_reply_report() {
+  local reply
+  reply=$(carried_prompt_reply "$1")
+  if [[ -n "$reply" ]]; then
+    echo "The fresh session's reply to the carried prompt began: $reply"
+  else
+    echo "The fresh transcript shows no reply to the carried prompt (no transcript, no message starting $SCHEDULED_TOKEN:, or no assistant text after it)."
+  fi
 }
 carried_prompt_evidence() {
   local transcript

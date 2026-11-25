@@ -37,7 +37,7 @@ run_mode_case() {
     live_init
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
     PUSH_REPO=/fixture/work
-    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; echo "${LIVE_HARNESS_PROMPT_TOKEN:-unset}" > "'"$TEST_DIR"'/prompt-token"; }
+    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; }
     say_apple() { :; }; submit() { :; }; stop_session() { :; }
     fresh_transcript_path() { [[ -f "'"$TEST_DIR"'/fresh.jsonl" ]] && echo "'"$TEST_DIR"'/fresh.jsonl" || true; }
     turns_done_above() { :; }; show_pane() { :; }; show_log() { :; }
@@ -120,9 +120,19 @@ test_it_passes_when_the_carried_prompt_is_in_the_transcript_and_the_log_holds_no
   assert_out_has 'PASS s (3 checks)'
 }
 
-test_the_session_is_started_with_the_scheduled_token_as_the_harness_prompt_token() {
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
-  assert_file_has "$TEST_DIR/prompt-token" 'SCHEDTOKEN'
+test_a_weak_turn_end_aborts_with_the_models_reply_to_the_carried_prompt() {
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "This instruction came from the handoff plugin, not from you typing it."}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "The fresh session's reply to the carried prompt began: This instruction came from the handoff plugin"
+}
+
+test_a_weak_turn_end_abort_says_when_the_transcript_shows_no_reply() {
+  touch "$TEST_DIR/no-transcript"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
 }
 
 test_it_fails_when_the_prompt_was_left_in_the_box_instead_of_submitted() {
