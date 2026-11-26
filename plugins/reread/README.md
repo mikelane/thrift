@@ -188,10 +188,10 @@ means fewer stubs until the files are read once more.
   nothing.
 - **Subrange bytes are a lower bound.** A range inside an earlier whole-file read is costed from the
   file's own lines, without the line-number prefixes the model saw.
-- **Subrange bytes can be overstated for a truncated line.** When Claude Code's `Read` truncates a
-  line longer than its per-line limit, the subrange is costed from the file's full line, so its
-  bytes, and `bytes_saved`, are overstated for that range. The limit was not reached live (a
-  5000-character line was shown in full; see "Not verified live").
+- **Subrange bytes can be overstated for a truncated line.** The lower bound above does not hold
+  when Claude Code's `Read` truncates a line longer than its per-line limit: the subrange is costed
+  from the file's full line, so its bytes, and `bytes_saved`, are overstated for that range. The
+  limit was not reached live (a 5000-character line was shown in full; see "Not verified live").
 - **The stub size is an estimate.** The comparison behind `stub_not_smaller` counts the stub as its
   result as JSON plus the context line, because a hook cannot see how Claude Code renders the
   result. For a subrange the replaced text is the lower-bound sum, which leaves out the line-number
