@@ -118,6 +118,16 @@ test_delivery_window_is_a_fail_when_the_second_prompt_is_held_joined() {
   assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'
 }
 
+# A transcript jq cannot finish parsing (a line cut short) is not evidence that "fivesix" is absent:
+# `! transcript_has_user_text` reads jq's parse failure as "no such entry" and the check passes.
+test_delivery_window_does_not_pass_not_joined_on_an_unparsable_transcript() {
+  write_fresh_transcript one five fivesix
+  printf '%s\n' '{"type":"user","message":{"con' >> "$TEST_DIR/fresh.jsonl"
+  run_delivery_window '$.command.run (handoff): 6 chars queued' \
+    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+  assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'
+}
+
 test_delivery_window_is_an_error_when_the_second_prompt_misses_the_sending_stage() {
   write_fresh_transcript one five
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
