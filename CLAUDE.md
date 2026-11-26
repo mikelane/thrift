@@ -33,9 +33,13 @@ specific to this repo.
   - Config: `release-please-config.json` has one package per plugin (`plugins/<name>`,
     `release-type: simple`, `component: <name>`, tag `<name>-vX.Y.Z`) and
     `.release-please-manifest.json` holds each plugin's current version.
-  - Release PRs: release-please keeps a release PR open per plugin with a `feat` or `fix` commit
-    under that plugin's path; the PR writes `plugins/<name>/CHANGELOG.md` and the `version` in
-    `plugin.json`. Never edit either by hand. A commit that touches no plugin path (`scripts/`,
+  - Release PRs: `separate-pull-requests` is `false`, so release-please keeps one combined release
+    PR open (branch `release-please--branches--main`, title `chore: release main`) for every plugin
+    with a `feat` or `fix` commit under its path. One PR avoids the conflicts separate PRs had:
+    each rewrote `.release-please-manifest.json`, so once one merged the rest conflicted. The PR
+    writes each released plugin's `plugins/<name>/CHANGELOG.md` and the `version` in its
+    `plugin.json`; versions, changelogs and tags (`<name>-vX.Y.Z`, with a GitHub release each) stay
+    per plugin. Never edit either file by hand. A commit that touches no plugin path (`scripts/`,
     `.github/`, root docs) releases nothing.
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
