@@ -1,8 +1,10 @@
 name: Release Please
 
-# On every push to main, release-please keeps one release PR open per plugin with releasable
-# commits (feat, fix). Merging that PR tags the commit, creates the GitHub release and lands the
-# CHANGELOG and version bump. Config: release-please-config.json and .release-please-manifest.json.
+# On every push to main, release-please keeps one combined release PR open for every plugin with
+# releasable commits (feat, fix). Merging that PR tags the commit once per released plugin, creates
+# a GitHub release for each and lands each plugin's CHANGELOG and version bump. A refused merge holds
+# every plugin's release at once.
+# Config: release-please-config.json and .release-please-manifest.json.
 #
 # The release PR is opened with a GitHub App token, not GITHUB_TOKEN. A PR opened with GITHUB_TOKEN
 # triggers no workflows, so the release PR would get no CI and could not merge. The App needs
@@ -45,7 +47,7 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
 
-      - name: Open or update the release PRs
+      - name: Open or update the release PR
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}

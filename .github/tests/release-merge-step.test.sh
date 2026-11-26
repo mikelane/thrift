@@ -126,6 +126,16 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
   [[ "$count" == 2 ]] || fail "got $count warnings"
 }
 
+# A combined release PR refused for a stray plugin file gets a warning naming that file (#207, #215).
+test_the_merge_step_names_the_stray_file_in_the_warning_for_a_combined_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.head.ref = "release-please--branches--main" | .changed_files = 2'
+  echo '[{"filename":"plugins/handoff/CHANGELOG.md"},{"filename":"plugins/reread/hooks/register.tsx"}]' \
+    >"$TEST_DIR/files-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "::warning title=Release PR #111 not merged::plugins/reread/hooks/register.tsx is not a file a release PR changes (at $SHA_A)"
+}
+
 test_the_merge_step_escapes_percent_in_a_warning_annotation() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "100%25"'
