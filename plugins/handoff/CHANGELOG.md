@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.8](https://github.com/mikelane/thrift/compare/handoff-v0.3.7...handoff-v0.3.8) (2026-11-26)
+
+
+### Bug Fixes
+
+* drop the plugin name from debug lines, which the engine already adds ([#203](https://github.com/mikelane/thrift/issues/203)) ([9d47a4e](https://github.com/mikelane/thrift/commit/9d47a4e391d9699221051395a45b6d5d594b7207))
+
 ## [0.3.7](https://github.com/mikelane/thrift/compare/handoff-v0.3.6...handoff-v0.3.7) (2026-11-26)
 
 
