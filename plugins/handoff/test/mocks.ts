@@ -56,6 +56,17 @@ export type World = {
   compact: () => Promise<SessionCompactResult>
   clearThrows: boolean
   resumeThrows: boolean
+  // A plugin-origin /resume that never returns.
+  resumeHangs: boolean
+  // Set while a hung /resume waits; calling it makes that /resume return having moved the person.
+  releaseHungResume: (() => void) | undefined
+  // A plugin-origin /resume that returns without leaving the session, as a picker the person cancels does.
+  resumeKeepsSession: boolean
+  // Once a plugin-origin /resume has run, the next session id read is denied.
+  denyIdAfterResume: boolean
+  // Session id reads are denied from the clear's end until a plugin-origin /resume runs.
+  denyIdUntilResume: boolean
+  isIdDeniedUntilResume: boolean
   appendDenied: boolean
   forkPrompts: string[]
   registerThrows: boolean
@@ -105,6 +116,7 @@ export const installSessionMocks = (on: On, world: World) => {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => {
+    if (world.isIdDeniedUntilResume) return { deny: 'no session id' }
     if (world.sessionIdDenials > 0) {
       world.sessionIdDenials -= 1
       return { deny: 'no session id' }
@@ -179,7 +191,18 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
   })
   on('command.run', async (_$, e) => {
     if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeThrows) throw new Error('resume refused')
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeHangs) {
+      return new Promise(resolve => {
+        world.releaseHungResume = () => {
+          world.sessionId = `resumed-${e.args}`
+          resolve({ text: 'ran resume' })
+        }
+      })
+    }
     if (e.command === 'resume') world.effects.push(`resume:${e.args}`)
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && !world.resumeKeepsSession) world.sessionId = `resumed-${e.args}`
+    if (e.command === 'resume' && e.origin.kind === 'plugin') world.isIdDeniedUntilResume = false
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.denyIdAfterResume) world.sessionIdDenials = 1
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
     if (world.answersPersonClear && e.origin.kind === 'composer') return { text: 'not now' }
@@ -190,6 +213,7 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     if (!world.isSessionIdStaleUntilClearReturns) world.sessionId = world.nextSessionId
     await $.session.end({ reason: 'clear', sessionId: ended, resume: { id: ended } })
     await world.onClearEnded?.()
+    world.isIdDeniedUntilResume = world.denyIdUntilResume
     world.sessionId = world.nextSessionId
     // Core names the run it made; an answer in a command's place carries no ref.
     return { ref: 1 }

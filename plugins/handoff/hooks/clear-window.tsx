@@ -7,7 +7,7 @@ import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
 import { writeRecord } from './record-writer'
-import { beginOwnClear, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
+import { beginOwnClear, forgetHeldResumeReplay, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
@@ -130,29 +130,41 @@ export async function waitForClearWindow(
   return { ...clearWindow, clearing }
 }
 
+// A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
+async function tryReadSessionId($: EngineInterface): Promise<string | undefined> {
+  try {
+    return await $.session.id()
+  } catch (error) {
+    debug($, `could not read the session id around the /resume replay: ${String(error)}`)
+    return undefined
+  }
+}
+
 // Each /resume held while the clear was queued runs now, one after another, in a later tick: the engine refuses a command
 // started inside the hook it waits on. A failed replay goes to the debug log, and the rest still run.
 function replayHeldResumes($: EngineInterface, state: SessionState): void {
   const heldResumeArgs = takeHeldResumes(state)
   if (heldResumeArgs.length === 0) return
-  // Set before the tick, so the delivery that follows the clear can wait for the outcome: only a replay that ran moved the person.
-  state.heldResumeReplay = new Promise<boolean>(resolve => {
+  // Set before the tick, so the delivery that follows the clear can wait for the outcome. A /resume that returns is not a move:
+  // the picker a bare /resume opens can be cancelled. Only a session id that differs afterwards counts.
+  const replay: Promise<boolean> = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
-        let hasResumed = false
+        const idBefore = await tryReadSessionId($)
         for (const resumeArgs of heldResumeArgs) {
           try {
             await $.command.run({ command: 'resume', args: resumeArgs })
-            hasResumed = true
           } catch (error) {
             debug($, `/resume replay failed: ${String(error)}`)
           }
         }
-        state.heldResumeReplay = null
-        resolve(hasResumed)
+        const idAfter = await tryReadSessionId($)
+        forgetHeldResumeReplay(state, replay)
+        resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
       })()
     })
   })
+  state.heldResumeReplay = replay
 }
 
 export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'compaction_preempted'
