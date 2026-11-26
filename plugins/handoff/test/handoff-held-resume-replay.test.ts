@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import { HELD_RESUME_REPLAY_TIMEOUT_MS } from '../hooks/handoff-delivery'
 import { install, lastRecord, runCommand, startSession } from './helpers'
 
 const COMPACTING = { options: { compactBeforeClear: true } } as const
@@ -58,5 +59,36 @@ describe('replayHeldResumes', () => {
     await runCommand($, 'handoff')
     await world.clock.settle()
     expect(answer).toMatchObject({ text: 'The handoff is clearing this session first; your /resume runs right after.' })
+  })
+})
+
+describe('a held resume replay that never returns', () => {
+  const hangingReplay = async ($: Parameters<typeof install>[0], on: Parameters<typeof install>[1]) => {
+    const world = install($, on)
+    world.resumeHangs = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+    }
+    await runCommand($, 'handoff')
+    return world
+  }
+
+  test('It holds the record back until the bounded wait ran out', COMPACTING, async ($, on) => {
+    const world = await hangingReplay($, on)
+    await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS - 1)
+    expect(world.records).toEqual([])
+  })
+
+  test('It writes the record once the bounded wait ran out', COMPACTING, async ($, on) => {
+    const world = await hangingReplay($, on)
+    await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
+    expect(lastRecord(world)).toMatchObject({ action: 'cleared', trigger_values: { note: 'appended' } })
+  })
+
+  test('It writes a debug line saying the replay did not return in time', COMPACTING, async ($, on) => {
+    const world = await hangingReplay($, on)
+    await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
+    expect(world.debugLines).toContain(`handoff: a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
   })
 })

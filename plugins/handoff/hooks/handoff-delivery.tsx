@@ -168,19 +168,39 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
+// Waits for a promise, but no longer than the timeout. Resolves to whether the timeout won; the timer is cancelled either way.
+async function settlesWithin($: EngineInterface, wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  let timer: { cancel: () => void } | undefined
+  const timedOut = new Promise<boolean>(resolve => {
+    timer = $.clock.after(timeoutMs, () => resolve(true))
+  })
+  const hasTimedOut = await Promise.race([wait.then(() => false), timedOut])
+  timer?.cancel()
+  return !hasTimedOut
+}
+
 // A clear that never returns must not hold the note back for good.
 export const FOREIGN_CLEAR_TIMEOUT_MS = 5000
 
 // The person's /clear can still be switching to the fresh session when the handoff resumes. The engine then still reports the
 // id of the cleared session, which the clear is about to empty. Wait for the clear to return, then read the id.
 async function waitForForeignClearsOrTimeOut($: EngineInterface, state: SessionState): Promise<void> {
-  let timer: { cancel: () => void } | undefined
-  const timedOut = new Promise<boolean>(resolve => {
-    timer = $.clock.after(FOREIGN_CLEAR_TIMEOUT_MS, () => resolve(true))
-  })
-  const hasTimedOut = await Promise.race([whenForeignClearsSettled(state).then(() => false), timedOut])
-  timer?.cancel()
-  if (hasTimedOut) debug($, `a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
+  const hasSettled = await settlesWithin($, whenForeignClearsSettled(state), FOREIGN_CLEAR_TIMEOUT_MS)
+  if (!hasSettled) debug($, `a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
+}
+
+// A held /resume that never returns must not hold back the record, the held prompts and the continue prompt for good.
+export const HELD_RESUME_REPLAY_TIMEOUT_MS = 5000
+
+// Whether the held /resume replay moved the person. A replay that does not return in time is not known to have moved them, so
+// the session id check decides.
+async function hasHeldResumeMoved($: EngineInterface, state: SessionState): Promise<boolean> {
+  const replay = state.heldResumeReplay
+  if (replay === null) return false
+  let hasMoved = false
+  const hasSettled = await settlesWithin($, replay.then(moved => { hasMoved = moved }), HELD_RESUME_REPLAY_TIMEOUT_MS)
+  if (!hasSettled) debug($, `a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
+  return hasMoved
 }
 
 type NoteDeliveryResult = { noteDelivery: NoteDelivery; noteSessionId: string | undefined }
@@ -346,7 +366,7 @@ export async function continueInFreshSession(
   const isInTranscript = noteDelivery === 'appended' || noteDelivery === 'submitted'
   // A held /resume replays right after the clear and moves the person once it runs, so wait for it: a replay that ran means the
   // note's line must not claim this session, and one that failed leaves the person here, where the id check decides.
-  const hasSessionMoved = isInTranscript && ((await state.heldResumeReplay) === true || (await hasSessionMovedFrom($, noteSessionId)))
+  const hasSessionMoved = isInTranscript && ((await hasHeldResumeMoved($, state)) || (await hasSessionMovedFrom($, noteSessionId)))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))
   for (const { text } of settledHandoff.heldGroups) await inspectPrompt($, state, text)

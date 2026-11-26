@@ -69,6 +69,7 @@ const defaultWorld = (clock: MockClock): World => ({
   compact: async () => compacted(48_000),
   clearThrows: false,
   resumeThrows: false,
+  resumeHangs: false,
   appendDenied: false,
   forkPrompts: [],
   registerThrows: false,

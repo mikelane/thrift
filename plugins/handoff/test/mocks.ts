@@ -56,6 +56,8 @@ export type World = {
   compact: () => Promise<SessionCompactResult>
   clearThrows: boolean
   resumeThrows: boolean
+  // A plugin-origin /resume that never returns.
+  resumeHangs: boolean
   appendDenied: boolean
   forkPrompts: string[]
   registerThrows: boolean
@@ -179,6 +181,7 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
   })
   on('command.run', async (_$, e) => {
     if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeThrows) throw new Error('resume refused')
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeHangs) return new Promise(() => undefined)
     if (e.command === 'resume') world.effects.push(`resume:${e.args}`)
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
