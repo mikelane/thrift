@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.7](https://github.com/mikelane/thrift/compare/handoff-v0.3.6...handoff-v0.3.7) (2026-11-26)
+
+
+### Bug Fixes
+
+* **handoff:** bound the held /resume replay wait and count only a changed session as moved ([#197](https://github.com/mikelane/thrift/issues/197)) ([4ea3a0f](https://github.com/mikelane/thrift/commit/4ea3a0fb48a104472545de2d6fa84aaa6bd2b070))
+
 ## [0.3.6](https://github.com/mikelane/thrift/compare/handoff-v0.3.5...handoff-v0.3.6) (2026-11-26)
 
 
