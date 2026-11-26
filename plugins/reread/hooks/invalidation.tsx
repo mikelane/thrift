@@ -28,9 +28,9 @@ async function pathsNamedBy($: EngineInterface, path: string): Promise<string[]>
   }
 }
 
-type Drop = { dropped: number; reason: DecisionReason; agentId: string | undefined; sessionId?: string }
+type DroppedReads = { dropped: number; reason: DecisionReason; agentId: string | undefined; sessionId?: string }
 
-async function noteDropped($: EngineInterface, state: SessionState, { dropped, reason, agentId, sessionId }: Drop) {
+async function noteDropped($: EngineInterface, state: SessionState, { dropped, reason, agentId, sessionId }: DroppedReads) {
   if (dropped === 0) return
   const engine = await engineInfo($, state)
   await writeRecord($, engine, { decision: 'invalidate', reason, dropped, isSubagent: agentId !== undefined }, sessionId)
