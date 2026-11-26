@@ -58,6 +58,8 @@ export type World = {
   resumeThrows: boolean
   // A plugin-origin /resume that never returns.
   resumeHangs: boolean
+  // A plugin-origin /resume that returns without leaving the session, as a picker the person cancels does.
+  resumeKeepsSession: boolean
   appendDenied: boolean
   forkPrompts: string[]
   registerThrows: boolean
@@ -183,6 +185,7 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
     if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeThrows) throw new Error('resume refused')
     if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeHangs) return new Promise(() => undefined)
     if (e.command === 'resume') world.effects.push(`resume:${e.args}`)
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && !world.resumeKeepsSession) world.sessionId = `resumed-${e.args}`
     if (e.command !== 'clear') return { text: `ran ${e.command}` }
     if (world.clearThrows) throw new Error('clear refused')
     if (world.answersPersonClear && e.origin.kind === 'composer') return { text: 'not now' }

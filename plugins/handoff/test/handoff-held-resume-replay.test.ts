@@ -49,6 +49,33 @@ describe('replayHeldResumes', () => {
     expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_moved' } })
   })
 
+  test('It does not report the note in another session when the replayed resume returned without leaving the session', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.resumeKeepsSession = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume(''))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.effects.filter(e => e.startsWith('resume:'))).toEqual(['resume:'])
+    expect(world.effects.some(e => e.includes('not this one'))).toBe(false)
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
+  test('It does not take the replay for a move when the session id cannot be read around it', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+      world.sessionIdDenials = 100
+    }
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.debugLines.some(line => line.includes('could not read the session id around the /resume replay'))).toBe(true)
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
   test('It answers a held resume with the clearing-first text instead of running it in the command.run hook', COMPACTING, async ($, on) => {
     const world = install($, on)
     await startSession($)
