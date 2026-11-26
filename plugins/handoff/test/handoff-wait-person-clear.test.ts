@@ -174,8 +174,8 @@ test('It shows the waiting status again on a second handoff after the first ende
 
 test('It logs to debug that the wait is for delivering the note once the person has cleared', async ($, on) => {
   const world = await personClearedThenTurnInFreshSession($, on)
-  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before delivering the note')
-  expect(world.debugLines).not.toContain('handoff: waiting for a running turn to end before the handoff goes on')
+  expect(world.debugLines).toContain('waiting for a running turn to end before delivering the note')
+  expect(world.debugLines).not.toContain('waiting for a running turn to end before the handoff goes on')
 })
 
 test('It logs to debug that the wait is for stopping the handoff once the session ended another way', async ($, on) => {
@@ -188,7 +188,7 @@ test('It logs to debug that the wait is for stopping the handoff once the sessio
   await startTurn($)
   fork.release(answered('The handoff note.'))
   await world.clock.settle()
-  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before stopping the handoff')
+  expect(world.debugLines).toContain('waiting for a running turn to end before stopping the handoff')
 })
 
 test('It records cleared_by person on the cleared record when the person clears during the wait', async ($, on) => {

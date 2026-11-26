@@ -56,6 +56,6 @@ describe('inspectPrompt', () => {
     world.gitThrows = true
     await startSession($)
     await submitPerson($, 'start on ENG-1')
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the git branch'))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not read the git branch'))).toBe(true)
   })
 })

@@ -68,9 +68,9 @@ test('It writes the log under THRIFT_HOME when it is set', async ($, on) => {
 
 const WRITER = ['sh', '-c', 'umask 077 && mkdir -p -- "$1" && cat >> "$2" && chmod 600 "$2"', 'sh']
 const DEFAULT_ARGV = [[...WRITER, '/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl']]
-const DEFAULT_USED = 'handoff: THRIFT_HOME is not an absolute path, so the default log location is used'
-const HOME_NEEDED = 'handoff: THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'
-const NO_LOCATION = 'handoff: no log location: neither THRIFT_HOME nor HOME is set'
+const DEFAULT_USED = 'THRIFT_HOME is not an absolute path, so the default log location is used'
+const HOME_NEEDED = 'THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'
+const NO_LOCATION = 'no log location: neither THRIFT_HOME nor HOME is set'
 
 // The debug lines are the ones about the log location; each names THRIFT_HOME.
 const thriftHomeCases = [

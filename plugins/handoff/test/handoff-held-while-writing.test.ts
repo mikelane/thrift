@@ -105,7 +105,7 @@ describe('holding prompts while the note is written', () => {
     const { world } = await writingTheNote($, on)
     await submitPerson($, 'secret words')
     await submitPerson($, 'more words')
-    expect(world.debugLines).toContain('handoff: held a prompt for the handoff (2 held)')
+    expect(world.debugLines).toContain('held a prompt for the handoff (2 held)')
     expect(world.debugLines.join('\n')).not.toContain('words')
   })
 
@@ -180,7 +180,7 @@ describe('refusing a prompt with attachments or context', () => {
   test('It logs a refused prompt to debug without its text', async ($, on) => {
     const { world } = await writingTheNote($, on)
     await submitPerson($, 'secret words', { attachments: IMAGE })
-    expect(world.debugLines).toContain('handoff: refused a prompt with attachments or context during the handoff')
+    expect(world.debugLines).toContain('refused a prompt with attachments or context during the handoff')
     expect(world.debugLines.join('\n')).not.toContain('words')
   })
 })

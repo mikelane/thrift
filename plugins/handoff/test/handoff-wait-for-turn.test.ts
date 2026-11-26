@@ -217,7 +217,7 @@ test('It clears once the turn that started during the compaction ends', COMPACTI
 
 test('It logs to debug when the handoff starts waiting for a running turn', async ($, on) => {
   const world = await waitingForATurn($, on)
-  expect(world.debugLines).toContain('handoff: waiting for a running turn to end before the handoff goes on')
+  expect(world.debugLines).toContain('waiting for a running turn to end before the handoff goes on')
 })
 
 test('It logs to debug once when a second turn starts during the wait', async ($, on) => {
@@ -231,7 +231,7 @@ test('It logs to debug once when a second turn starts during the wait', async ($
 test('It logs to debug when the handoff resumes after the wait', async ($, on) => {
   const world = await waitingForATurn($, on)
   await endTurn($, world)
-  expect(world.debugLines).toContain('handoff: resumed after the wait for a running turn')
+  expect(world.debugLines).toContain('resumed after the wait for a running turn')
 })
 
 test('It logs nothing about waiting when no turn is running', async ($, on) => {

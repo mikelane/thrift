@@ -122,7 +122,7 @@ test('It logs the failed session id read and still writes handoff_failed when tr
   world.sessionIdDenials = 2
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(world.debugLines.filter(line => line.startsWith('handoff: could not read the session id'))).toHaveLength(1)
+  expect(world.debugLines.filter(line => line.startsWith('could not read the session id'))).toHaveLength(1)
   const ends = endRecords(world)
   expect(ends).toHaveLength(1)
   expect(ends[0]).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'handoff_failed', held_restore: 'none' } })
@@ -134,7 +134,7 @@ test('It writes no handoff_failed record when tryReadSessionId and writeRecord b
   world.sessionIdDenials = 3
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(world.debugLines.filter(line => line.startsWith('handoff: could not read the session id'))).toHaveLength(1)
+  expect(world.debugLines.filter(line => line.startsWith('could not read the session id'))).toHaveLength(1)
   expect(endRecords(world)).toEqual([])
 })
 

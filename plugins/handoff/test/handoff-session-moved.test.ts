@@ -59,7 +59,7 @@ describe('a /resume that switched sessions after the clear', () => {
 
   test('It writes a debug line naming the session of the note and the session the person is in', async ($, on) => {
     const world = await handoffThenResume($, on)
-    expect(world.debugLines).toContain('handoff: session moved: the note went to new-session, and the person is now in resumed-elsewhere')
+    expect(world.debugLines).toContain('session moved: the note went to new-session, and the person is now in resumed-elsewhere')
   })
 
   test('It records delivery_session_id, the session that holds the note', async ($, on) => {
@@ -112,7 +112,7 @@ describe('a session id that cannot be read after the clear', () => {
       world.sessionIdDenials = 1
     }
     await runHandoff($, world)
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the delivery (append): '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not read the session id for the delivery (append): '))).toBe(true)
     expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
   })
@@ -128,7 +128,7 @@ describe('a session id that cannot be read after the append is refused', () => {
       },
     })
     await runHandoff($, world)
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the delivery (submit): '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not read the session id for the delivery (submit): '))).toBe(true)
   })
 })
 
@@ -142,7 +142,7 @@ describe('a session id that cannot be read once the note is in, for hasSessionMo
     }
     await runHandoff($, world)
     expect(world.sessionIdDenials).toBe(0)
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the move check: '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not read the session id for the move check: '))).toBe(true)
     expect(world.effects).toContain(`${LOG_PREFIX}${handedOffMessage('old-session')}`)
     expect(world.effects).not.toContain(`${LOG_PREFIX}${ELSEWHERE}`)
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()

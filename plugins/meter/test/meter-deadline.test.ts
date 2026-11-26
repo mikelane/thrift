@@ -69,7 +69,7 @@ describe('takeBreakdown: a held summary and its 30 s deadline', () => {
   test('It logs a summary that reaches its deadline as a failed summary breakdown', async ($, on) => {
     const { world, measuring } = await startHeldSummary($, on)
     await world.clock.advance(30 * SECOND)
-    expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
+    expect(world.debugLines).toEqual(['could not take the summary breakdown: Error: timed out after 30s'])
     await drain(world, measuring.dispatch)
   })
 
@@ -184,7 +184,7 @@ describe('takeBreakdown: a held full count and its 180 s deadline', () => {
     const pressing = pressRefresh($)
     await world.clock.settle()
     await world.clock.advance(180 * SECOND)
-    expect(world.debugLines).toEqual(['meter: could not take the full breakdown: Error: timed out after 180s'])
+    expect(world.debugLines).toEqual(['could not take the full breakdown: Error: timed out after 180s'])
     expect((await textsOf(pane)).join('\n')).toContain('stale')
     await drain(world, pressing)
   })
@@ -227,7 +227,7 @@ describe('loadHeadline: a held plain call and its 30 s deadline', () => {
     const { world, opening } = await heldPlainOpen($, on)
     await world.clock.advance(30 * SECOND)
     await opening
-    expect(world.debugLines).toEqual(['meter: could not read usage: Error: timed out after 30s'])
+    expect(world.debugLines).toEqual(['could not read usage: Error: timed out after 30s'])
     await drain(world)
   })
 
@@ -267,7 +267,7 @@ describe('reloadOpenMeter: deadlines across a clear', () => {
     await $.session.end(clear('s1'))
     await world.clock.settle()
     await world.clock.advance(30 * SECOND)
-    expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
+    expect(world.debugLines).toEqual(['could not take the summary breakdown: Error: timed out after 30s'])
     expect(await readPane($)).toContain('stale')
     await drain(world)
   })
@@ -278,7 +278,7 @@ describe('reloadOpenMeter: deadlines across a clear', () => {
     await $.session.end(clear('s1'))
     await world.clock.settle()
     await world.clock.advance(20 * SECOND)
-    expect(world.debugLines).toEqual(['meter: could not take the summary breakdown: Error: timed out after 30s'])
+    expect(world.debugLines).toEqual(['could not take the summary breakdown: Error: timed out after 30s'])
     expect(await readPane($)).not.toContain('stale')
     await drain(world, measuring.dispatch)
   })

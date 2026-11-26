@@ -109,7 +109,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await leftInBox(world, 'next thing')
     world.isFillRefusedOverText = true
     await finishNote()
-    expect(world.effects).toContain('debug:handoff: the prompt box refused to be emptied: refused by a hook')
+    expect(world.effects).toContain('debug:the prompt box refused to be emptied: refused by a hook')
   })
 
   test('It writes a debug line and carries on when the box cannot be read', async ($, on) => {
@@ -118,7 +118,7 @@ describe('the prompt box after a held prompt is delivered', () => {
     await leftInBox(world, 'next thing')
     world.boxReadDenied = true
     await finishNote()
-    expect(world.effects.filter(effect => effect.startsWith('debug:handoff: could not empty the prompt box'))).toHaveLength(1)
+    expect(world.effects.filter(effect => effect.startsWith('debug:could not empty the prompt box'))).toHaveLength(1)
   })
 })
 
@@ -274,7 +274,7 @@ describe('the prompt box while prompts are held', () => {
     world.boxReadDenied = true
     await submitPerson($, 'one')
     await world.clock.settle()
-    expect(world.effects.filter(effect => effect.startsWith('debug:handoff: could not empty the prompt box'))).toHaveLength(1)
+    expect(world.effects.filter(effect => effect.startsWith('debug:could not empty the prompt box'))).toHaveLength(1)
   })
 
   test('It writes a debug line and carries on when the box refuses to be emptied at hold time', async ($, on) => {
@@ -282,7 +282,7 @@ describe('the prompt box while prompts are held', () => {
     world.isFillRefusedOverText = true
     await submitPerson($, 'one')
     await world.clock.settle()
-    expect(world.effects).toContain('debug:handoff: the prompt box refused to be emptied: refused by a hook')
+    expect(world.effects).toContain('debug:the prompt box refused to be emptied: refused by a hook')
   })
 
   test('It restores a held group once when the hold-time clear emptied the box', async ($, on) => {

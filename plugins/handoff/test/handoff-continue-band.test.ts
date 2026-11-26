@@ -75,7 +75,7 @@ test('It names the continue check in the debug line when its session id read fai
   const band = await weakBand($, world)
   await band.press({ key: 'handoff' })
   await world.clock.settle()
-  expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the continue check: '))).toBe(true)
+  expect(world.debugLines.some(line => line.startsWith('could not read the session id for the continue check: '))).toBe(true)
 })
 
 // Coverage probe: act mode with a typed /handoff continues (README: only plugin-started handoffs are always strong).

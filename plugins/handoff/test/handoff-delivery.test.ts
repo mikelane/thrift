@@ -28,7 +28,7 @@ describe('submitOrKeepInTranscript', () => {
     await submitPerson($, 'run the nightly job', { kind: 'scheduled-trigger' })
     world.submitThrows = true
     await failNote()
-    expect(world.debugLines).toContain('handoff: could not restore the held prompt: HooksError: no implementation for prompt.submit')
+    expect(world.debugLines).toContain('could not restore the held prompt: HooksError: no implementation for prompt.submit')
   })
 })
 
@@ -53,7 +53,7 @@ describe('sendOrKeepInBox', () => {
     await submitPerson($, 'next thing')
     world.submitDropped = true
     await finishNote()
-    expect(world.debugLines).toContain('handoff: could not send the prompt: refused by another hook')
+    expect(world.debugLines).toContain('could not send the prompt: refused by another hook')
   })
 
   test('It sends no held person prompt ahead of a note that never entered the fresh session', async ($, on) => {

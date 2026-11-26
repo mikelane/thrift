@@ -131,7 +131,7 @@ test('It writes the drop reason to the debug log when a hook drops the submitted
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.debugLines).toContain('handoff: could not send the prompt: refused by another hook')
+  expect(world.debugLines).toContain('could not send the prompt: refused by another hook')
 })
 
 test('It logs note not_carried in the cleared record when nothing could carry the note', ACT, async ($, on) => {
@@ -159,7 +159,7 @@ test('It writes the deny reason to the debug log when the append is refused', AC
   await startSession($)
   await finishedTaskTurn($, world)
   await world.clock.settle()
-  expect(world.debugLines).toContain('handoff: append denied: refused')
+  expect(world.debugLines).toContain('append denied: refused')
 })
 
 const compactedFirst = async ($: Engine, on: On, compaction: () => Promise<SessionCompactResult>) => {

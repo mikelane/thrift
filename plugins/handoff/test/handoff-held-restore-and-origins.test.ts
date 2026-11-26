@@ -127,7 +127,7 @@ describe('mixed origins and the carried prompt', () => {
   test('It logs a dropped repeat of the carried prompt to debug without its text', ASK, async ($, on) => {
     const { world } = await heldBeforeTheHandoff($, on)
     await submitPerson($, 'now ENG-2')
-    expect(world.debugLines).toContain('handoff: dropped a repeat of the prompt the handoff carries')
+    expect(world.debugLines).toContain('dropped a repeat of the prompt the handoff carries')
     expect(world.debugLines.join('\n')).not.toContain('ENG-2')
   })
 

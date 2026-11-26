@@ -53,7 +53,7 @@ describe('a compaction that failed because a turn took the session', () => {
 
   test('It writes a debug line saying a running turn preempted the compaction', COMPACTING, async ($, on) => {
     const world = await compactionPreemptedByATurn($, on)
-    expect(world.debugLines).toContain('handoff: the compaction was preempted by a running turn, so the handoff skips the clear')
+    expect(world.debugLines).toContain('the compaction was preempted by a running turn, so the handoff skips the clear')
   })
 
   test('It says the handoff did not clear', COMPACTING, async ($, on) => {
