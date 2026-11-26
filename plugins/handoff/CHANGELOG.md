@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/mikelane/thrift/compare/handoff-v0.3.5...handoff-v0.3.6) (2026-11-26)
+
+
+### Bug Fixes
+
+* **handoff:** tell the model a carried scheduled prompt is the person's own task ([#194](https://github.com/mikelane/thrift/issues/194)) ([13290a4](https://github.com/mikelane/thrift/commit/13290a474be15bc63baa70179db09d4673276409))
+
 ## [0.3.5](https://github.com/mikelane/thrift/compare/handoff-v0.3.4...handoff-v0.3.5) (2026-11-26)
 
 
