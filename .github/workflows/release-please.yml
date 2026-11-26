@@ -1,8 +1,10 @@
 name: Release Please
 
 # On every push to main, release-please keeps one combined release PR open for every plugin with
-# releasable commits (feat, fix). Merging that PR tags the commit once per released plugin, creates a
-# GitHub release for each and lands each plugin's CHANGELOG and version bump. Config: release-please-config.json and .release-please-manifest.json.
+# releasable commits (feat, fix). Merging that PR tags the commit once per released plugin, creates
+# a GitHub release for each and lands each plugin's CHANGELOG and version bump. A refused merge holds
+# every plugin's release at once.
+# Config: release-please-config.json and .release-please-manifest.json.
 #
 # The release PR is opened with a GitHub App token, not GITHUB_TOKEN. A PR opened with GITHUB_TOKEN
 # triggers no workflows, so the release PR would get no CI and could not merge. The App needs

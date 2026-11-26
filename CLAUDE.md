@@ -41,6 +41,10 @@ specific to this repo.
     `plugin.json`; versions, changelogs and tags (`<name>-vX.Y.Z`, with a GitHub release each) stay
     per plugin. Never edit either file by hand. A commit that touches no plugin path (`scripts/`,
     `.github/`, root docs) releases nothing.
+  - Which plugins a release-merge annotation covers: the job's annotations name the PR number and
+    the commit, never a plugin, and the combined PR's title names none either. A refused or failed
+    merge holds every plugin in the PR; the PR body (one section per plugin) or its changed
+    `plugins/<name>/` files say which.
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
     the component is not the marketplace name, or when a manifest version differs from
