@@ -94,14 +94,14 @@ test_the_merge_step_names_the_pr_in_an_error_when_it_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the PR"
+  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the PR (at $SHA_A)"
 }
 
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_fetched() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/files-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the changed files"
+  assert_out_has "::error title=Release PR #111 not merged::cannot fetch the changed files (at $SHA_A)"
 }
 
 test_the_merge_step_fails_when_the_changed_files_cannot_be_fetched() {
@@ -155,7 +155,7 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_re
   echo 'not json' >"$TEST_DIR/files-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot read the changed files"
+  assert_out_has "::error title=Release PR #111 not merged::cannot read the changed files (at $SHA_A)"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
@@ -163,7 +163,7 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_gate_cannot_be_checked() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step merge_step_with_a_failing_problem_check_for_pr_111
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
@@ -181,7 +181,7 @@ test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
   : >"$TEST_DIR/pulls.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -190,7 +190,7 @@ test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate"
+  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -253,28 +253,28 @@ with_failing_mktemp() {
   "$@"
 }
 
-# assert_temp_file_failure_stops_the_gate <prefix>: the gate stops at the mktemp for <prefix> with
-# its own error, not at a later step reading an empty path.
+# assert_temp_file_failure_stops_the_gate <prefix> <what>: the gate stops at the mktemp for <prefix>
+# with an error naming <what> and the tested commit, not at a later step reading an empty path.
 assert_temp_file_failure_stops_the_gate() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step with_failing_mktemp "$1" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot create a temp file"
+  assert_out_has "::error title=Release PR #111 not merged::cannot create a temp file for $2 (at $SHA_A)"
   assert_out_lacks "cannot fetch"
   assert_out_lacks "cannot read the changed files"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
 test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_pr_temp_file() {
-  assert_temp_file_failure_stops_the_gate pr
+  assert_temp_file_failure_stops_the_gate pr 'the PR'
 }
 
 test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_files_temp_file() {
-  assert_temp_file_failure_stops_the_gate files
+  assert_temp_file_failure_stops_the_gate files 'the changed file names'
 }
 
 test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_raw_temp_file() {
-  assert_temp_file_failure_stops_the_gate raw
+  assert_temp_file_failure_stops_the_gate raw 'the files API response'
 }
 
 test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {

@@ -348,24 +348,24 @@ release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
-    || release_merge_fail "$number" "cannot create a temp file" || return 1
+    || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
   files=$(mktemp "$work_dir/files.XXXXXX") \
-    || release_merge_fail "$number" "cannot create a temp file" || return 1
+    || release_merge_fail "$number" "cannot create a temp file for the changed file names (at $tested_sha)" || return 1
   raw=$(mktemp "$work_dir/raw.XXXXXX") \
-    || release_merge_fail "$number" "cannot create a temp file" || return 1
+    || release_merge_fail "$number" "cannot create a temp file for the files API response (at $tested_sha)" || return 1
   gh api "repos/$REPO/pulls/$number" >"$pr" \
-    || release_merge_fail "$number" "cannot fetch the PR" || return 1
+    || release_merge_fail "$number" "cannot fetch the PR (at $tested_sha)" || return 1
   # Two steps, not a pipe: a failed fetch must not read as "no changed files" without pipefail.
   gh api --paginate "repos/$REPO/pulls/$number/files" >"$raw" \
-    || release_merge_fail "$number" "cannot fetch the changed files" || return 1
+    || release_merge_fail "$number" "cannot fetch the changed files (at $tested_sha)" || return 1
   release_merge_changed_files <"$raw" >"$files" \
-    || release_merge_fail "$number" "cannot read the changed files" || return 1
+    || release_merge_fail "$number" "cannot read the changed files (at $tested_sha)" || return 1
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
-    || release_merge_fail "$number" "cannot count the changed files" || return 1
+    || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
     "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
-    || release_merge_fail "$number" "cannot check the gate" || return 1
+    || release_merge_fail "$number" "cannot check the gate (at $tested_sha)" || return 1
   release_merge_record_problem "$ci_run_id" "$number" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
