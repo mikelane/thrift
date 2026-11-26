@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
 import { announce } from './announcement'
-import { withPreface } from './carried-preface'
+import { carriedText } from './carried-preface'
 import { CONTINUE_PROMPT, decideContinue, type ContinueFields, type SessionCheck } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
@@ -56,10 +56,6 @@ const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be
 // rejecting.
 // A prompt someone else sent says where it came from; the plugin's own note and continue prompt are not carried prompts. The
 // queued entry holds the text that is submitted, because the turn it starts is matched back to it by that text.
-function prefacedIfCarried(prompt: HeldPrompt): HeldPrompt {
-  return prompt.author === 'person' ? { ...prompt, text: withPreface(prompt) } : prompt
-}
-
 async function submitEntered(
   $: EngineInterface,
   state: SessionState,
@@ -67,7 +63,7 @@ async function submitEntered(
   failureLabel: string,
   asUser: boolean,
 ): Promise<boolean> {
-  const submission = asUser ? prompt : prefacedIfCarried(prompt)
+  const submission = { ...prompt, text: carriedText(prompt, asUser) }
   queueResubmittedPrompt(state, submission)
   try {
     const result = await $.prompt.submit(asUser ? { text: submission.text, asUser: true } : { text: submission.text })
@@ -217,7 +213,7 @@ async function deliverNoteAsPrompt(
   // always undefined today and no test can tell whether it is passed on. It stays so a group that does carry one is not lost.
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
   const note: HeldPrompt = {
-    text: joinPrompts(message, sameOriginGroup === undefined ? undefined : withPreface(sameOriginGroup)),
+    text: joinPrompts(message, sameOriginGroup === undefined ? undefined : carriedText(sameOriginGroup, false)),
     isUnattended: settledHandoff.isUnattended,
     origin,
     author: 'plugin',

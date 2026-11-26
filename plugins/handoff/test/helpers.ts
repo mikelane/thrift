@@ -318,4 +318,4 @@ export const buttonLabels = async (band: Awaited<ReturnType<typeof mountBand>>) 
   (await band.findAll({ type: 'Button' })).map(button => button.props.label)
 
 // What the model reads for a scheduled prompt the handoff carried: the origin preface, then the prompt.
-export const scheduled = (text: string): string => withPreface({ text, origin: 'scheduled-trigger', isUnattended: true })
+export const scheduled = (text: string): string => withPreface(text)
