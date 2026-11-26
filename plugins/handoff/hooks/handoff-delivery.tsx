@@ -32,6 +32,7 @@ import {
   releaseCarriedGroup,
   removeResubmittedPrompt,
   takeLateArrivalsOrEndSending,
+  whenForeignClearsSettled,
   type BoxPlacement,
   type HeldPrompt,
   type HeldPromptGroup,
@@ -163,6 +164,21 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
+// A clear that never returns must not hold the note back for good.
+export const FOREIGN_CLEAR_TIMEOUT_MS = 5000
+
+// The person's /clear can still be switching to the fresh session when the handoff resumes. The engine then still reports the
+// id of the cleared session, which the clear is about to empty. Wait for the clear to return, then read the id.
+async function waitForForeignClearsOrTimeOut($: EngineInterface, state: SessionState): Promise<void> {
+  let timer: { cancel: () => void } | undefined
+  const timedOut = new Promise<boolean>(resolve => {
+    timer = $.clock.after(FOREIGN_CLEAR_TIMEOUT_MS, () => resolve(true))
+  })
+  const hasTimedOut = await Promise.race([whenForeignClearsSettled(state).then(() => false), timedOut])
+  timer?.cancel()
+  if (hasTimedOut) debug($, `a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
+}
+
 type NoteDeliveryResult = { noteDelivery: NoteDelivery; noteSessionId: string | undefined }
 
 // The session id is read straight before the append, and again straight before the prompt submit when the append is refused,
@@ -174,6 +190,7 @@ async function deliverNote(
   settledHandoff: SettledHandoff,
   message: string,
 ): Promise<NoteDeliveryResult> {
+  await waitForForeignClearsOrTimeOut($, state)
   const appendSessionId = await readSessionId($, 'delivery (append)')
   if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId: appendSessionId }
   const submitSessionId = await readSessionId($, 'delivery (submit)')

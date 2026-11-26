@@ -128,6 +128,10 @@ export type SessionState = Settings & {
   // From the clear's return until the held resumes have run: resolves true when at least one replayed /resume returned
   // without throwing (the person left the fresh session), false when every one threw. Never rejects. Null when none is replaying.
   heldResumeReplay: Promise<boolean> | null
+  // Clears someone else started whose command.run has not returned: the engine still names the cleared session until they do.
+  foreignClearsRunning: number
+  // Resolvers of the deliveries waiting for foreignClearsRunning to reach zero.
+  foreignClearReleasers: Array<() => void>
 }
 
 // A reload that runs register again calls this again: see the SAFETY note at the call in register.tsx for what it
@@ -170,6 +174,8 @@ export const createState = (settings: Settings): SessionState => ({
   sessionEndBeforeClear: null,
   heldResumeArgs: [],
   heldResumeReplay: null,
+  foreignClearsRunning: 0,
+  foreignClearReleasers: [],
 })
 
 export const resetForNewSession = (state: SessionState): void => {
@@ -484,4 +490,29 @@ export const settlePostCompactionContext = (state: SessionState, measuredTokens:
   state.isAwaitingPostCompactionContext = false
   state.backoffFrom = measuredTokens
   state.floorTokens = measuredTokens
+}
+
+// Counts a foreign clear from the start of its command.run until it returns or throws. A note delivery must not read the
+// session id while the person's clear is still switching sessions. The handoff's own clear is not counted.
+export const recordForeignClearRunning = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
+  state.foreignClearsRunning += 1
+}
+
+// Releases the waiting deliveries once the last running foreign clear is done.
+export const recordForeignClearDone = (state: SessionState, origin: PromptOrigin): void => {
+  if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
+  if (state.foreignClearsRunning > 0) state.foreignClearsRunning -= 1
+  if (state.foreignClearsRunning > 0) return
+  const releasers = state.foreignClearReleasers
+  state.foreignClearReleasers = []
+  for (const release of releasers) release()
+}
+
+// Resolves at once when no foreign clear is running.
+export const whenForeignClearsSettled = (state: SessionState): Promise<void> => {
+  if (state.foreignClearsRunning === 0) return Promise.resolve()
+  return new Promise(resolve => {
+    state.foreignClearReleasers.push(resolve)
+  })
 }

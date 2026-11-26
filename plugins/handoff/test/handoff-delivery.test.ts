@@ -213,6 +213,8 @@ describe('the late-turn check in continueInFreshSession', () => {
     await finishNote()
     endPersonClear()
     await personClear
+    // The delivery waits for the person's clear to return, then runs in a later tick.
+    await world.clock.settle()
     expect(world.appended.join('\n')).toContain(TURN_AFTER_NOTE_LINE)
   })
 })

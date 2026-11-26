@@ -37,6 +37,8 @@ import {
   endMainTurn,
   noteCacheReads,
   forgetForeignClear,
+  recordForeignClearDone,
+  recordForeignClearRunning,
   recordForeignClear,
   recordForeignClearReturned,
   holdResume,
@@ -195,6 +197,7 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
   // taken for the handoff's, and a late turn after it goes unreported. Needs two queued clears and such a hook. No guard.
   on('command.run', { command: 'clear' }, async ($, e, next) => {
     recordForeignClear(state, e.origin)
+    recordForeignClearRunning(state, e.origin)
     try {
       const clearOutput = await next(e)
       if (clearOutput.ref === undefined) forgetForeignClear(state)
@@ -203,6 +206,8 @@ const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
     } catch (error) {
       forgetForeignClear(state)
       throw error
+    } finally {
+      recordForeignClearDone(state, e.origin)
     }
   }).catch(($, e, next) => next(e))
 

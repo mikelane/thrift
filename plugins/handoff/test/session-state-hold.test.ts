@@ -61,6 +61,8 @@ test('It returns the settings with a closed gate and an empty session from creat
     sessionEndBeforeClear: null,
     heldResumeArgs: [],
     heldResumeReplay: null,
+    foreignClearsRunning: 0,
+    foreignClearReleasers: [],
   })
 })
 
