@@ -11,7 +11,7 @@ export type LogRecord = {
   trigger_values: Record<string, unknown>
 }
 
-export type FileState = { text: string; bytes: Uint8Array; mtimeMs: number }
+type FileState = { text: string; bytes: Uint8Array; mtimeMs: number }
 
 const base64Of = (bytes: Uint8Array): string => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
 
