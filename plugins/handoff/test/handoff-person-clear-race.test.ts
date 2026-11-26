@@ -44,7 +44,7 @@ describe('a person clear still finishing when the handoff resumes after the wait
 })
 
 describe('a person clear that returns before the wait runs out', () => {
-  test('It writes no timeout debug line and cancels the wait timer', async ($, on) => {
+  test('It writes no timeout debug line when the clear returns before the timeout', async ($, on) => {
     const world = await waitingForATurn($, on)
     const { finishClear } = await personClearStillFinishing($, world)
     await finishClear()
