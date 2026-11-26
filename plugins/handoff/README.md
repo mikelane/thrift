@@ -792,5 +792,8 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/held-delivery.ts` | `GroupDelivery` and `worstDelivery`: the worst outcome among the held groups sent or put back, as one value |
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
-| `hooks/session-state.ts` | The per-session state object |
+| `hooks/session-state.ts` | The per-session state object: its types (`SessionState`, `HandoffHold`, `HeldPrompt`), `createState`, `resetForNewSession`, and the setters on the whole object (`claimPending`, `noteCacheReads`, `settlePostCompactionContext`) |
+| `hooks/handoff-hold-state.ts` | The `HandoffHold` lifecycle: starting it (`beginHandoffHold`), holding a prompt that arrives (`addHeldPrompt`, `takeHeldPrompts`), sending (`beginSending`, `takeLateArrivalsOrEndSending`), releasing what the handoff carried (`releaseCarried`, `releaseCarriedGroup`), and ending it (`endHandoff`) |
+| `hooks/clear-stage.ts` | The stages around the clear: the outcome before it (`preClearOutcome`), the handoff's own clear (`beginOwnClear`, `markOwnClearReturned`), a clear someone else ran (`recordForeignClear`, `recordForeignClearDone`, `whenForeignClearsSettled`), who cleared (`clearedByFor`), and the resume held until the session ends (`holdResume`, `takeHeldResumes`) |
+| `hooks/turn-state.ts` | The turns: main and subagent turns starting and ending (`startMainTurn`, `endMainTurn`, `startSubagentTurn`, `endSubagentTurn`), prompts resubmitted after one (`queueResubmittedPrompt`), the note window (`beginNoteWindow`), and waiting for a turn to end (`waitForTurnEnd`, `releaseTurnEndWaiter`) |
 | `types/index.d.ts` | The band's atom: an `Offer`, or a status line (writing the note, or waiting for a turn) |
