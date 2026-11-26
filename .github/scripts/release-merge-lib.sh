@@ -297,13 +297,16 @@ release_merge_sweep() (
 # the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The
 # message says whether it was merged or closed without merging (the same PR read gives `merged`).
 # Fails for any other cause, so a real merge failure still fails the job: returns 1 when the PR is
-# still open at <sha>, and 2 when its state could not be read. A PR closed without being merged also
+# still open at <sha>, and 2 when its state could not be read (the response is not exactly one JSON
+# object with a string `state`: `null`, `{}`, an empty body). A PR closed without being merged also
 # gets a notice annotation on stderr, so it shows on the run summary (stdout stays the one message).
 release_merge_lost_race() {
   local pr_fields state head merged
   pr_fields=$(set -o pipefail
     gh api "repos/$1/pulls/$2" \
-      | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 2
+      | jq -rs 'if length == 1 and (.[0] | type) == "object" and (.[0].state | type) == "string"
+               then .[0] | [.state, .head.sha, (.merged // false)] | join(" ")
+               else error("not one PR object") end') || return 2
   read -r state head merged <<<"$pr_fields"
   if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
@@ -402,8 +405,9 @@ release_merge_pr_if_gate_passes() {
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
-  # A fetch that is not one JSON object would otherwise read as refusals built from empty fields.
-  jq -e 'type == "object"' "$pr" >/dev/null 2>&1 \
+  # A fetch that is not exactly one JSON object would otherwise read as refusals built from empty
+  # fields; `jq -e` alone checks only the last value of a stream, so slurp and count.
+  jq -se 'length == 1 and (.[0] | type) == "object"' "$pr" >/dev/null 2>&1 \
     || release_merge_fail "$number" "cannot parse the PR (at $tested_sha)" || return 1
   # The gate's stderr goes to a file so a failure's annotation can name the lookup that failed; it
   # is replayed to the log either way. With no temp file it goes nowhere and the annotation leaves
