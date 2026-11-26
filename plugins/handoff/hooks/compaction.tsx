@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Trigger } from './decision-record'
 import { debug, logFailure } from './engine-log'
 import { writeRecord } from './record-writer'
-import { type SessionState } from './session-state'
+import type { SessionState } from './session-state'
 import { claimPending } from './turn-state'
 
 const knownFloor = (state: SessionState): number | undefined => (state.floorTokens > 0 ? state.floorTokens : undefined)

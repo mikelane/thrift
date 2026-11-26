@@ -1,4 +1,4 @@
-import { type SessionState } from './session-state'
+import type { SessionState } from './session-state'
 import { isHoldingForHandoff } from './prompt-hold-state'
 
 // Claude Code leaves a dropped prompt's text in the box and submits the next one typed after it, joined: `five` then `six` is
