@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/mikelane/thrift/compare/reread-v1.0.2...reread-v1.0.3) (2026-11-26)
+
+
+### Bug Fixes
+
+* drop the plugin name from debug lines, which the engine already adds ([#203](https://github.com/mikelane/thrift/issues/203)) ([9d47a4e](https://github.com/mikelane/thrift/commit/9d47a4e391d9699221051395a45b6d5d594b7207))
+
 ## [1.0.2](https://github.com/mikelane/thrift/compare/reread-v1.0.1...reread-v1.0.2) (2026-11-22)
 
 
