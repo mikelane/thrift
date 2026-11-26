@@ -5,7 +5,7 @@ import type { SessionEndBeforeClear, SessionState } from './session-state'
 export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abandon_compaction_preempted' | 'deliver_to_person_clear' | 'clear'
 
 // The outcomes that end in a cleared session, whoever cleared it.
-export type ClearingOutcome = Extract<PreClearOutcome, 'deliver_to_person_clear' | 'clear'>
+type ClearingOutcome = Extract<PreClearOutcome, 'deliver_to_person_clear' | 'clear'>
 
 // Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
 const CLEARED_BY = {

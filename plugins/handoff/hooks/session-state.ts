@@ -38,7 +38,7 @@ export type HandoffHold =
 //   idle:         no handoff.
 //   before_clear: the note is written, awaited, or compacted; the clear has not been issued.
 //   own_clear:    the handoff issued its /clear.
-export type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
+type HandoffStage = 'idle' | 'before_clear' | 'own_clear'
 
 // What ended the session before the handoff's own clear: the person's /clear, or anything else (a resume and so on).
 export type SessionEndBeforeClear = 'cleared_by_person' | 'other'
