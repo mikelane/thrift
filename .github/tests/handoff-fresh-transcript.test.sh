@@ -109,7 +109,7 @@ test_has_user_text_matches_the_whole_text_only() {
   local T status=0
   T=$(mktemp -d)
   write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"fivesix"}}'
-  transcript_has_user_text "$T/t.jsonl" five || status=$?
+  transcript_has_user_text_equal_to "$T/t.jsonl" five || status=$?
   rm -rf "$T"
   report test_has_user_text_matches_the_whole_text_only "$status" 1
 }
@@ -118,14 +118,14 @@ test_has_user_text_finds_a_text_among_several_entries() {
   local T status=0
   T=$(mktemp -d)
   write_transcript "$T/t.jsonl" "$TOOL_RESULT_USER" "$STRING_USER" "$BLOCKS_USER"
-  transcript_has_user_text "$T/t.jsonl" six || status=$?
+  transcript_has_user_text_equal_to "$T/t.jsonl" six || status=$?
   rm -rf "$T"
   report test_has_user_text_finds_a_text_among_several_entries "$status" 0
 }
 
 test_has_user_text_fails_when_the_transcript_is_missing() {
   local status=0
-  transcript_has_user_text /nonexistent/t.jsonl five 2>/dev/null || status=$?
+  transcript_has_user_text_equal_to /nonexistent/t.jsonl five 2>/dev/null || status=$?
   report test_has_user_text_fails_when_the_transcript_is_missing "$status" 1
 }
 
@@ -171,7 +171,7 @@ test_has_user_text_matches_the_raw_text_of_a_wrapped_entry() {
   local T status=0
   T=$(mktemp -d)
   write_transcript "$T/t.jsonl" "$WRAPPED_USER"
-  transcript_has_user_text "$T/t.jsonl" 'SCHEDTOKEN: run it' || status=$?
+  transcript_has_user_text_equal_to "$T/t.jsonl" 'SCHEDTOKEN: run it' || status=$?
   rm -rf "$T"
   report test_has_user_text_matches_the_raw_text_of_a_wrapped_entry "$status" 0
 }
@@ -186,7 +186,7 @@ test_has_user_text_fails_when_the_transcript_cannot_be_parsed() {
   local T status=0
   T=$(mktemp -d)
   write_transcript "$T/t.jsonl" "$STRING_USER" '{"type":"user","message":{"con'
-  transcript_has_user_text "$T/t.jsonl" five 2>/dev/null || status=$?
+  transcript_has_user_text_equal_to "$T/t.jsonl" five 2>/dev/null || status=$?
   rm -rf "$T"
   # Any non-zero status is a failure: jq -e exits 5 on a parse error, 1 on no match.
   report test_has_user_text_fails_when_the_transcript_cannot_be_parsed "$((status != 0))" 1

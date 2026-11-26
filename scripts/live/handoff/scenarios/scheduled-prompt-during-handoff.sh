@@ -142,16 +142,16 @@ carried_unattended() {
 }
 # The plugin's debug line no longer carries the submitted text (2.1.332), so the prompt is read from the fresh
 # session's transcript.
-fresh_transcript_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1" | jq -r '.session_id')"; }
+fresh_transcript_path_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1" | jq -r '.session_id')"; }
 carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
-    && transcript_has_user_text_containing "$(fresh_transcript_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
+    && transcript_has_user_text_containing "$(fresh_transcript_path_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
 }
 # carried_prompt_reply <baseline>: the first 300 characters of the assistant text that follows the carried
 # prompt's user message in the fresh transcript; empty when there is no transcript, no such message or no reply.
 carried_prompt_reply() {
   local transcript
-  transcript=$(fresh_transcript_of_first_handoff "$1")
+  transcript=$(fresh_transcript_path_of_first_handoff "$1")
   [[ -f "$transcript" ]] || return 0
   jq -rs --arg fragment "$SCHEDULED_TOKEN:" "$TRANSCRIPT_ENTRY_TEXT_JQ"'
     . as $entries
@@ -172,7 +172,7 @@ carried_prompt_reply_report() {
 }
 carried_prompt_evidence() {
   local transcript
-  transcript=$(fresh_transcript_of_first_handoff "$1")
+  transcript=$(fresh_transcript_path_of_first_handoff "$1")
   if [[ -n "$transcript" ]]; then
     echo "the fresh session's transcript $transcript has no user message containing $SCHEDULED_TOKEN:"
   else

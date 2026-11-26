@@ -22,7 +22,7 @@ CLEAR_QUEUED='command\.run \(handoff\): 6 chars queued'
 SECOND_PROMPT_PAUSE=0.04
 TIGHT_POLL=0.005
 # A plugin submit in the debug log: the text in quotes (before 2.1.332) or only its length.
-PLUGIN_SUBMIT='prompt\.submit \(handoff\): ("|[0-9]+ chars)'
+PLUGIN_SUBMIT_LOG_PATTERN='prompt\.submit \(handoff\): ("|[0-9]+ chars)'
 
 scenario_run() {
   handoff_prepare '{}'
@@ -73,7 +73,7 @@ press_two_prompts() {
 # The held prompt and the two late arrivals are each submitted by the plugin, whatever text they carry:
 # a wait on the expected texts would time out, an ERROR, on the joined "fivesix" this scenario reports.
 settle_after_delivery() {
-  wait_for "the held prompt and both late prompts to be submitted" log_has_more_than a "$PLUGIN_SUBMIT" 2
+  wait_for "the held prompt and both late prompts to be submitted" log_has_more_than a "$PLUGIN_SUBMIT_LOG_PATTERN" 2
 }
 
 show_transcript_lookup() {
@@ -88,5 +88,5 @@ show_transcript_lookup() {
 
 both_held_in_sending_stage() { log_has a 'held a prompt for the handoff \(2 held\)'; }
 # Both read the transcript, so a missing one fails them instead of passing for want of a "fivesix".
-not_joined() { [[ -f "$1" ]] && transcript_user_texts "$1" >/dev/null && ! transcript_has_user_text "$1" fivesix; }
-both_delivered() { transcript_has_user_text "$1" five && transcript_has_user_text "$1" six; }
+not_joined() { [[ -f "$1" ]] && transcript_user_texts "$1" >/dev/null && ! transcript_has_user_text_equal_to "$1" fivesix; }
+both_delivered() { transcript_has_user_text_equal_to "$1" five && transcript_has_user_text_equal_to "$1" six; }

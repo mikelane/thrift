@@ -111,7 +111,7 @@ test_delivery_window_is_a_fail_when_the_second_prompt_is_held_joined() {
 }
 
 # A transcript jq cannot finish parsing (a line cut short) is not evidence that "fivesix" is absent:
-# `! transcript_has_user_text` reads jq's parse failure as "no such entry" and the check passes.
+# `! transcript_has_user_text_equal_to` reads jq's parse failure as "no such entry" and the check passes.
 test_delivery_window_does_not_pass_not_joined_on_an_unparsable_transcript() {
   write_fresh_transcript one five fivesix
   printf '%s\n' '{"type":"user","message":{"con' >> "$TEST_DIR/fresh.jsonl"

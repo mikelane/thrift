@@ -84,8 +84,8 @@ transcript_user_texts() {
   jq -c "$TRANSCRIPT_ENTRY_TEXT_JQ"' select(.type == "user") | entry_text' "$1"
 }
 
-# transcript_has_user_text <transcript> <text>: a user entry whose whole text is <text>.
-transcript_has_user_text() {
+# transcript_has_user_text_equal_to <transcript> <text>: a user entry whose whole text is <text>.
+transcript_has_user_text_equal_to() {
   transcript_user_texts "$1" | jq -s -e --arg text "$2" 'any(.[]; . == $text)' >/dev/null
 }
 
