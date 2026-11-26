@@ -169,7 +169,7 @@ function unsentNoteNotice(note: HeldPrompt, isJoined: boolean): string {
   return canUseBox(note) ? UNSENT_NOTE : UNSENT_UNATTENDED_NOTE
 }
 
-// Waits for a promise, but no longer than the timeout. Resolves to whether the timeout won; the timer is cancelled either way.
+// Waits for a promise, but no longer than the timeout. Resolves to true if the promise settled in time, false if the timeout won. The timer is cancelled either way.
 async function settlesWithin($: EngineInterface, wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {
   let timer: { cancel: () => void } | undefined
   const timedOut = new Promise<boolean>(resolve => {
@@ -198,7 +198,7 @@ export const HELD_RESUME_REPLAY_TIMEOUT_MS = 5000
 async function hasHeldResumeMoved($: EngineInterface, state: SessionState): Promise<boolean> {
   const replay = state.heldResumeReplay
   if (replay === null) return false
-  // Only the handoff that follows the clear reads the replay. One that gave up on it must not leave it for a later handoff.
+  // The handoff that follows the clear takes the replay, even if it stops waiting, so a later handoff never reads a stale one.
   forgetHeldResumeReplay(state, replay)
   let hasMoved = false
   const hasSettled = await settlesWithin($, replay.then(moved => { hasMoved = moved }), HELD_RESUME_REPLAY_TIMEOUT_MS)
@@ -367,8 +367,8 @@ export async function continueInFreshSession(
   // Only a note appended or submitted to a transcript is in the session whose id was read. A note in the prompt box, or one
   // that never entered, is not in that session, so there is no session to point the person at.
   const isInTranscript = noteDelivery === 'appended' || noteDelivery === 'submitted'
-  // A held /resume replays right after the clear and moves the person once it runs, so wait for it: a replay that ran means the
-  // note's line must not claim this session, and one that failed leaves the person here, where the id check decides.
+  // A held /resume replays right after the clear, so wait for it. If it changed the session id, the note's line must not claim
+  // this session. If it failed or was cancelled, the person is still here, and the id check decides.
   const hasSessionMoved = isInTranscript && ((await hasHeldResumeMoved($, state)) || (await hasSessionMovedFrom($, noteSessionId)))
   if (hasSessionMoved && noteSessionId !== undefined) $.ui.log(noteInOtherSessionMessage(noteSessionId))
   else announce($, FINAL_MESSAGES[noteDelivery](oldId))

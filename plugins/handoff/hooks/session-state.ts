@@ -396,7 +396,7 @@ export const holdResume = (state: SessionState, args: string): void => {
 
 export const takeHeldResumes = (state: SessionState): string[] => state.heldResumeArgs.splice(0)
 
-// A newer replay may already have replaced the one being forgotten, and that one stays.
+// Clears the replay only if it is still the current one. A newer replay stays.
 export function forgetHeldResumeReplay(state: SessionState, replay: Promise<boolean>): void {
   if (state.heldResumeReplay === replay) state.heldResumeReplay = null
 }
