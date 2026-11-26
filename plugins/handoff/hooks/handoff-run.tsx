@@ -23,7 +23,7 @@ import { writeRecord } from './record-writer'
 import { claimPending, type SessionState } from './session-state'
 import { beginNoteWindow } from './turn-state'
 import { beginBeforeClear, clearedByFor, hasSecondClear } from './clear-stage'
-import { beginHandoffHold, beginSending, endHandoff, takeHeldPrompts } from './prompt-hold-state'
+import { beginHandoffHold, beginSending, endHandoff, takeHeldPrompts } from './handoff-hold-state'
 
 type AbandonDetails = { sessionId?: string; forkReason?: ForkReason; clearSkipCause?: ClearSkipCause }
 

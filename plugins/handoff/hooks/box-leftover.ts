@@ -1,5 +1,5 @@
 import type { SessionState } from './session-state'
-import { isHoldingForHandoff } from './prompt-hold-state'
+import { isHoldingForHandoff } from './handoff-hold-state'
 
 // Claude Code leaves a dropped prompt's text in the box and submits the next one typed after it, joined: `five` then `six` is
 // submitted as `fivesix`. The plugin takes the leftover out in a later tick, but the next prompt can arrive before that tick

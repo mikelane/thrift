@@ -30,7 +30,7 @@ import { writeRecord } from './record-writer'
 import type { HeldPrompt, HeldPromptGroup, SessionState } from './session-state'
 import { queueResubmittedPrompt, removeResubmittedPrompt } from './turn-state'
 import { forgetHeldResumeReplay, whenForeignClearsSettled } from './clear-stage'
-import { beginSending, releaseCarried, releaseCarriedGroup, takeLateArrivalsOrEndSending, type BoxPlacement } from './prompt-hold-state'
+import { beginSending, releaseCarried, releaseCarriedGroup, takeLateArrivalsOrEndSending, type BoxPlacement } from './handoff-hold-state'
 
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'

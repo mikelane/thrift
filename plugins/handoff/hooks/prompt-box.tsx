@@ -5,7 +5,7 @@ import { debug } from './engine-log'
 import { boxCopiesOf, holdsPrompt, withoutBoxCopy, withoutPrompt, type Carried } from './handoff-note'
 import { isComposerOrigin } from './prompt-plan'
 import type { HeldPrompt, SessionState } from './session-state'
-import type { BoxPlacement } from './prompt-hold-state'
+import type { BoxPlacement } from './handoff-hold-state'
 
 const UNSENT_PROMPT = 'Your prompt could not be sent or put in the prompt box. Here it is:'
 const UNSENT_OTHER_PROMPT = 'A prompt could not be sent, so here it is:'

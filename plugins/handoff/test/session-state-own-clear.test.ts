@@ -3,7 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { createState } from '../hooks/session-state'
 import { startMainTurn } from '../hooks/turn-state'
 import { beginBeforeClear, beginOwnClear, clearedByFor, hasSecondClear, forgetForeignClear, markOwnClearReturned, recordForeignClear, recordForeignClearReturned, recordSessionEnd } from '../hooks/clear-stage'
-import { endHandoff } from '../hooks/prompt-hold-state'
+import { endHandoff } from '../hooks/handoff-hold-state'
 import { settings } from './session-state-fixtures'
 import type { PromptOrigin } from 'claude-code'
 

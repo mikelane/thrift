@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { type HandoffHold, type HeldPrompt, createState, resetForNewSession } from '../hooks/session-state'
 import { removeResubmittedPrompt, queueResubmittedPrompt, startMainTurn } from '../hooks/turn-state'
-import { type BoxPlacement, addHeldPrompt, beginSending, refusedPromptPlacement, beginHandoffHold, isCarriedByHandoff, isHoldingForHandoff, releaseCarried, takeHeldPrompts, takeLateArrivalsOrEndSending } from '../hooks/prompt-hold-state'
+import { type BoxPlacement, addHeldPrompt, beginSending, refusedPromptPlacement, beginHandoffHold, isCarriedByHandoff, isHoldingForHandoff, releaseCarried, takeHeldPrompts, takeLateArrivalsOrEndSending } from '../hooks/handoff-hold-state'
 import { settings, person, nightly } from './session-state-fixtures'
 
 const sendingState = () => {

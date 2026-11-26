@@ -7,6 +7,8 @@ export type PreClearOutcome = 'abandon_session_ended' | 'abandon_busy' | 'abando
 // The outcomes that end in a cleared session, whoever cleared it.
 type ClearingOutcome = Extract<PreClearOutcome, 'deliver_to_person_clear' | 'clear'>
 
+const PLUGIN_NAME = 'handoff'
+
 // Who ran the clear for each outcome that reaches it; a new outcome fails to compile until it is mapped here.
 const CLEARED_BY = {
   clear: 'handoff',
@@ -67,8 +69,6 @@ export const recordForeignClearReturned = (state: SessionState, origin: PromptOr
   if (origin.kind === 'plugin' && origin.name === PLUGIN_NAME) return
   if (state.handoffStage === 'own_clear' && !state.hasOwnClearReturned) state.didForeignClearFinishFirst = true
 }
-
-const PLUGIN_NAME = 'handoff'
 
 // A clear someone else started, counted from its command.run until its session end. The declarations skip only the calling
 // hook on a plugin's $.command.run ("the calling hook alone"; "the plugin's others see it"), so the handoff's own clear can
