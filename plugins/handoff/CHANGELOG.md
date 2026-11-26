@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/mikelane/thrift/compare/handoff-v0.3.4...handoff-v0.3.5) (2026-11-26)
+
+
+### Bug Fixes
+
+* **handoff:** wait for a person's running /clear before delivering the note ([#192](https://github.com/mikelane/thrift/issues/192)) ([35810be](https://github.com/mikelane/thrift/commit/35810bed5f034644a36714ad5128cced974866e2))
+
 ## [0.3.4](https://github.com/mikelane/thrift/compare/handoff-v0.3.3...handoff-v0.3.4) (2026-11-25)
 
 
