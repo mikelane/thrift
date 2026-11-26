@@ -39,8 +39,8 @@ specific to this repo.
     each rewrote `.release-please-manifest.json`, so once one merged the rest conflicted. The PR
     writes each released plugin's `plugins/<name>/CHANGELOG.md` and the `version` in its
     `plugin.json`; versions, changelogs and tags (`<name>-vX.Y.Z`, with a GitHub release each) stay
-    per plugin. Never edit either file by hand. A commit that touches no plugin path (`scripts/`,
-    `.github/`, root docs) releases nothing.
+    per plugin. Never edit a plugin's `CHANGELOG.md` or the `version` in its `plugin.json` by hand.
+    A commit that touches no plugin path (`scripts/`, `.github/`, root docs) releases nothing.
   - Which plugins a release-merge annotation covers: the job's annotations name the PR number and
     the commit, never a plugin, and the combined PR's title names none either. A refused or failed
     merge holds every plugin in the PR; the PR body (one section per plugin) or its changed
