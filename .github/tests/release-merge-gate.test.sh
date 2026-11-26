@@ -70,13 +70,12 @@ test_a_pr_that_changes_only_some_allowed_files_has_no_problems() {
 
 # One fix that releases several plugins makes release-please open a single PR on
 # release-please--branches--main that changes the manifest and every released package (#207).
+# No plugin has a version.txt and the Simple strategy never creates one, so the PR has none.
 COMBINED_BRANCH=release-please--branches--main
 COMBINED_FILES='.release-please-manifest.json
 plugins/handoff/CHANGELOG.md
-plugins/handoff/version.txt
 plugins/handoff/.claude-plugin/plugin.json
 plugins/meter/CHANGELOG.md
-plugins/meter/version.txt
 plugins/meter/.claude-plugin/plugin.json'
 
 test_a_combined_release_pr_that_changes_two_packages_has_no_problems() {
