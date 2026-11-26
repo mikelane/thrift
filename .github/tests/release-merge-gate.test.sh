@@ -97,10 +97,10 @@ test_a_combined_release_pr_with_an_extra_file_blocks_the_merge() {
 }
 
 test_a_combined_release_pr_blocks_the_merge_when_another_open_pr_shares_its_branch() {
-  local got on_combined
-  on_combined=".head.ref = \"$COMBINED_BRANCH\""
-  write_pulls "$(open_pr 111 "$SHA" "$on_combined")" "$(open_pr 999 "$SHA" "$on_combined")"
-  got=$(gate_problems "$on_combined" "$COMBINED_FILES")
+  local got combined_head_ref_filter
+  combined_head_ref_filter=".head.ref = \"$COMBINED_BRANCH\""
+  write_pulls "$(open_pr 111 "$SHA" "$combined_head_ref_filter")" "$(open_pr 999 "$SHA" "$combined_head_ref_filter")"
+  got=$(gate_problems "$combined_head_ref_filter" "$COMBINED_FILES")
   [[ "$got" == "another open PR shares the branch $COMBINED_BRANCH: #999" ]] || fail "got [$got]"
 }
 
