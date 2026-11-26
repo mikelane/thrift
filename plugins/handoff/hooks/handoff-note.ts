@@ -1,6 +1,7 @@
 import type { ForkReason } from './fork-outcome'
 import { isComposerOrigin, isPersonOrigin } from './prompt-plan'
-import { isGroupOfOrigin, type BoxPlacement, type HeldPrompt, type HeldPromptGroup } from './session-state'
+import type { HeldPrompt, HeldPromptGroup } from './session-state'
+import { isGroupOfOrigin, type BoxPlacement } from './handoff-hold-state'
 
 export const HANDOFF_PROMPT = `Write a handoff for the next session, which will start fresh with only this note.
 Cover, under short headings:

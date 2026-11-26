@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { createState, queueResubmittedPrompt, startMainTurn } from '../hooks/session-state'
+import { createState } from '../hooks/session-state'
+import { queueResubmittedPrompt, startMainTurn } from '../hooks/turn-state'
 import { settings } from './session-state-fixtures'
 
 const entry = (text: string, isUnattended: boolean) => ({ text, isUnattended, origin: 'composer' as const, author: 'person' as const })

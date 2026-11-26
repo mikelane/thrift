@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { HELD_RESUME_REPLAY_TIMEOUT_MS } from '../hooks/handoff-delivery'
+import { HELD_RESUME_REPLAY_TIMEOUT_MS } from '../hooks/fresh-session-continuation'
 import { install, lastRecord, runCommand, startSession } from './helpers'
 
 const COMPACTING = { options: { compactBeforeClear: true } } as const
@@ -160,7 +160,7 @@ describe('a held resume replay that never returns', () => {
   test('It writes a debug line saying the replay did not return in time', COMPACTING, async ($, on) => {
     const world = await hangingReplay($, on)
     await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
-    expect(world.debugLines).toContain(`handoff: a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
+    expect(world.debugLines).toContain(`a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
   })
 })
 

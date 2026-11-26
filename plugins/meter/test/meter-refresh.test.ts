@@ -310,7 +310,7 @@ describe('loadBreakdown', () => {
     await measure($, usageOf(150000), ['context'])
     const texts = await textsOf(await mountPane($))
     expect(world.debugLines).toHaveLength(1)
-    expect(world.debugLines[0]).toStartWith('meter: could not take the summary breakdown:')
+    expect(world.debugLines[0]).toStartWith('could not take the summary breakdown:')
     expect(world.debugLines[0]).toContain('count refused')
     expect(texts).toContain('⚠ stale')
     expect(texts.some(text => /Messages +88k/.test(text))).toBe(true)
@@ -321,7 +321,7 @@ describe('loadBreakdown', () => {
     world.isBreakdownFailing = true
     await runMeter($, 'refresh')
     expect(world.debugLines).toHaveLength(1)
-    expect(world.debugLines[0]).toStartWith('meter: could not take the full breakdown:')
+    expect(world.debugLines[0]).toStartWith('could not take the full breakdown:')
     expect(world.debugLines[0]).toContain('count refused')
     expect(await textsOf(await mountPane($))).toContain('⚠ stale')
   })
@@ -361,7 +361,7 @@ describe('loadHeadline', () => {
     world.isBreakdownFailing = true
     await startSession($)
     await runMeter($)
-    expect(world.debugLines[0]).toStartWith('meter: could not read usage:')
+    expect(world.debugLines[0]).toStartWith('could not read usage:')
     expect(world.debugLines[0]).toContain('plain reading refused')
     expect(await textsOf(await mountPane($))).toContain('⚠ stale')
   })

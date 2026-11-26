@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, lastRecord, putFile, read, SEVEN_LINES } from './world'
+import { install } from './world'
+import { isStub, lastRecord, read } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 
-const NO_LOCATION = 'reread: no log location: neither THRIFT_HOME nor HOME is set'
+const NO_LOCATION = 'no log location: neither THRIFT_HOME nor HOME is set'
 
 describe('writeRecord', () => {
   test('It appends a record for an evaluation', ACT, async ($, on) => {
@@ -40,7 +42,7 @@ describe('writeRecord', () => {
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect([world.debugLines, world.logArgv[0]?.slice(4)]).toEqual([
-      ['reread: THRIFT_HOME is not an absolute path, so the default log location is used'],
+      ['THRIFT_HOME is not an absolute path, so the default log location is used'],
       ['/home/u/.claude/thrift', '/home/u/.claude/thrift/decisions.jsonl'],
     ])
   })
@@ -50,7 +52,7 @@ describe('writeRecord', () => {
     const world = install($, on, { home: null, thriftHome: 'relative/dir' })
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual(['reread: THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'])
+    expect(world.debugLines).toEqual(['THRIFT_HOME is not an absolute path, so HOME is needed for a log location, and it is not set'])
   })
 
   test('It treats an empty THRIFT_HOME as unset and writes under HOME without a debug line', ACT, async ($, on) => {
@@ -79,7 +81,7 @@ describe('writeRecord', () => {
     world.logWrite = 'exit'
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual(['reread: log write to /home/u/.claude/thrift/decisions.jsonl failed (exit 1): disk full'])
+    expect(world.debugLines).toEqual(['log write to /home/u/.claude/thrift/decisions.jsonl failed (exit 1): disk full'])
   })
 
   test('It says why when the log write throws', ACT, async ($, on) => {
@@ -87,7 +89,7 @@ describe('writeRecord', () => {
     world.logWrite = 'throw'
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not write a decision record: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not write a decision record: /)])
   })
 
   test('It still returns the stub when the log write fails', ACT, async ($, on) => {

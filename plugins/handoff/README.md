@@ -773,6 +773,9 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/engine-log.tsx` | `debug` and `logFailure`: the debug-log line and the guard for background work, shared by the modules that take `$` |
 | `hooks/band-controller.tsx` | The band: the offer atom, putting it up and taking it down, its buttons and what a press does (its `PressActions`, built in `register.tsx`, reach the handoff and the compaction without importing `handoff-run.tsx`, which imports this module), and drawing it |
 | `hooks/handoff-run.tsx` | A handoff's run: claiming it (`scheduleHandoff`), writing the note, waiting for the clear window, and abandoning with a reason |
+| `hooks/lifecycle-hooks.tsx` | `registerLifecycleHooks`: the `session.start`, `/clear`, `/resume` and `session.end` hooks, and the engine version read at start |
+| `hooks/fresh-session-continuation.tsx` | `continueInFreshSession`: after the clear, delivering the note, the held prompts and the continue prompt in the fresh session, and writing the record |
+| `hooks/handoff-delivery.tsx` | Delivering a handoff's prompts: submitting a held prompt (`submitEntered`), waiting for a promise to settle within a timeout (`settlesWithin`), delivering the note (`deliverNote`), sending the held groups and the late arrivals after it (`sendHeldGroups`, `sendLateArrivals`), and putting them back when the handoff fails (`restoreHeldGroups`, `restoreLateArrivals`) |
 | `hooks/compaction.tsx` | `scheduleCompaction`: the compaction a weak signal or the Compact button asks for, and its record |
 | `hooks/handoff-command.tsx` | `startHandoffCommand`: the reply to `/handoff` |
 | `hooks/command-registration.tsx` | `registerHandoffCommand`, run at session start and again after a clear |
@@ -792,5 +795,8 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/held-delivery.ts` | `GroupDelivery` and `worstDelivery`: the worst outcome among the held groups sent or put back, as one value |
 | `hooks/band-text.ts` | The band's wording |
 | `hooks/tasks.ts` | Background task id helpers |
-| `hooks/session-state.ts` | The per-session state object |
+| `hooks/session-state.ts` | The per-session state object: its types (`SessionState`, `HandoffHold`, `HeldPrompt`), `createState`, `resetForNewSession`, and the setters on the whole object (`claimPending`, `noteCacheReads`, `settlePostCompactionContext`) |
+| `hooks/handoff-hold-state.ts` | The `HandoffHold` lifecycle: starting it (`beginHandoffHold`), holding a prompt that arrives (`addHeldPrompt`, `takeHeldPrompts`), sending (`beginSending`, `takeLateArrivalsOrEndSending`), releasing what the handoff carried (`releaseCarried`, `releaseCarriedGroup`), and ending it (`endHandoff`) |
+| `hooks/clear-stage.ts` | The stages around the clear: the outcome before it (`preClearOutcome`), the handoff's own clear (`beginOwnClear`, `markOwnClearReturned`), a clear someone else ran (`recordForeignClear`, `recordForeignClearDone`, `whenForeignClearsSettled`), who cleared (`clearedByFor`), and a `/resume` held while the handoff's clear is queued, then replayed once that clear returns (`shouldHoldResume`, `holdResume`, `takeHeldResumes`) |
+| `hooks/turn-state.ts` | The turns: main and subagent turns starting and ending (`startMainTurn`, `endMainTurn`, `startSubagentTurn`, `endSubagentTurn`), prompts resubmitted after one (`queueResubmittedPrompt`), the note window (`beginNoteWindow`), and waiting for a turn to end (`waitForTurnEnd`, `releaseTurnEndWaiter`) |
 | `types/index.d.ts` | The band's atom: an `Offer`, or a status line (writing the note, or waiting for a turn) |

@@ -1,20 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-import {
-  beginBeforeClear,
-  beginOwnClear,
-  noteCacheReads,
-  recordSessionEnd,
-  createState,
-  beginNoteWindow,
-  endMainTurn,
-  startMainTurn,
-  startSubagentTurn,
-  endSubagentTurn,
-  releaseTurnEndWaiter,
-  waitForTurnEnd,
-  resetForNewSession,
-} from '../hooks/session-state'
+import { createState, noteCacheReads, resetForNewSession } from '../hooks/session-state'
+import { beginNoteWindow, endMainTurn, startMainTurn, startSubagentTurn, endSubagentTurn, releaseTurnEndWaiter, waitForTurnEnd } from '../hooks/turn-state'
+import { beginBeforeClear, beginOwnClear, recordSessionEnd } from '../hooks/clear-stage'
 import { settings } from './session-state-fixtures'
 
 const isPending = async (promise: Promise<void>): Promise<boolean> =>

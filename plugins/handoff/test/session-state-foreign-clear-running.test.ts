@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { PromptOrigin } from 'claude-code'
 
-import { createState, recordForeignClearDone, recordForeignClearRunning, whenForeignClearsSettled } from '../hooks/session-state'
+import { createState } from '../hooks/session-state'
+import { recordForeignClearDone, recordForeignClearRunning, whenForeignClearsSettled } from '../hooks/clear-stage'
 import { settings } from './session-state-fixtures'
 
 const PERSON_ORIGIN: PromptOrigin = { kind: 'composer' }

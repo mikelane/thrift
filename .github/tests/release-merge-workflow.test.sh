@@ -144,6 +144,21 @@ test_a_failed_merge_whose_pr_lookup_fails_is_not_a_lost_race() {
   return 0
 }
 
+test_a_failed_merge_whose_pr_lookup_fails_returns_2_so_it_differs_from_a_still_open_pr() {
+  local status=0
+  stub_gh
+  release_merge_lost_race "$REPO" 111 "$SHA" >/dev/null 2>&1 || status=$?
+  [[ "$status" == 2 ]] || fail "got status $status"
+}
+
+test_a_failed_merge_of_an_open_pr_at_the_tested_head_returns_1() {
+  local status=0
+  write_pr "$TEST_DIR/pr-111.json" .
+  stub_gh
+  release_merge_lost_race "$REPO" 111 "$SHA" >/dev/null 2>&1 || status=$?
+  [[ "$status" == 1 ]] || fail "got status $status"
+}
+
 test_a_failed_merge_of_an_open_pr_at_the_tested_head_is_not_a_lost_race() {
   lost_race . >/dev/null && fail 'hid a real merge failure'
   return 0

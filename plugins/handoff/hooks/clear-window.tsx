@@ -4,12 +4,17 @@ import type { BandState } from '../types'
 import { WAITING, WAITING_STATUS } from './band-text'
 import type { ClearSkipCause, DecisionReason, HandoffRequest, SettledHandoff, Trigger } from './decision-record'
 import { debug } from './engine-log'
+import { tryReadSessionId } from './session-id'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
 import { writeRecord } from './record-writer'
-import { beginOwnClear, forgetHeldResumeReplay, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
+import type { SessionState } from './session-state'
+import { waitForTurnEnd } from './turn-state'
+import { beginOwnClear, forgetHeldResumeReplay, markOwnClearReturned, preClearOutcome, takeHeldResumes, type PreClearOutcome } from './clear-stage'
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
+
+const RESUME_REPLAY_PHRASE = ' around the /resume replay'
 
 type RedrawBand = (band: BandState) => Promise<void>
 export type AbandonHandoff = (
@@ -130,16 +135,6 @@ export async function waitForClearWindow(
   return { ...clearWindow, clearing }
 }
 
-// A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
-async function tryReadSessionId($: EngineInterface): Promise<string | undefined> {
-  try {
-    return await $.session.id()
-  } catch (error) {
-    debug($, `could not read the session id around the /resume replay: ${String(error)}`)
-    return undefined
-  }
-}
-
 // Each /resume held while the clear was queued runs now, one after another, in a later tick: the engine refuses a command
 // started inside the hook it waits on. A failed replay goes to the debug log, and the rest still run.
 function replayHeldResumes($: EngineInterface, state: SessionState): void {
@@ -150,7 +145,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
   const replay: Promise<boolean> = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
-        const idBefore = await tryReadSessionId($)
+        const idBefore = await tryReadSessionId($, RESUME_REPLAY_PHRASE)
         for (const resumeArgs of heldResumeArgs) {
           try {
             await $.command.run({ command: 'resume', args: resumeArgs })
@@ -158,8 +153,9 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
             debug($, `/resume replay failed: ${String(error)}`)
           }
         }
-        const idAfter = await tryReadSessionId($)
+        const idAfter = await tryReadSessionId($, RESUME_REPLAY_PHRASE)
         forgetHeldResumeReplay(state, replay)
+        // A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
         resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
       })()
     })

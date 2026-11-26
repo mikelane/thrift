@@ -96,7 +96,7 @@ describe('compactBeforeClearing', () => {
     }
     await finishNote()
     expect(world.records[0]).toMatchObject({ action: 'none', session_id: 'old-session', trigger_values: { reason: 'compaction_failed' } })
-    expect(world.debugLines.some(line => line.startsWith('handoff: compaction before the clear failed: '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('compaction before the clear failed: '))).toBe(true)
   })
 })
 
@@ -111,7 +111,7 @@ describe('clearSession', () => {
     const { world, finishNote } = await writingTheNote($, on)
     world.clearThrows = true
     await finishNote()
-    expect(world.debugLines.some(line => line.startsWith('handoff: /clear failed: '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('/clear failed: '))).toBe(true)
     expect(lastRecord(world)).toMatchObject({ action: 'none', trigger_values: { reason: 'clear_failed' } })
   })
 })

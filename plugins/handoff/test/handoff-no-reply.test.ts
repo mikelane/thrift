@@ -63,7 +63,7 @@ test('It logs the API status and error kind to the debug log when the fork fails
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(world.debugLines).toContain('handoff: the fork wrote no handoff note: api-error (status 529, overloaded)')
+  expect(world.debugLines).toContain('the fork wrote no handoff note: api-error (status 529, overloaded)')
 })
 
 test('It logs the reason to the debug log when the fork returns an empty reply', async ($, on) => {
@@ -72,7 +72,7 @@ test('It logs the reason to the debug log when the fork returns an empty reply',
   await startSession($)
   await runCommand($, 'handoff')
   await world.clock.settle()
-  expect(world.debugLines).toContain('handoff: the fork wrote no handoff note: empty-reply')
+  expect(world.debugLines).toContain('the fork wrote no handoff note: empty-reply')
 })
 
 test('It writes no fork debug line when the fork has nothing to fork', async ($, on) => {

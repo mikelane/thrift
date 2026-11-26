@@ -105,7 +105,7 @@ SUBMIT_COUNTS=('$.prompt.submit (handoff): 3 chars' '$.prompt.submit (handoff): 
 test_delivery_window_is_a_fail_when_the_second_prompt_is_held_joined() {
   write_fresh_transcript one five fivesix
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
   assert_exit_code 1
   assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'
 }
@@ -116,14 +116,14 @@ test_delivery_window_does_not_pass_not_joined_on_an_unparsable_transcript() {
   write_fresh_transcript one five fivesix
   printf '%s\n' '{"type":"user","message":{"con' >> "$TEST_DIR/fresh.jsonl"
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
   assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'
 }
 
 test_delivery_window_is_an_error_when_the_second_prompt_misses_the_sending_stage() {
   write_fresh_transcript one five
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' '$.prompt.submit (handoff): 3 chars' '$.prompt.submit (handoff): 4 chars'
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '$.prompt.submit (handoff): 3 chars' '$.prompt.submit (handoff): 4 chars'
   assert_exit_code 2
   assert_out_has 'the timing window was missed'
 }
@@ -131,7 +131,7 @@ test_delivery_window_is_an_error_when_the_second_prompt_misses_the_sending_stage
 test_delivery_window_passes_when_each_prompt_is_held_as_typed() {
   write_fresh_transcript one five six
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
   assert_exit_code 0
   assert_out_has 'PASS s (3 checks)'
 }
@@ -139,7 +139,7 @@ test_delivery_window_passes_when_each_prompt_is_held_as_typed() {
 test_delivery_window_counts_plugin_submits_that_log_their_text() {
   write_fresh_transcript one five six
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' \
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' \
     '$.prompt.submit (handoff): "one"' '$.prompt.submit (handoff): "five"' '$.prompt.submit (handoff): "six"'
   assert_exit_code 0
   assert_out_has 'PASS s (3 checks)'
@@ -148,7 +148,7 @@ test_delivery_window_counts_plugin_submits_that_log_their_text() {
 test_delivery_window_fails_the_delivery_check_when_a_prompt_is_missing_from_the_transcript() {
   write_fresh_transcript one five
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
   assert_exit_code 1
   assert_out_has 'FAIL  both prompts reached the fresh session as typed'
 }
@@ -156,7 +156,7 @@ test_delivery_window_fails_the_delivery_check_when_a_prompt_is_missing_from_the_
 test_delivery_window_fails_both_transcript_checks_and_says_so_when_no_transcript_is_found() {
   rm -f "$TEST_DIR/fresh.jsonl"
   run_delivery_window '$.command.run (handoff): 6 chars queued' \
-    'handoff: held a prompt for the handoff (1 held)' 'handoff: held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
+    '[handoff] $.ui.log (to debug): held a prompt for the handoff (1 held)' '[handoff] $.ui.log (to debug): held a prompt for the handoff (2 held)' "${SUBMIT_COUNTS[@]}"
   assert_exit_code 1
   assert_out_has 'no fresh session transcript found for the old session old-1'
   assert_out_has 'FAIL  the second prompt was held as typed, not joined to the first'

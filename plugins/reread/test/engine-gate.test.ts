@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, lastRecord, putFile, read, SEVEN_LINES, triggerValues } from './world'
+import { install } from './world'
+import { isStub, lastRecord, read, triggerValues } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 
@@ -101,8 +103,8 @@ describe('engineInfo: the engine version', () => {
     expect([isStub(second), world.debugLines]).toEqual([
       false,
       [
-        expect.stringMatching(/^reread: could not read the engine version: /),
-        'reread: engine unknown is not a release at or before the one reread was tested through, so it runs as off',
+        expect.stringMatching(/^could not read the engine version: /),
+        'engine unknown is not a release at or before the one reread was tested through, so it runs as off',
       ],
     ])
   })

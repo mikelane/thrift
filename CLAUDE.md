@@ -33,10 +33,21 @@ specific to this repo.
   - Config: `release-please-config.json` has one package per plugin (`plugins/<name>`,
     `release-type: simple`, `component: <name>`, tag `<name>-vX.Y.Z`) and
     `.release-please-manifest.json` holds each plugin's current version.
-  - Release PRs: release-please keeps a release PR open per plugin with a `feat` or `fix` commit
-    under that plugin's path; the PR writes `plugins/<name>/CHANGELOG.md` and the `version` in
-    `plugin.json`. Never edit either by hand. A commit that touches no plugin path (`scripts/`,
-    `.github/`, root docs) releases nothing.
+  - Release PRs: `separate-pull-requests` is `false`, so release-please keeps one combined release
+    PR open (branch `release-please--branches--main`, title `chore: release main`) for every plugin
+    with a `feat` or `fix` commit under its path. One PR avoids the conflicts separate PRs had:
+    each rewrote `.release-please-manifest.json`, so once one merged the rest conflicted. The PR
+    writes each released plugin's `plugins/<name>/CHANGELOG.md` and the `version` in its
+    `plugin.json`; versions, changelogs and tags (`<name>-vX.Y.Z`, with a GitHub release each) stay
+    per plugin. Never edit a plugin's `CHANGELOG.md` or the `version` in its `plugin.json` by hand.
+    A commit that touches no plugin path (`scripts/`, `.github/`, root docs) releases nothing.
+  - Which plugins a release-merge annotation covers: annotation titles name the PR number
+    (`Release PR #N not merged`), never a plugin; two failures name no PR, `Release PR sweep failed`
+    and `Release merge failed`. The combined PR's title names no plugin either, so a refused or
+    failed merge holds every plugin in the PR. The PR body (one section per plugin) or its changed
+    `plugins/<name>/` files say which. A refusal for a file outside the allowlist names that file
+    (`plugins/<name>/... is not a file a release PR changes`). #215 tracks naming the plugins in
+    annotations.
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
     the component is not the marketplace name, or when a manifest version differs from

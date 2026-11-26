@@ -38,7 +38,7 @@ describe('registerMeterCommand', () => {
     world.isRegisterFailing = true
     await startSession($)
     expect(world.debugLines).toHaveLength(1)
-    expect(world.debugLines[0]).toStartWith('meter: could not register /meter:')
+    expect(world.debugLines[0]).toStartWith('could not register /meter:')
     expect(world.debugLines[0]).toContain('register refused')
   })
 })
@@ -163,7 +163,7 @@ describe('runMeterCommand', () => {
     world.isOpenFailing = true
     await startSession($)
     await runMeter($)
-    expect(world.debugLines.at(-1)).toStartWith('meter: could not run /meter:')
+    expect(world.debugLines.at(-1)).toStartWith('could not run /meter:')
   })
 
   test('It accepts surrounding spaces around refresh', async ($, on) => {

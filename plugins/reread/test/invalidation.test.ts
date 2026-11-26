@@ -1,17 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  compact,
-  endSessionWith,
-  install,
-  isStub,
-  lastRecord,
-  putFile,
-  read,
-  runTool,
-  SEVEN_LINES,
-  triggerValues,
-} from './world'
+import { install } from './world'
+import { compact, endSessionWith, isStub, lastRecord, read, runTool, triggerValues } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 
@@ -201,7 +192,7 @@ describe('noteToolRan after a file-editing tool', () => {
     const world = install($, on)
     world.statThrowsFor.add('/work/new.ts')
     await runTool($, 'Write', { file_path: '/work/new.ts' })
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not resolve an edited path: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not resolve an edited path: /)])
   })
 
   test('It drops the path the tool was given when the engine resolves no real path', ACT, async ($, on) => {

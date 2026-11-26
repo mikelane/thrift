@@ -1,18 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  install,
-  isStub,
-  putFile,
-  putFileBytes,
-  read,
-  rewriteBytesKeepingStat,
-  rewriteKeepingStat,
-  SEVEN_LINES,
-  TINY_FILE,
-  triggerValues,
-  type World,
-} from './world'
+import { install, type World } from './world'
+import { isStub, read, triggerValues } from './world-actions'
+import { putFile, putFileBytes, rewriteBytesKeepingStat, rewriteKeepingStat, SEVEN_LINES, TINY_FILE } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 
@@ -314,7 +304,7 @@ describe('readTool: the debug line for an engine call that failed', () => {
   test('It says why when the file cannot be stat-ed', ACT, async ($, on) => {
     const world = install($, on)
     await read($, '/work/missing.ts')
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not stat a file: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not stat a file: /)])
   })
 
   test('It says why when the file cannot be read to hash it', ACT, async ($, on) => {
@@ -322,7 +312,7 @@ describe('readTool: the debug line for an engine call that failed', () => {
     putFile(world, '/work/a.ts', SEVEN_LINES)
     world.readThrowsFor.add('/work/a.ts')
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not read a file: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not read a file: /)])
   })
 
   test('It says why when the conversation cannot be read', ACT, async ($, on) => {
@@ -331,7 +321,7 @@ describe('readTool: the debug line for an engine call that failed', () => {
     await read($, '/work/a.ts')
     world.isMessagesFailing = true
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not read the conversation: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not read the conversation: /)])
   })
 
   test('It says why when a read that ran cannot be tracked', ACT, async ($, on) => {
@@ -339,6 +329,6 @@ describe('readTool: the debug line for an engine call that failed', () => {
     putFile(world, '/work/a.ts', SEVEN_LINES)
     world.isTurnsFailing = true
     await read($, '/work/a.ts')
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not track a read: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not track a read: /)])
   })
 })

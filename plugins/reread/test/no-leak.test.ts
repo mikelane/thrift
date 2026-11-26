@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, putFile, read, runTool } from './world'
+import { install } from './world'
+import { read, runTool } from './world-actions'
+import { putFile } from './world-files'
 
 const BIG_PATH = '/work/secret-project/big.ts'
 const TINY_PATH = '/work/secret-project/tiny.ts'
