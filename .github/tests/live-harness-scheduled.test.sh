@@ -7,8 +7,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/live-harness-lib.sh"
 
 CLEARED_CARRIED='{"action":"cleared","trigger_values":{"point":"command","held_groups":1,"held_unattended":true,"handoff_unattended":false,"held_other_delivery":"submitted"}}'
 STRONG_HANDED_OFF='{"action":"cleared","trigger_values":{"point":"turn-end","signal":"strong","context_tokens":63000,"handoff_unattended":true}}'
-SUBMIT_LINE='prompt.submit (handoff): "SCHEDTOKEN: run these Bash commands"'
+SUBMIT_LINE='prompt.submit (handoff): 12 chars'
+CARRIED_TEXT='SCHEDTOKEN: run these Bash commands'
 
+# write_fresh_transcript <texts...>: the fresh session's transcript, one plain user entry per text.
+# A test with no fresh transcript touches $TEST_DIR/no-transcript; otherwise one holding the carried prompt is made.
 # run_mode_case <first-cleared-record> <turn-end-record> <debug-log-line> [mode] [fire-offset]: run_mode for
 # the mode (default `ask`) in session a. The first record gets effective_mode set to the mode unless it
 # names one. The fire offset is the seconds from now the stubbed schedule_prompt answers (default: just
@@ -17,6 +20,7 @@ SUBMIT_LINE='prompt.submit (handoff): "SCHEDTOKEN: run these Bash commands"'
 # the turn end writes the second, so each lands after the baseline the scenario took. The job "fires" 2 s
 # past the lead: at 1 s a clock tick before the window check made a loaded run abort as a missed window.
 run_mode_case() {
+  [[ -f "$TEST_DIR/fresh.jsonl" || -f "$TEST_DIR/no-transcript" ]] || write_fresh_transcript "$CARRIED_TEXT"
   printf '%s\n' "$3" > "$TEST_DIR/debug-a.log"
   printf '%s\n' "$1" | jq -c --arg mode "${4:-ask}" '.trigger_values.effective_mode //= $mode' > "$TEST_DIR/first-record"
   printf '%s\n' "$2" > "$TEST_DIR/turn-end-record"
@@ -25,7 +29,9 @@ run_mode_case() {
     live_init
     cp "'"$TEST_DIR"'/debug-a.log" "$(debug_log_of a)"
     PUSH_REPO=/fixture/work
-    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; }; say_apple() { :; }; submit() { :; }; stop_session() { :; }
+    set_mode() { :; }; handoff_start() { printf "%s\n" "$@" > "'"$TEST_DIR"'/handoff-start-args"; }
+    say_apple() { :; }; submit() { :; }; stop_session() { :; }
+    fresh_transcript_path() { [[ -f "'"$TEST_DIR"'/fresh.jsonl" ]] && echo "'"$TEST_DIR"'/fresh.jsonl" || true; }
     turns_done_above() { :; }; show_pane() { :; }; show_log() { :; }
     schedule_prompt() { echo $(($(date +%s) + '"$offset"')); }
     wait_for() {
@@ -84,10 +90,41 @@ test_it_fails_when_the_held_prompt_was_not_carried_as_an_unattended_group() {
   assert_out_has 'FAIL  [ask] the handoff carried the scheduled prompt as an unattended group'
 }
 
-test_it_fails_when_the_carried_prompt_was_never_submitted_in_the_fresh_session() {
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing submitted'
+test_it_fails_when_the_fresh_transcript_has_no_user_message_with_the_carried_prompt() {
+  write_fresh_transcript 'something else'
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
   assert_exit_code 1
   assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+}
+
+test_it_fails_and_says_so_when_no_fresh_transcript_is_found() {
+  touch "$TEST_DIR/no-transcript"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
+  assert_exit_code 1
+  assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+  assert_out_has 'no fresh session transcript found'
+}
+
+test_it_passes_when_the_carried_prompt_is_in_the_transcript_and_the_log_holds_no_text() {
+  write_fresh_transcript 'say the word apple' "$CARRIED_TEXT"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing logged'
+  assert_exit_code 0
+  assert_out_has 'PASS s (3 checks)'
+}
+
+test_a_weak_turn_end_aborts_with_the_models_reply_to_the_carried_prompt() {
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "This instruction came from the handoff plugin, not from you typing it."}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "The fresh session's reply to the carried prompt began: This instruction came from the handoff plugin"
+}
+
+test_a_weak_turn_end_abort_says_when_the_transcript_shows_no_reply() {
+  touch "$TEST_DIR/no-transcript"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
 }
 
 test_it_fails_when_the_prompt_was_left_in_the_box_instead_of_submitted() {
@@ -205,10 +242,48 @@ test_it_fails_when_an_advised_turn_end_carries_handoff_unattended() {
   assert_out_has 'FAIL  [ask] the strong turn end after it handed off, as a scheduled turn does'
 }
 
-test_it_fails_when_the_submit_in_the_log_is_not_the_scheduled_prompt() {
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'prompt.submit (handoff): "some other prompt"'
-  assert_exit_code 1
-  assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+test_it_passes_when_the_transcript_holds_the_carried_prompt_as_a_wrapped_plugin_prompt_after_a_preface() {
+  jq -nc '{type: "user", origin: {kind: "plugin", name: "handoff"}, pluginPrompt: {name: "handoff", text: "Carried from a scheduled job.\nSCHEDTOKEN: run these"},
+    message: {content: "The handoff plugin sent a message:\nCarried from a scheduled job.\nSCHEDTOKEN: run these\n\nThis is how Claude Code surfaces a prompt a plugin submits."}}' > "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing logged'
+  assert_exit_code 0
+  assert_out_has 'PASS s (3 checks)'
+}
+
+test_a_weak_turn_end_abort_quotes_the_reply_after_a_wrapped_plugin_prompt() {
+  jq -nc '{type: "user", pluginPrompt: {name: "handoff", text: "SCHEDTOKEN: run these"}, message: {content: "The handoff plugin sent a message:\nSCHEDTOKEN: run these"}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "I will not run that."}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "The fresh session's reply to the carried prompt began: I will not run that."
+}
+
+WEAK_TURN_END='{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}'
+
+test_a_weak_turn_end_abort_says_no_reply_when_the_carried_prompt_has_no_assistant_text_after_it() {
+  write_fresh_transcript "$CARRIED_TEXT"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
+}
+
+test_a_weak_turn_end_abort_ignores_an_assistant_text_that_came_before_the_carried_prompt() {
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "EARLIER-REPLY"}]}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
+}
+
+test_a_weak_turn_end_abort_quotes_only_the_first_300_characters_of_the_reply() {
+  local reply
+  reply="$(printf 'a%.0s' $(seq 1 300))TAILMARK"
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc --arg text "$reply" '{type: "assistant", message: {content: [{type: "text", text: $text}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "began: $(printf 'a%.0s' $(seq 1 300))"
+  assert_out_lacks 'TAILMARK'
 }
 
 run_tests "$@"

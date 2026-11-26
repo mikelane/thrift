@@ -116,12 +116,12 @@ run_mode() {
   [[ "$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')" == "$mode" ]] \
     || live_abort "the first handoff's record says the session ran in '$(first_cleared "$baseline" | jq -r '.trigger_values.effective_mode')', not in $mode: the $mode checks would prove nothing"
   [[ "$(turn_end_field "$after_handoff" signal)" == strong ]] \
-    || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing"
+    || live_abort "the turn end after the carried prompt was '$(turn_end_field "$after_handoff" signal)', not strong (context $(turn_end_field "$after_handoff" context_tokens) against $THRESHOLD): the run proves nothing. $(carried_prompt_reply_report "$baseline")"
 
   check "[$mode] the handoff carried the scheduled prompt as an unattended group" \
     "the cleared record was: $(first_cleared "$baseline")" carried_unattended "$baseline"
   check "[$mode] the carried prompt was submitted in the fresh session" \
-    "the cleared record was: $(first_cleared "$baseline"); the log has no plugin submit of the prompt" carried_prompt_submitted "$baseline" "$name"
+    "the cleared record was: $(first_cleared "$baseline"); $(carried_prompt_evidence "$baseline")" carried_prompt_submitted "$baseline"
   check "[$mode] the strong turn end after it handed off, as a scheduled turn does" \
     "the turn end record was: $(turn_end_record "$after_handoff")" turn_end_handed_off "$after_handoff"
   stop_session "$name"
@@ -140,9 +140,44 @@ show_records_after() {
 carried_unattended() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_groups == 1 and .held_unattended == true and .handoff_unattended == false)' >/dev/null
 }
+# The plugin's debug line no longer carries the submitted text (2.1.332), so the prompt is read from the fresh
+# session's transcript.
+fresh_transcript_path_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1" | jq -r '.session_id')"; }
 carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
-    && log_has "$2" "prompt\\.submit \\(handoff\\): \"$SCHEDULED_TOKEN"
+    && transcript_has_user_text_containing "$(fresh_transcript_path_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
+}
+# carried_prompt_reply <baseline>: the first 300 characters of the assistant text that follows the carried
+# prompt's user message in the fresh transcript; empty when there is no transcript, no such message or no reply.
+carried_prompt_reply() {
+  local transcript
+  transcript=$(fresh_transcript_path_of_first_handoff "$1")
+  [[ -f "$transcript" ]] || return 0
+  jq -rs --arg fragment "$SCHEDULED_TOKEN:" "$TRANSCRIPT_ENTRY_TEXT_JQ"'
+    . as $entries
+    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | entry_text | contains($fragment)))) // null) as $at
+    | if $at == null then ""
+      else ($entries[$at + 1:] | map(select(.type == "assistant") | entry_text | select(length > 0)) | first // "") | .[0:300] end' "$transcript"
+}
+# carried_prompt_reply_report <baseline>: says whether the model answered the carried prompt or declined it, so a
+# refusal shows in an abort instead of reading as a context-size miss.
+carried_prompt_reply_report() {
+  local reply
+  reply=$(carried_prompt_reply "$1")
+  if [[ -n "$reply" ]]; then
+    echo "The fresh session's reply to the carried prompt began: $reply"
+  else
+    echo "The fresh transcript shows no reply to the carried prompt (no transcript, no message containing $SCHEDULED_TOKEN:, or no assistant text after it)."
+  fi
+}
+carried_prompt_evidence() {
+  local transcript
+  transcript=$(fresh_transcript_path_of_first_handoff "$1")
+  if [[ -n "$transcript" ]]; then
+    echo "the fresh session's transcript $transcript has no user message containing $SCHEDULED_TOKEN:"
+  else
+    echo "no fresh session transcript found for the old session"
+  fi
 }
 # In `act` a person's strong turn end hands off too; handoff_unattended is what says the turn was the scheduled one.
 turn_end_handed_off() { turn_end_record "$1" | jq -e 'select(.action == "cleared" and .trigger_values.handoff_unattended == true)' >/dev/null; }

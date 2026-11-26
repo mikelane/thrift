@@ -64,4 +64,132 @@ test_excludes_the_old_session_file() {
   report test_excludes_the_old_session_file "$got" ""
 }
 
+# write_transcript <file> <jsonl-lines...>
+write_transcript() { local file=$1; shift; printf '%s\n' "$@" >"$file"; }
+
+STRING_USER='{"type":"user","message":{"content":"five"}}'
+BLOCKS_USER='{"type":"user","message":{"content":[{"type":"text","text":"si"},{"type":"text","text":"x"}]}}'
+TOOL_RESULT_USER='{"type":"user","message":{"content":[{"type":"tool_result","content":"ignored"}]}}'
+ASSISTANT='{"type":"assistant","message":{"content":[{"type":"text","text":"five"}]}}'
+
+test_user_texts_reads_a_string_content() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$STRING_USER"
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_reads_a_string_content "$got" '"five"'
+}
+
+test_user_texts_joins_the_text_blocks_of_an_array_content() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$BLOCKS_USER"
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_joins_the_text_blocks_of_an_array_content "$got" '"six"'
+}
+
+test_user_texts_skips_assistant_entries() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$ASSISTANT" "$STRING_USER"
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_skips_assistant_entries "$got" '"five"'
+}
+
+test_user_texts_fails_when_the_transcript_is_missing() {
+  local got status=0
+  got=$(transcript_user_texts /nonexistent/t.jsonl 2>/dev/null) || status=$?
+  report test_user_texts_fails_when_the_transcript_is_missing "$status:$got" "1:"
+}
+
+test_has_user_text_matches_the_whole_text_only() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"fivesix"}}'
+  transcript_has_user_text_equal_to "$T/t.jsonl" five || status=$?
+  rm -rf "$T"
+  report test_has_user_text_matches_the_whole_text_only "$status" 1
+}
+
+test_has_user_text_finds_a_text_among_several_entries() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$TOOL_RESULT_USER" "$STRING_USER" "$BLOCKS_USER"
+  transcript_has_user_text_equal_to "$T/t.jsonl" six || status=$?
+  rm -rf "$T"
+  report test_has_user_text_finds_a_text_among_several_entries "$status" 0
+}
+
+test_has_user_text_fails_when_the_transcript_is_missing() {
+  local status=0
+  transcript_has_user_text_equal_to /nonexistent/t.jsonl five 2>/dev/null || status=$?
+  report test_has_user_text_fails_when_the_transcript_is_missing "$status" 1
+}
+
+test_has_user_text_containing_matches_the_token_after_a_preface() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"Carried from a scheduled job. SCHEDTOKEN: run these"}}'
+  transcript_has_user_text_containing "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
+  rm -rf "$T"
+  report test_has_user_text_containing_matches_the_token_after_a_preface "$status" 0
+}
+
+test_has_user_text_containing_fails_when_no_text_has_the_token() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"something else"}}'
+  transcript_has_user_text_containing "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
+  rm -rf "$T"
+  report test_has_user_text_containing_fails_when_no_text_has_the_token "$status" 1
+}
+
+WRAPPED_USER='{"type":"user","origin":{"kind":"plugin","name":"handoff"},"pluginPrompt":{"name":"handoff","text":"SCHEDTOKEN: run it"},"message":{"content":"The handoff plugin sent a message:\nSCHEDTOKEN: run it\n\nThis is how Claude Code surfaces a prompt a plugin submits between turns."}}'
+
+test_user_texts_prints_the_raw_plugin_prompt_of_a_wrapped_entry() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$WRAPPED_USER"
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_prints_the_raw_plugin_prompt_of_a_wrapped_entry "$got" '"SCHEDTOKEN: run it"'
+}
+
+test_user_texts_prints_the_content_of_an_entry_without_a_plugin_prompt() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" '{"type":"user","origin":{"kind":"plugin","name":"handoff"},"message":{"content":"five"}}'
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_prints_the_content_of_an_entry_without_a_plugin_prompt "$got" '"five"'
+}
+
+test_has_user_text_matches_the_raw_text_of_a_wrapped_entry() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$WRAPPED_USER"
+  transcript_has_user_text_equal_to "$T/t.jsonl" 'SCHEDTOKEN: run it' || status=$?
+  rm -rf "$T"
+  report test_has_user_text_matches_the_raw_text_of_a_wrapped_entry "$status" 0
+}
+
+test_has_user_text_containing_fails_when_the_transcript_is_missing() {
+  local status=0
+  transcript_has_user_text_containing /nonexistent/t.jsonl 'SCHEDTOKEN:' 2>/dev/null || status=$?
+  report test_has_user_text_containing_fails_when_the_transcript_is_missing "$status" 1
+}
+
+test_has_user_text_fails_when_the_transcript_cannot_be_parsed() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$STRING_USER" '{"type":"user","message":{"con'
+  transcript_has_user_text_equal_to "$T/t.jsonl" five 2>/dev/null || status=$?
+  rm -rf "$T"
+  # Any non-zero status is a failure: jq -e exits 5 on a parse error, 1 on no match.
+  report test_has_user_text_fails_when_the_transcript_cannot_be_parsed "$((status != 0))" 1
+}
+
 run_tests "$@"
