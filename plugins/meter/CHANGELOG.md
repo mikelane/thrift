@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/mikelane/thrift/compare/meter-v0.4.1...meter-v0.4.2) (2026-11-26)
+
+
+### Bug Fixes
+
+* drop the plugin name from debug lines, which the engine already adds ([#203](https://github.com/mikelane/thrift/issues/203)) ([9d47a4e](https://github.com/mikelane/thrift/commit/9d47a4e391d9699221051395a45b6d5d594b7207))
+
 ## [0.4.1](https://github.com/mikelane/thrift/compare/meter-v0.4.0...meter-v0.4.1) (2026-11-21)
 
 
