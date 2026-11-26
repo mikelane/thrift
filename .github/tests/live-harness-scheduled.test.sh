@@ -250,11 +250,20 @@ test_it_fails_when_an_advised_turn_end_carries_handoff_unattended() {
   assert_out_has 'FAIL  [ask] the strong turn end after it handed off, as a scheduled turn does'
 }
 
-test_it_fails_when_the_transcript_only_quotes_the_token_inside_another_message() {
-  write_fresh_transcript "I read SCHEDTOKEN: in the note"
-  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" "$SUBMIT_LINE"
-  assert_exit_code 1
-  assert_out_has 'FAIL  [ask] the carried prompt was submitted in the fresh session'
+test_it_passes_when_the_transcript_holds_the_carried_prompt_as_a_wrapped_plugin_prompt_after_a_preface() {
+  jq -nc '{type: "user", origin: {kind: "plugin", name: "handoff"}, pluginPrompt: {name: "handoff", text: "Carried from a scheduled job.\nSCHEDTOKEN: run these"},
+    message: {content: "The handoff plugin sent a message:\nCarried from a scheduled job.\nSCHEDTOKEN: run these\n\nThis is how Claude Code surfaces a prompt a plugin submits."}}' > "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$STRONG_HANDED_OFF" 'nothing logged'
+  assert_exit_code 0
+  assert_out_has 'PASS s (3 checks)'
+}
+
+test_a_weak_turn_end_abort_quotes_the_reply_after_a_wrapped_plugin_prompt() {
+  jq -nc '{type: "user", pluginPrompt: {name: "handoff", text: "SCHEDTOKEN: run these"}, message: {content: "The handoff plugin sent a message:\nSCHEDTOKEN: run these"}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "I will not run that."}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "The fresh session's reply to the carried prompt began: I will not run that."
 }
 
 run_tests "$@"

@@ -129,22 +129,51 @@ test_has_user_text_fails_when_the_transcript_is_missing() {
   report test_has_user_text_fails_when_the_transcript_is_missing "$status" 1
 }
 
-test_has_user_text_starting_matches_a_prefix() {
+test_has_user_text_containing_matches_the_token_after_a_preface() {
   local T status=0
   T=$(mktemp -d)
-  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"SCHEDTOKEN: run these"}}'
-  transcript_has_user_text_starting "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
+  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"Carried from a scheduled job. SCHEDTOKEN: run these"}}'
+  transcript_has_user_text_containing "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
   rm -rf "$T"
-  report test_has_user_text_starting_matches_a_prefix "$status" 0
+  report test_has_user_text_containing_matches_the_token_after_a_preface "$status" 0
 }
 
-test_has_user_text_starting_does_not_match_a_prefix_inside_the_text() {
+test_has_user_text_containing_fails_when_no_text_has_the_token() {
   local T status=0
   T=$(mktemp -d)
-  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"I said SCHEDTOKEN: no"}}'
-  transcript_has_user_text_starting "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
+  write_transcript "$T/t.jsonl" '{"type":"user","message":{"content":"something else"}}'
+  transcript_has_user_text_containing "$T/t.jsonl" 'SCHEDTOKEN:' || status=$?
   rm -rf "$T"
-  report test_has_user_text_starting_does_not_match_a_prefix_inside_the_text "$status" 1
+  report test_has_user_text_containing_fails_when_no_text_has_the_token "$status" 1
+}
+
+WRAPPED_USER='{"type":"user","origin":{"kind":"plugin","name":"handoff"},"pluginPrompt":{"name":"handoff","text":"SCHEDTOKEN: run it"},"message":{"content":"The handoff plugin sent a message:\nSCHEDTOKEN: run it\n\nThis is how Claude Code surfaces a prompt a plugin submits between turns."}}'
+
+test_user_texts_prints_the_raw_plugin_prompt_of_a_wrapped_entry() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$WRAPPED_USER"
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_prints_the_raw_plugin_prompt_of_a_wrapped_entry "$got" '"SCHEDTOKEN: run it"'
+}
+
+test_user_texts_prints_the_content_of_an_entry_without_a_plugin_prompt() {
+  local T got
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" '{"type":"user","origin":{"kind":"plugin","name":"handoff"},"message":{"content":"five"}}'
+  got=$(transcript_user_texts "$T/t.jsonl")
+  rm -rf "$T"
+  report test_user_texts_prints_the_content_of_an_entry_without_a_plugin_prompt "$got" '"five"'
+}
+
+test_has_user_text_matches_the_raw_text_of_a_wrapped_entry() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$WRAPPED_USER"
+  transcript_has_user_text "$T/t.jsonl" 'SCHEDTOKEN: run it' || status=$?
+  rm -rf "$T"
+  report test_has_user_text_matches_the_raw_text_of_a_wrapped_entry "$status" 0
 }
 
 run_tests "$@"

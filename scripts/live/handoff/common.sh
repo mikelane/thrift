@@ -70,13 +70,17 @@ fresh_transcript_path() {
   grep -lF -- "Handoff from the previous session ($1)" "$dir"/*.jsonl 2>/dev/null | grep -vxF -- "$old" | head -n 1 || true
 }
 
-# transcript_user_texts <transcript>: the text of each user entry, one JSON string per line. A string
-# content is the text; an array content is its text blocks joined (a tool result has none, so it is "").
+# transcript_user_texts <transcript>: the text of each user entry, one JSON string per line. A prompt a
+# plugin submitted without asUser is stored with the engine's wrapper as its content ("The handoff plugin
+# sent a message: ..."), and its raw text in the entry's pluginPrompt.text, which is used when present.
+# Otherwise a string content is the text; an array content is its text blocks joined (a tool result has
+# none, so it is "").
 # Fails when the transcript is not a file, so a missing one never reads as "no user entry matched".
 transcript_user_texts() {
   [[ -n "${1:-}" && -f "$1" ]] || return 1
-  jq -c 'select(.type == "user") | (.message.content // "")
-    | if type == "string" then . else map(select(.type == "text") | .text) | join("") end' "$1"
+  jq -c 'select(.type == "user")
+    | .pluginPrompt.text // ((.message.content // "")
+      | if type == "string" then . else map(select(.type == "text") | .text) | join("") end)' "$1"
 }
 
 # transcript_has_user_text <transcript> <text>: a user entry whose whole text is <text>.
@@ -84,9 +88,9 @@ transcript_has_user_text() {
   transcript_user_texts "$1" | jq -s -e --arg text "$2" 'any(.[]; . == $text)' >/dev/null
 }
 
-# transcript_has_user_text_starting <transcript> <prefix>: a user entry whose text begins with <prefix>.
-transcript_has_user_text_starting() {
-  transcript_user_texts "$1" | jq -s -e --arg prefix "$2" 'any(.[]; startswith($prefix))' >/dev/null
+# transcript_has_user_text_containing <transcript> <fragment>: a user entry whose text contains <fragment>.
+transcript_has_user_text_containing() {
+  transcript_user_texts "$1" | jq -s -e --arg fragment "$2" 'any(.[]; contains($fragment))' >/dev/null
 }
 
 # held_prompts_flow <name>: the turn, then /handoff, then three prompts typed while the note is

@@ -145,7 +145,7 @@ carried_unattended() {
 fresh_transcript_of_first_handoff() { fresh_transcript_path "$(first_cleared "$1" | jq -r '.session_id')"; }
 carried_prompt_submitted() {
   first_cleared "$1" | jq -e '.trigger_values | select(.held_other_delivery == "submitted")' >/dev/null \
-    && transcript_has_user_text_starting "$(fresh_transcript_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
+    && transcript_has_user_text_containing "$(fresh_transcript_of_first_handoff "$1")" "$SCHEDULED_TOKEN:"
 }
 # carried_prompt_reply <baseline>: the first 300 characters of the assistant text that follows the carried
 # prompt's user message in the fresh transcript; empty when there is no transcript, no such message or no reply.
@@ -153,10 +153,10 @@ carried_prompt_reply() {
   local transcript
   transcript=$(fresh_transcript_of_first_handoff "$1")
   [[ -f "$transcript" ]] || return 0
-  jq -rs --arg prefix "$SCHEDULED_TOKEN:" '
-    def text: (.message.content // "") | if type == "string" then . else map(select(.type == "text") | .text) | join("") end;
+  jq -rs --arg fragment "$SCHEDULED_TOKEN:" '
+    def text: .pluginPrompt.text // ((.message.content // "") | if type == "string" then . else map(select(.type == "text") | .text) | join("") end);
     . as $entries
-    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | text | startswith($prefix)))) // null) as $at
+    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | text | contains($fragment)))) // null) as $at
     | if $at == null then ""
       else ($entries[$at + 1:] | map(select(.type == "assistant") | text | select(length > 0)) | first // "") | .[0:300] end' "$transcript"
 }
@@ -168,14 +168,14 @@ carried_prompt_reply_report() {
   if [[ -n "$reply" ]]; then
     echo "The fresh session's reply to the carried prompt began: $reply"
   else
-    echo "The fresh transcript shows no reply to the carried prompt (no transcript, no message starting $SCHEDULED_TOKEN:, or no assistant text after it)."
+    echo "The fresh transcript shows no reply to the carried prompt (no transcript, no message containing $SCHEDULED_TOKEN:, or no assistant text after it)."
   fi
 }
 carried_prompt_evidence() {
   local transcript
   transcript=$(fresh_transcript_of_first_handoff "$1")
   if [[ -n "$transcript" ]]; then
-    echo "the fresh session's transcript $transcript has no user message starting with $SCHEDULED_TOKEN:"
+    echo "the fresh session's transcript $transcript has no user message containing $SCHEDULED_TOKEN:"
   else
     echo "no fresh session transcript found for the old session"
   fi
