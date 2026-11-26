@@ -49,6 +49,36 @@ test_the_merge_step_logs_a_merged_line_after_a_successful_merge() {
   assert_out_has "Merged PR #111 at $SHA_A."
 }
 
+test_the_merge_step_emits_a_notice_annotation_after_a_successful_merge() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "::notice title=Release PR #111 merged::Merged PR #111 at $SHA_A."
+}
+
+test_the_merge_step_emits_a_notice_annotation_when_the_pr_was_closed_without_merging() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  jq '.state = "closed" | .merged = false' "$TEST_DIR/pr-111.json" \
+    >"$TEST_DIR/pr-after-failed-merge.json"
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 0
+  assert_out_has "::notice title=Release PR #111 not merged::PR #111 was closed without being merged."
+}
+
+test_the_merge_step_emits_no_merged_notice_after_a_lost_race_or_a_failed_merge_or_a_refusal() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_lacks "::notice"
+  rm "$TEST_DIR/pr-after-failed-merge.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_lacks "::notice"
+  rm "$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_B" 211
+  assert_out_lacks "::notice"
+}
+
 test_the_merge_step_does_not_log_a_merged_line_when_the_merge_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"

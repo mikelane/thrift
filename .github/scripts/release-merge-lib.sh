@@ -297,7 +297,8 @@ release_merge_sweep() (
 # the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The
 # message says whether it was merged or closed without merging (the same PR read gives `merged`).
 # Fails for any other cause, so a real merge failure still fails the job: returns 1 when the PR is
-# still open at <sha>, and 2 when its state could not be read.
+# still open at <sha>, and 2 when its state could not be read. A PR closed without being merged also
+# gets a notice annotation on stderr, so it shows on the run summary (stdout stays the one message).
 release_merge_lost_race() {
   local pr_fields state head merged
   pr_fields=$(set -o pipefail
@@ -308,6 +309,7 @@ release_merge_lost_race() {
     echo "PR #$2 is $state: another run merged it first."
   elif [[ "$state" != open ]]; then
     echo "PR #$2 was $state without being merged."
+    echo "::notice title=Release PR #$2 not merged::PR #$2 was $state without being merged." >&2
   elif [[ "$head" != "$3" ]]; then
     echo "PR #$2 head moved to $head since CI tested $3."
   else
@@ -411,7 +413,10 @@ release_merge_pr_if_gate_passes() {
   # lost-race lookup's status.
   gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null 2>"$merge_stderr" && did_merge=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "$(release_merge_merge_failure_reason "$tested_sha" "$?" "$merge_stderr")" || { release_merge_replay_stderr "$merge_stderr"; return 1; }
   release_merge_replay_stderr "$merge_stderr"
-  [[ "$did_merge" == 0 ]] || echo "Merged PR #$number at $tested_sha."
+  [[ "$did_merge" == 0 ]] || {
+    echo "Merged PR #$number at $tested_sha."
+    echo "::notice title=Release PR #$number merged::Merged PR #$number at $tested_sha."
+  }
 }
 
 # release_merge_triggering_run_is_latest <number> <tested-sha> <head-ref> <ci-run-id>: succeeds when
