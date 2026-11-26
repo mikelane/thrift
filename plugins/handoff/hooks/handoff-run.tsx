@@ -33,9 +33,6 @@ import {
   type SessionState,
 } from './session-state'
 
-// A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
-// writeRecord leaves its own debug line.
-
 type AbandonDetails = { sessionId?: string; forkReason?: ForkReason; clearSkipCause?: ClearSkipCause }
 
 async function abandonHandoff(
@@ -51,6 +48,8 @@ async function abandonHandoff(
   beginSending(state)
   await takeDownBand($, state)
   announce($, message)
+  // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
+  // writeRecord leaves its own debug line.
   const recordedSessionId = sessionId ?? (await tryReadSessionId($))
   const restores = await restoreHeldGroups($, state, settledHandoff)
   const late = await restoreLateArrivals($, state)

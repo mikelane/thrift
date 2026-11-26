@@ -131,7 +131,6 @@ export async function waitForClearWindow(
   return { ...clearWindow, clearing }
 }
 
-// A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
 // Each /resume held while the clear was queued runs now, one after another, in a later tick: the engine refuses a command
 // started inside the hook it waits on. A failed replay goes to the debug log, and the rest still run.
 function replayHeldResumes($: EngineInterface, state: SessionState): void {
@@ -152,6 +151,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
         }
         const idAfter = await tryReadSessionId($, ' around the /resume replay')
         forgetHeldResumeReplay(state, replay)
+        // A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
         resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
       })()
     })
