@@ -11,7 +11,9 @@ import { resetForNewSession, type SessionState } from './session-state'
 import type { Mode } from './signals'
 import { releaseTurnEndWaiter } from './turn-state'
 
-async function readVersion($: EngineInterface) {
+type VersionRead = { engineVersion: string; base: string | undefined }
+
+async function readVersion($: EngineInterface): Promise<VersionRead> {
   try {
     const { version, base } = await $.session.version()
     return { engineVersion: base ?? version, base }
@@ -21,7 +23,8 @@ async function readVersion($: EngineInterface) {
   }
 }
 
-export const registerLifecycleHooks = (on: On, state: SessionState, setting: Mode) => {
+// A function declaration, not a const arrow: its hooks take `$`, and the engine follows `$` past an import only into a function.
+export function registerLifecycleHooks(on: On, state: SessionState, setting: Mode): void {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await takeDownBandFromBeforeReload($, state)
