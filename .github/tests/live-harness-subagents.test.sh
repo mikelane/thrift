@@ -360,6 +360,17 @@ test_the_scenario_allows_the_agent_tool_in_the_foreground_session() {
   assert_out_has 'AFTER=[]'
 }
 
+test_the_scenario_turns_the_tool_call_check_off_for_the_foreground_session() {
+  run_live "$SCENARIO"'
+    live_init
+    SETTLE_SECONDS=1
+    start_waiting_handoff() { echo "CHECK=[${WAITING_HANDOFF_TOOL_CALL_CHECK:-}]"; }
+    foreground_agent_during_the_wait c p
+    echo "AFTER=[${WAITING_HANDOFF_TOOL_CALL_CHECK:-}]"'
+  assert_out_has 'CHECK=[off]'
+  assert_out_has 'AFTER=[]'
+}
+
 test_press_while_a_subagent_runs_raises_an_error_when_the_log_is_unreadable_before_the_turn_is_typed() {
   run_live "$SCENARIO"'
     live_init
