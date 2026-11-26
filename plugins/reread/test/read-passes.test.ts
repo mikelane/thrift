@@ -1,18 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  install,
-  isStub,
-  putFile,
-  putFileBytes,
-  read,
-  rewriteBytesKeepingStat,
-  rewriteKeepingStat,
-  SEVEN_LINES,
-  TINY_FILE,
-  triggerValues,
-  type World,
-} from './world'
+import { install, type World } from './world'
+import { isStub, read, triggerValues } from './world-actions'
+import { putFile, putFileBytes, rewriteBytesKeepingStat, rewriteKeepingStat, SEVEN_LINES, TINY_FILE } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 

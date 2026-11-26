@@ -1,17 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  compact,
-  endSessionWith,
-  install,
-  isStub,
-  lastRecord,
-  putFile,
-  read,
-  runTool,
-  SEVEN_LINES,
-  triggerValues,
-} from './world'
+import { install } from './world'
+import { compact, endSessionWith, isStub, lastRecord, read, runTool, triggerValues } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 

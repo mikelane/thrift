@@ -1,7 +1,7 @@
 import { mock, type Engine } from 'claude-code/testing'
-import type { On, SessionVersion, ToolCallResult } from 'claude-code'
+import type { On, SessionVersion } from 'claude-code'
 
-type LogRecord = {
+export type LogRecord = {
   ts: string
   session_id: string
   component: string
@@ -11,9 +11,7 @@ type LogRecord = {
   trigger_values: Record<string, unknown>
 }
 
-type FileState = { text: string; bytes: Uint8Array; mtimeMs: number }
-
-const encoder = new TextEncoder()
+export type FileState = { text: string; bytes: Uint8Array; mtimeMs: number }
 
 const base64Of = (bytes: Uint8Array): string => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
 
@@ -239,73 +237,3 @@ export const install = ($: Engine, on: On, { home = '/home/u', thriftHome }: Env
   installOutputMocks(on, world)
   return world
 }
-
-let clockTick = 1
-
-export const putFile = (world: World, path: string, text: string): void => {
-  clockTick += 1
-  world.files.set(path, { text, bytes: encoder.encode(text), mtimeMs: clockTick })
-}
-
-// Stores the file's exact bytes, which need not be valid UTF-8. The text the Read tool sees is the bytes decoded as UTF-8.
-export const putFileBytes = (world: World, path: string, bytes: Uint8Array): void => {
-  clockTick += 1
-  world.files.set(path, { text: new TextDecoder().decode(bytes), bytes, mtimeMs: clockTick })
-}
-
-// Changes a file's content and leaves its size and mtime as they were.
-export const rewriteKeepingStat = (world: World, path: string, text: string): void => {
-  const file = world.files.get(path)
-  if (file === undefined) throw new Error(`no file ${path}`)
-  world.files.set(path, { text, bytes: encoder.encode(text), mtimeMs: file.mtimeMs })
-}
-
-// Changes a file's bytes and leaves its size and mtime as they were.
-export const rewriteBytesKeepingStat = (world: World, path: string, bytes: Uint8Array): void => {
-  const file = world.files.get(path)
-  if (file === undefined) throw new Error(`no file ${path}`)
-  world.files.set(path, { text: new TextDecoder().decode(bytes), bytes, mtimeMs: file.mtimeMs })
-}
-
-// `$.tool.call`'s parameter type is a union over every built-in and MCP tool, and resolving it overflows the compiler once many
-// MCP servers' types are generated (TS2589). Casting the function, not the input, keeps that union from ever being instantiated.
-type LooseToolCall = { tool: string; [argument: string]: unknown }
-
-const callTool = ($: Engine, input: LooseToolCall) => ($.tool.call as unknown as (input: LooseToolCall) => Promise<ToolCallResult>)(input)
-
-type ReadOptions = { offset?: number; limit?: number; pages?: string; allow_large?: boolean; agentId?: string }
-
-export const read = ($: Engine, path: string, options: ReadOptions = {}) => callTool($, { tool: 'Read', file_path: path, ...options })
-
-export const runTool = ($: Engine, tool: string, input: Record<string, unknown> = {}, agentId?: string) =>
-  callTool($, { tool, ...input, ...(agentId === undefined ? {} : { agentId }) })
-
-export const startSession = ($: Engine) => $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-
-export const endSessionWith = ($: Engine, reason: 'clear' | 'resume' | 'other', sessionId = 'session-1') =>
-  $.session.end({ reason, sessionId, resume: { id: sessionId } })
-
-type Trigger = 'manual' | 'auto' | 'plugin' | 'precompute'
-
-export const compact = ($: Engine, trigger: Trigger, agentId?: string) =>
-  $.session.compact({ trigger, messages: [{ role: 'user', text: 'work', toolUses: [] }], ...(agentId === undefined ? {} : { agentId }) })
-
-export const lastRecord = (world: World): LogRecord => {
-  const record = world.records.at(-1)
-  if (record === undefined) throw new Error('no decision record was written')
-  return record
-}
-
-export const triggerValues = (world: World) => lastRecord(world).trigger_values
-
-export const isStub = (answer: ToolCallResult): boolean =>
-  typeof answer.result === 'object' && answer.result !== null && Reflect.get(answer.result, 'type') === 'file_unchanged'
-
-// Seven lines, each far longer than the stub context line, so that a repeat of any one or two of them is still worth a stub.
-export const SEVEN_LINES = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'].map(name => `${name} ${'x'.repeat(200)}`).join('\n')
-
-// Small enough that a stub would cost more than the contents.
-export const TINY_FILE = 'one\ntwo\nthree\nfour\nfive\nsix\nseven'
-
-// Far larger than the stub that would answer a repeat of it, in short lines: two of them are smaller than the stub.
-export const LARGE_FILE = Array.from({ length: 40 }, (_, index) => `line ${index + 1} of a file that is long enough to be worth a stub`).join('\n')
