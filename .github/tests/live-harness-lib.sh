@@ -19,14 +19,15 @@ write_live_stubs() {
 }
 
 # hermetic_env <command...>: drops the owner's settings that would steer the harness out of the
-# test's own directories or change its timeouts and cleanup, and every CLAUDE* and ANTHROPIC*
-# variable: the owner's login and keys. The stubs print CLAUDE* values, and a failing test prints its
+# test's own directories or change its timeouts and cleanup, every CLAUDE* and ANTHROPIC*
+# variable (the owner's login and keys), and every WAITING_HANDOFF_* variable (the owner's
+# handoff tool and check settings). The stubs print CLAUDE* values, and a failing test prints its
 # output. A test's own NAME=value arguments still arrive, because env applies them after every -u.
 hermetic_env() {
   local name dropped=()
   for name in $(compgen -e); do
     case "$name" in
-      CLAUDE* | ANTHROPIC* | XDG_CACHE_HOME | LIVE_CWD | LIVE_KEEP | LIVE_TIMEOUT | LIVE_COLUMNS) dropped+=(-u "$name") ;;
+      CLAUDE* | ANTHROPIC* | WAITING_HANDOFF_* | XDG_CACHE_HOME | LIVE_CWD | LIVE_KEEP | LIVE_TIMEOUT | LIVE_COLUMNS) dropped+=(-u "$name") ;;
     esac
   done
   env ${dropped[@]+"${dropped[@]}"} "$@"
