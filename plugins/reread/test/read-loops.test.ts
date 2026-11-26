@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Plugin } from 'claude-code/testing'
 
-import { install, isStub, lastRecord, putFile, read, SEVEN_LINES, triggerValues } from './world'
+import { install } from './world'
+import { isStub, lastRecord, read, triggerValues } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 

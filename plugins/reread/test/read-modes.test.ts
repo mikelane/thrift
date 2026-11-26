@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, lastRecord, putFile, read, SEVEN_LINES, triggerValues } from './world'
+import { install } from './world'
+import { isStub, lastRecord, read, triggerValues } from './world-actions'
+import { putFile, SEVEN_LINES } from './world-files'
 
 const OFF = { options: { readMode: 'off' } }
 const ASK = { options: { readMode: 'ask' } }

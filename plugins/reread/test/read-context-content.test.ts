@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { install, isStub, LARGE_FILE, putFile, read, SEVEN_LINES, triggerValues } from './world'
+import { install } from './world'
+import { isStub, read, triggerValues } from './world-actions'
+import { LARGE_FILE, putFile, SEVEN_LINES } from './world-files'
 
 const ACT = { options: { readMode: 'act' } }
 
