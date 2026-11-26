@@ -164,6 +164,8 @@ describe('a later handoff after a held resume replay that never returned', () =>
     await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
     world.onClearIssued = undefined
     await runCommand($, 'handoff')
+    // Let the later handoff reach its read of the replay before the replay returns.
+    await world.clock.advance(1)
     world.releaseHungResume?.()
     await world.clock.settle()
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
