@@ -77,3 +77,12 @@ assert_dir_lacks() {
   grep -rqa -- "$1" "$2" || status=$?
   ((status == 1)) || fail "the run directory holds the text, or grep could not read it (status $status)"
 }
+
+# write_fresh_transcript <text...>: $TEST_DIR/fresh.jsonl with one plain user entry per text.
+write_fresh_transcript() {
+  local text
+  : > "$TEST_DIR/fresh.jsonl"
+  for text in "$@"; do
+    jq -nc --arg text "$text" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
+  done
+}

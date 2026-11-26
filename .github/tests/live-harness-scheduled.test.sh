@@ -11,14 +11,6 @@ SUBMIT_LINE='prompt.submit (handoff): 12 chars'
 CARRIED_TEXT='SCHEDTOKEN: run these Bash commands'
 
 # write_fresh_transcript <texts...>: the fresh session's transcript, one plain user entry per text.
-write_fresh_transcript() {
-  local text
-  : > "$TEST_DIR/fresh.jsonl"
-  for text in "$@"; do
-    jq -nc --arg text "$text" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
-  done
-}
-
 # A test with no fresh transcript touches $TEST_DIR/no-transcript; otherwise one holding the carried prompt is made.
 # run_mode_case <first-cleared-record> <turn-end-record> <debug-log-line> [mode] [fire-offset]: run_mode for
 # the mode (default `ask`) in session a. The first record gets effective_mode set to the mode unless it
@@ -264,6 +256,34 @@ test_a_weak_turn_end_abort_quotes_the_reply_after_a_wrapped_plugin_prompt() {
   run_mode_case "$CLEARED_CARRIED" '{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}' "$SUBMIT_LINE"
   assert_exit_code 2
   assert_out_has "The fresh session's reply to the carried prompt began: I will not run that."
+}
+
+WEAK_TURN_END='{"action":"none","trigger_values":{"point":"turn-end","signal":"weak","context_tokens":31000}}'
+
+test_a_weak_turn_end_abort_says_no_reply_when_the_carried_prompt_has_no_assistant_text_after_it() {
+  write_fresh_transcript "$CARRIED_TEXT"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
+}
+
+test_a_weak_turn_end_abort_ignores_an_assistant_text_that_came_before_the_carried_prompt() {
+  jq -nc '{type: "assistant", message: {content: [{type: "text", text: "EARLIER-REPLY"}]}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has 'The fresh transcript shows no reply to the carried prompt'
+}
+
+test_a_weak_turn_end_abort_quotes_only_the_first_300_characters_of_the_reply() {
+  local reply
+  reply="$(printf 'a%.0s' $(seq 1 300))TAILMARK"
+  jq -nc --arg text "$CARRIED_TEXT" '{type: "user", message: {content: $text}}' > "$TEST_DIR/fresh.jsonl"
+  jq -nc --arg text "$reply" '{type: "assistant", message: {content: [{type: "text", text: $text}]}}' >> "$TEST_DIR/fresh.jsonl"
+  run_mode_case "$CLEARED_CARRIED" "$WEAK_TURN_END" "$SUBMIT_LINE"
+  assert_exit_code 2
+  assert_out_has "began: $(printf 'a%.0s' $(seq 1 300))"
+  assert_out_lacks 'TAILMARK'
 }
 
 run_tests "$@"

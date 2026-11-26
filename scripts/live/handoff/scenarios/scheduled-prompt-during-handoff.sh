@@ -153,12 +153,11 @@ carried_prompt_reply() {
   local transcript
   transcript=$(fresh_transcript_of_first_handoff "$1")
   [[ -f "$transcript" ]] || return 0
-  jq -rs --arg fragment "$SCHEDULED_TOKEN:" '
-    def text: .pluginPrompt.text // ((.message.content // "") | if type == "string" then . else map(select(.type == "text") | .text) | join("") end);
+  jq -rs --arg fragment "$SCHEDULED_TOKEN:" "$TRANSCRIPT_ENTRY_TEXT_JQ"'
     . as $entries
-    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | text | contains($fragment)))) // null) as $at
+    | (first(range(0; length) | select($entries[.].type == "user" and ($entries[.] | entry_text | contains($fragment)))) // null) as $at
     | if $at == null then ""
-      else ($entries[$at + 1:] | map(select(.type == "assistant") | text | select(length > 0)) | first // "") | .[0:300] end' "$transcript"
+      else ($entries[$at + 1:] | map(select(.type == "assistant") | entry_text | select(length > 0)) | first // "") | .[0:300] end' "$transcript"
 }
 # carried_prompt_reply_report <baseline>: says whether the model answered the carried prompt or declined it, so a
 # refusal shows in an abort instead of reading as a context-size miss.

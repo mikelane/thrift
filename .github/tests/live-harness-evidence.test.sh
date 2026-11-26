@@ -78,14 +78,6 @@ test_busy_abandon_is_a_fail_when_the_handoff_clears_instead_of_stopping() {
 }
 
 # write_fresh_transcript <texts...>: the fresh session's transcript, one plain user entry per text.
-write_fresh_transcript() {
-  local text
-  : > "$TEST_DIR/fresh.jsonl"
-  for text in "$@"; do
-    jq -nc --arg text "$text" '{type: "user", message: {content: $text}}' >> "$TEST_DIR/fresh.jsonl"
-  done
-}
-
 # run_delivery_window <debug-log-lines...>: the delivery-window scenario against a fixture debug log and
 # the fixture transcript (when write_fresh_transcript made one), with every engine-facing helper a no-op,
 # so only the scenario's own waits and checks read the evidence.

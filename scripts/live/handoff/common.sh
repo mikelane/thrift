@@ -76,11 +76,12 @@ fresh_transcript_path() {
 # Otherwise a string content is the text; an array content is its text blocks joined (a tool result has
 # none, so it is "").
 # Fails when the transcript is not a file, so a missing one never reads as "no user entry matched".
+# TRANSCRIPT_ENTRY_TEXT_JQ defines `entry_text` for jq programs that read a transcript entry's text.
+TRANSCRIPT_ENTRY_TEXT_JQ='def entry_text: .pluginPrompt.text // ((.message.content // "")
+  | if type == "string" then . else map(select(.type == "text") | .text) | join("") end);'
 transcript_user_texts() {
   [[ -n "${1:-}" && -f "$1" ]] || return 1
-  jq -c 'select(.type == "user")
-    | .pluginPrompt.text // ((.message.content // "")
-      | if type == "string" then . else map(select(.type == "text") | .text) | join("") end)' "$1"
+  jq -c "$TRANSCRIPT_ENTRY_TEXT_JQ"' select(.type == "user") | entry_text' "$1"
 }
 
 # transcript_has_user_text <transcript> <text>: a user entry whose whole text is <text>.
