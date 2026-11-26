@@ -43,36 +43,38 @@ describe('a person clear still finishing when the handoff resumes after the wait
   })
 })
 
-describe('a person clear that returns before the wait runs out', () => {
-  test('It writes no timeout debug line when the clear returns before the timeout', async ($, on) => {
-    const world = await waitingForATurn($, on)
-    const { finishClear } = await personClearStillFinishing($, world)
-    await finishClear()
-    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
-    expect(world.debugLines.filter(line => line.includes('did not return within'))).toEqual([])
-  })
-})
-
-describe('a person clear that never returns', () => {
-  test('It delivers to the session the engine names once the bounded wait ran out', async ($, on) => {
-    const world = await waitingForATurn($, on)
-    await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
-    expect(world.appendedTo).toEqual(['old-session'])
+describe('settlesWithin', () => {
+  describe('a person clear that returns before the wait runs out', () => {
+    test('It writes no timeout debug line when the clear returns before the timeout', async ($, on) => {
+      const world = await waitingForATurn($, on)
+      const { finishClear } = await personClearStillFinishing($, world)
+      await finishClear()
+      await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
+      expect(world.debugLines.filter(line => line.includes('did not return within'))).toEqual([])
+    })
   })
 
-  test('It writes a debug line saying the clear did not return in time', async ($, on) => {
-    const world = await waitingForATurn($, on)
-    await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
-    expect(world.debugLines).toContain(`a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
-  })
+  describe('a person clear that never returns', () => {
+    test('It delivers to the session the engine names once the bounded wait ran out', async ($, on) => {
+      const world = await waitingForATurn($, on)
+      await personClearStillFinishing($, world)
+      await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
+      expect(world.appendedTo).toEqual(['old-session'])
+    })
 
-  test('It holds the note back until the wait ran out', async ($, on) => {
-    const world = await waitingForATurn($, on)
-    await personClearStillFinishing($, world)
-    await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS - 1)
-    expect(world.appendedTo).toEqual([])
+    test('It writes a debug line saying the clear did not return in time', async ($, on) => {
+      const world = await waitingForATurn($, on)
+      await personClearStillFinishing($, world)
+      await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
+      expect(world.debugLines).toContain(`a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
+    })
+
+    test('It holds the note back until the wait ran out', async ($, on) => {
+      const world = await waitingForATurn($, on)
+      await personClearStillFinishing($, world)
+      await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS - 1)
+      expect(world.appendedTo).toEqual([])
+    })
   })
 })
 

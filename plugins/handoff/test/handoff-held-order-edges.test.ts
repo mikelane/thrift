@@ -20,110 +20,114 @@ const endFirstTurnInFreshSession = async ($: Engine, world: World, promptText: s
 
 const handoffsStarted = (world: World) => world.forkPrompts.length
 
-describe('the origin of the first of several resubmitted turns', () => {
-  test('It judges the turn of a resubmitted person group as attended when a scheduled group is queued behind it', ASK, async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'person says')
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    await finishNote()
-    await endFirstTurnInFreshSession($, world, 'person says')
-    expect(handoffsStarted(world)).toBe(1)
-  })
+describe('sendHeldGroups', () => {
+  describe('the origin of the first of several resubmitted turns', () => {
+    test('It judges the turn of a resubmitted person group as attended when a scheduled group is queued behind it', ASK, async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'person says')
+      await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+      await finishNote()
+      await endFirstTurnInFreshSession($, world, 'person says')
+      expect(handoffsStarted(world)).toBe(1)
+    })
 
-  test('It submits a carried scheduled group under the scheduled-task preface and as the plugin, not asUser', ASK, async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    await finishNote()
-    expect(enteredPrompts(world)).toEqual([
-      "entered:plugin:A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:\n\nnightly job",
-    ])
-  })
+    test('It submits a carried scheduled group under the scheduled-task preface and as the plugin, not asUser', ASK, async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+      await finishNote()
+      expect(enteredPrompts(world)).toEqual([
+        "entered:plugin:A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:\n\nnightly job",
+      ])
+    })
 
-  test('It judges the turn of a resubmitted scheduled group as unattended when a person group is queued behind it', ASK, async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-    await submitPerson($, 'person says')
-    await finishNote()
-    await endFirstTurnInFreshSession($, world, scheduledText('nightly job'))
-    expect(handoffsStarted(world)).toBe(2)
-  })
+    test('It judges the turn of a resubmitted scheduled group as unattended when a person group is queued behind it', ASK, async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+      await submitPerson($, 'person says')
+      await finishNote()
+      await endFirstTurnInFreshSession($, world, scheduledText('nightly job'))
+      expect(handoffsStarted(world)).toBe(2)
+    })
 
-  test('It judges the turn of a resubmitted person group as attended when a scheduled prompt that arrived mid-delivery is queued behind it', ASK, async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'person says')
-    world.submitHooks = [
-      () => {
-        void submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
-      },
-    ]
-    await finishNote()
-    await endFirstTurnInFreshSession($, world, 'person says')
-    expect(handoffsStarted(world)).toBe(1)
-  })
-})
-
-describe('the session ends while the handoff sends', () => {
-  test('It still sends a prompt that arrived mid-delivery when the person runs /clear during the delivery', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'held one')
-    world.submitHooks = [
-      () => {
-        void submitPerson($, 'late')
-        void runCommand($, 'clear')
-      },
-    ]
-    await finishNote()
-    expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
-      ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
-      1,
-    ])
-  })
-
-  test('It still sends a prompt that arrived mid-delivery when the session ends for a resume during the delivery', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'held one')
-    world.submitHooks = [
-      () => {
-        void submitPerson($, 'late')
-        void $.session.end({ reason: 'resume', sessionId: 'new-session', resume: { id: 'new-session' } })
-      },
-    ]
-    await finishNote()
-    expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
-      ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
-      1,
-    ])
+    test('It judges the turn of a resubmitted person group as attended when a scheduled prompt that arrived mid-delivery is queued behind it', ASK, async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'person says')
+      world.submitHooks = [
+        () => {
+          void submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+        },
+      ]
+      await finishNote()
+      await endFirstTurnInFreshSession($, world, 'person says')
+      expect(handoffsStarted(world)).toBe(1)
+    })
   })
 })
 
-describe('the box order when the fresh session refuses every submit', () => {
-  test('It leaves a held prompt ahead of a prompt that arrived mid-delivery in the box', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'held one')
-    world.submitDropped = true
-    world.submitHooks = [
-      () => {
-        void submitPerson($, 'late')
-      },
-    ]
-    await finishNote()
-    expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate'])
+describe('sendLateArrivals', () => {
+  describe('the session ends while the handoff sends', () => {
+    test('It still sends a prompt that arrived mid-delivery when the person runs /clear during the delivery', async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'held one')
+      world.submitHooks = [
+        () => {
+          void submitPerson($, 'late')
+          void runCommand($, 'clear')
+        },
+      ]
+      await finishNote()
+      expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
+        ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
+        1,
+      ])
+    })
+
+    test('It still sends a prompt that arrived mid-delivery when the session ends for a resume during the delivery', async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'held one')
+      world.submitHooks = [
+        () => {
+          void submitPerson($, 'late')
+          void $.session.end({ reason: 'resume', sessionId: 'new-session', resume: { id: 'new-session' } })
+        },
+      ]
+      await finishNote()
+      expect([entered(world), world.records.filter(record => record.action === 'cleared').length]).toEqual([
+        ['entered:plugin+asUser:held one', 'entered:plugin+asUser:late'],
+        1,
+      ])
+    })
   })
 
-  test('It leaves prompts that arrived mid-delivery in the box in arrival order', async ($, on) => {
-    const { world, finishNote } = await writingTheNote($, on)
-    await submitPerson($, 'held one')
-    world.submitDropped = true
-    world.submitHooks = [
-      () => {
-        void submitPerson($, 'late one')
-      },
-      () => {
-        void submitPerson($, 'late two')
-      },
-    ]
-    await finishNote()
-    expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate one\nlate two'])
+  describe('the box order when the fresh session refuses every submit', () => {
+    test('It leaves a held prompt ahead of a prompt that arrived mid-delivery in the box', async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'held one')
+      world.submitDropped = true
+      world.submitHooks = [
+        () => {
+          void submitPerson($, 'late')
+        },
+      ]
+      await finishNote()
+      expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate'])
+    })
+
+    test('It leaves prompts that arrived mid-delivery in the box in arrival order', async ($, on) => {
+      const { world, finishNote } = await writingTheNote($, on)
+      await submitPerson($, 'held one')
+      world.submitDropped = true
+      world.submitHooks = [
+        () => {
+          void submitPerson($, 'late one')
+        },
+        () => {
+          void submitPerson($, 'late two')
+        },
+      ]
+      await finishNote()
+      expect([entered(world), world.box.text]).toEqual([[], 'held one\nlate one\nlate two'])
+    })
   })
 })
 

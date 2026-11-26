@@ -773,6 +773,9 @@ prompts are delivered, and it is not guarded. After one, run `/handoff` again.
 | `hooks/engine-log.tsx` | `debug` and `logFailure`: the debug-log line and the guard for background work, shared by the modules that take `$` |
 | `hooks/band-controller.tsx` | The band: the offer atom, putting it up and taking it down, its buttons and what a press does (its `PressActions`, built in `register.tsx`, reach the handoff and the compaction without importing `handoff-run.tsx`, which imports this module), and drawing it |
 | `hooks/handoff-run.tsx` | A handoff's run: claiming it (`scheduleHandoff`), writing the note, waiting for the clear window, and abandoning with a reason |
+| `hooks/lifecycle-hooks.tsx` | `registerLifecycleHooks`: the `session.start`, `/clear`, `/resume` and `session.end` hooks, and the engine version read at start |
+| `hooks/fresh-session-continuation.tsx` | `continueInFreshSession`: after the clear, delivering the note, the held prompts and the continue prompt in the fresh session, and writing the record |
+| `hooks/handoff-delivery.tsx` | Delivering a handoff's prompts: submitting a held prompt (`submitEntered`), waiting for a promise to settle within a timeout (`settlesWithin`), delivering the note (`deliverNote`), sending the held groups and the late arrivals after it (`sendHeldGroups`, `sendLateArrivals`), and putting them back when the handoff fails (`restoreHeldGroups`, `restoreLateArrivals`) |
 | `hooks/compaction.tsx` | `scheduleCompaction`: the compaction a weak signal or the Compact button asks for, and its record |
 | `hooks/handoff-command.tsx` | `startHandoffCommand`: the reply to `/handoff` |
 | `hooks/command-registration.tsx` | `registerHandoffCommand`, run at session start and again after a clear |
