@@ -138,6 +138,8 @@ export const createState = (settings: Settings): SessionState => ({
   foreignClearReleasers: [],
 })
 
+// The prompts a handoff holds and carries, and its stage, survive resetForNewSession: the clear happens in the middle of
+// the handoff. The turn-end waiter is not released here: the handoff must resume after the session end hook returns.
 export const resetForNewSession = (state: SessionState): void => {
   state.contextTokens = 0
   state.cacheReadTokens = 0
@@ -157,6 +159,3 @@ export const resetForNewSession = (state: SessionState): void => {
   state.isPressRunning = false
   state.deferredPress = null
 }
-
-// The prompts a handoff holds and carries, and its stage, survive resetForNewSession: the clear happens in the middle of
-// the handoff. The turn-end waiter is not released here: the handoff must resume after the session end hook returns.
