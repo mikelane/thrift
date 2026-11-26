@@ -6,6 +6,7 @@ import { submissionTextFor } from './scheduled-preface'
 import { CONTINUE_PROMPT, decideContinue, type ContinueFields, type SessionCheck } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
+import { tryReadSessionId } from './session-id'
 import {
   FINAL_MESSAGES,
   boxCopyOf,
@@ -218,9 +219,9 @@ async function deliverNote(
   message: string,
 ): Promise<NoteDeliveryResult> {
   await waitForForeignClearsOrTimeOut($, state)
-  const appendSessionId = await readSessionId($, 'delivery (append)')
+  const appendSessionId = await tryReadSessionId($, ' for the delivery (append)')
   if (await appendNote($, message)) return { noteDelivery: 'appended', noteSessionId: appendSessionId }
-  const submitSessionId = await readSessionId($, 'delivery (submit)')
+  const submitSessionId = await tryReadSessionId($, ' for the delivery (submit)')
   return { noteDelivery: await deliverNoteAsPrompt($, state, settledHandoff, message), noteSessionId: submitSessionId }
 }
 
@@ -268,29 +269,18 @@ function sendLateArrivals($: EngineInterface, state: SessionState, holdBackPerso
   })
 }
 
-type SessionIdRead = 'delivery (append)' | 'delivery (submit)' | 'move check' | 'continue check'
-
-async function readSessionId($: EngineInterface, purpose: SessionIdRead): Promise<string | undefined> {
-  try {
-    return await $.session.id()
-  } catch (error) {
-    debug($, `could not read the session id for the ${purpose}: ${String(error)}`)
-    return undefined
-  }
-}
-
 // A /resume queued behind the clear runs in the fresh session, so by the time the note is in, the person may be in another
 // session. An id that cannot be read on either side is not taken for a move.
 async function hasSessionMovedFrom($: EngineInterface, noteSessionId: string | undefined): Promise<boolean> {
   if (noteSessionId === undefined) return false
-  const currentSessionId = await readSessionId($, 'move check')
+  const currentSessionId = await tryReadSessionId($, ' for the move check')
   if (currentSessionId === undefined || currentSessionId === noteSessionId) return false
   debug($, `session moved: the note went to ${noteSessionId}, and the person is now in ${currentSessionId}`)
   return true
 }
 
 // The submit runs in a clock tick, since the engine refuses one from a hook the turn may be waiting on.
-// SAFETY: readSessionId and submitEntered catch their own failures, so run never rejects and no test reaches the reject.
+// SAFETY: tryReadSessionId and submitEntered catch their own failures, so run never rejects and no test reaches the reject.
 // Keep it: a run that did reject would otherwise leave the handoff waiting forever with its claim held.
 function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -302,7 +292,7 @@ function afterTick<T>($: EngineInterface, run: () => Promise<T>): Promise<T> {
 
 async function checkSession($: EngineInterface, noteSessionId: string | undefined): Promise<SessionCheck> {
   if (noteSessionId === undefined) return 'unknown'
-  const currentSessionId = await readSessionId($, 'continue check')
+  const currentSessionId = await tryReadSessionId($, ' for the continue check')
   if (currentSessionId === undefined) return 'unknown'
   return currentSessionId === noteSessionId ? 'same' : 'moved'
 }

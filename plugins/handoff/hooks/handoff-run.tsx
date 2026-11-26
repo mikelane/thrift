@@ -14,6 +14,7 @@ import {
 } from './decision-record'
 import { announce } from './announcement'
 import { debug, logFailure } from './engine-log'
+import { tryReadSessionId } from './session-id'
 import { noteOutcome, type ForkReason, type NoteOutcome } from './fork-outcome'
 import { continueInFreshSession, restoreHeldGroups, restoreLateArrivals } from './handoff-delivery'
 import { HANDOFF_PROMPT, NO_HANDOFF_MESSAGE, groupHeldPrompts, noHandoffMessage } from './handoff-note'
@@ -32,17 +33,6 @@ import {
   type SessionState,
 } from './session-state'
 
-// A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
-// writeRecord leaves its own debug line.
-async function readSessionId($: EngineInterface): Promise<string | undefined> {
-  try {
-    return await $.session.id()
-  } catch (error) {
-    debug($, `could not read the session id: ${String(error)}`)
-    return undefined
-  }
-}
-
 type AbandonDetails = { sessionId?: string; forkReason?: ForkReason; clearSkipCause?: ClearSkipCause }
 
 async function abandonHandoff(
@@ -58,7 +48,9 @@ async function abandonHandoff(
   beginSending(state)
   await takeDownBand($, state)
   announce($, message)
-  const recordedSessionId = sessionId ?? (await readSessionId($))
+  // A failed read leaves the id to writeRecord, which reads it again. If that fails too, no record is written and
+  // writeRecord leaves its own debug line.
+  const recordedSessionId = sessionId ?? (await tryReadSessionId($))
   const restores = await restoreHeldGroups($, state, settledHandoff)
   const late = await restoreLateArrivals($, state)
   await writeRecord($, state, {

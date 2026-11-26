@@ -65,6 +65,19 @@ test('It logs session_unknown when neither session id read succeeds', CONTINUING
   expect(lastRecord(world).trigger_values).toMatchObject({ continued: 'skipped', continue_skip: 'session_unknown' })
 })
 
+// Pins the debug text of the continue check's failed session id read (no other test names it).
+test('It names the continue check in the debug line when its session id read fails', CONTINUING, async ($, on) => {
+  const world = install($, on)
+  world.onAppended = async () => {
+    world.sessionIdDenials = 2
+  }
+  await startSession($)
+  const band = await weakBand($, world)
+  await band.press({ key: 'handoff' })
+  await world.clock.settle()
+  expect(world.debugLines.some(line => line.startsWith('handoff: could not read the session id for the continue check: '))).toBe(true)
+})
+
 // Coverage probe: act mode with a typed /handoff continues (README: only plugin-started handoffs are always strong).
 test('It submits one continue prompt after a typed /handoff in act mode', { options: { handoffMode: 'act', continueAfterHandoff: true } }, async ($, on) => {
   const world = install($, on)

@@ -116,7 +116,7 @@ test('It writes one cleared record under the old session when the person clears 
   })
 })
 
-test('It logs the failed session id read and still writes handoff_failed when readSessionId cannot read the id', async ($, on) => {
+test('It logs the failed session id read and still writes handoff_failed when tryReadSessionId cannot read the id', async ($, on) => {
   const world = install($, on)
   await startSession($)
   world.sessionIdDenials = 2
@@ -128,7 +128,7 @@ test('It logs the failed session id read and still writes handoff_failed when re
   expect(ends[0]).toMatchObject({ session_id: 'old-session', trigger_values: { reason: 'handoff_failed', held_restore: 'none' } })
 })
 
-test('It writes no handoff_failed record when readSessionId and writeRecord both cannot read the id', async ($, on) => {
+test('It writes no handoff_failed record when tryReadSessionId and writeRecord both cannot read the id', async ($, on) => {
   const world = install($, on)
   await startSession($)
   world.sessionIdDenials = 3

@@ -95,7 +95,7 @@ describe('runHandoff', () => {
   })
 })
 
-describe('readSessionId', () => {
+describe('tryReadSessionId', () => {
   test('It says why when the id cannot be read for the abandoned handoff either', async ($, on) => {
     const world = install($, on)
     world.sessionIdDenials = 2
