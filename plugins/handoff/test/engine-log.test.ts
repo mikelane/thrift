@@ -7,8 +7,7 @@ describe('debug', () => {
     const world = install($, on)
     world.registerThrows = true
     await startSession($)
-    expect(world.debugLines).toHaveLength(1)
-    expect(world.debugLines.some(line => line.startsWith('handoff: '))).toBe(false)
+    expect(world.debugLines).toEqual(['could not register /handoff: HooksError: no implementation for command.register'])
   })
 })
 
