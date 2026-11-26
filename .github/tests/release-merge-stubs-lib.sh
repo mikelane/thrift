@@ -29,7 +29,8 @@ write_pr() {
 # query, CI runs, a pull request's files) fail unless `--paginate` is given, as a single page
 # would miss results. The merge command logs its arguments to merge-calls and fails when
 # merge.error exists, first replacing pr-<n>.json with pr-after-failed-merge.json if that exists
-# (the other trigger got there first). Each Actions route (the CI runs, a run's artifact list, an
+# (the other trigger got there first), and printing merge.error as its stderr ("merge refused"
+# when it is empty). Each Actions route (the CI runs, a run's artifact list, an
 # artifact's zip) records the GH_TOKEN it was called with in its own file (runs-token,
 # artifacts-token, zip-token), so a test can check every one of them used the runs token.
 stub_gh() {
@@ -40,7 +41,7 @@ stub_gh() {
     '  echo "$*" >>"$dir/merge-calls"' \
     '  [[ -e "$dir/merge.error" ]] || exit 0' \
     '  [[ -r "$dir/pr-after-failed-merge.json" ]] && cp "$dir/pr-after-failed-merge.json" "$dir/pr-$3.json"' \
-    '  echo "merge refused" >&2; exit 1' \
+    '  if [[ -s "$dir/merge.error" ]]; then cat "$dir/merge.error" >&2; else echo "merge refused" >&2; fi; exit 1' \
     'fi' \
     'path= paginated=0' \
     'for arg in "$@"; do [[ "$arg" == repos/* ]] && path=$arg; [[ "$arg" == --paginate ]] && paginated=1; done' \

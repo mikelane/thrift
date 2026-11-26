@@ -147,7 +147,7 @@ test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::error title=Release PR #111 not merged::the merge failed at $SHA_A"
+  assert_out_has "::error title=Release PR #111 not merged::the merge command failed at $SHA_A"
 }
 
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_read() {
@@ -480,7 +480,70 @@ test_the_merge_step_says_the_pr_state_could_not_be_read_when_the_lost_race_looku
   echo 'not json' >"$TEST_DIR/pr-after-failed-merge.json"
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "or its state could not be read"
+  assert_out_has "state could not be read"
+}
+
+# A failed merge's error annotation says which cause it was: gh's own reason on one line, and
+# whether the PR is still open at the tested commit or its state could not be read.
+test_the_merge_step_puts_ghs_reason_in_the_error_when_the_merge_fails_and_the_pr_is_still_open() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  echo 'GraphQL: Pull Request is not mergeable (mergePullRequest)' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::the merge command failed at $SHA_A and the PR is still open at that commit: GraphQL: Pull Request is not mergeable (mergePullRequest)"
+  assert_out_lacks "state could not be read"
+}
+
+test_the_merge_step_keeps_ghs_stderr_in_the_log_when_the_merge_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  echo 'GraphQL: Pull Request is not mergeable (mergePullRequest)' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "GraphQL: Pull Request is not mergeable (mergePullRequest)"
+}
+
+test_the_merge_step_says_the_state_could_not_be_read_and_gives_ghs_reason_when_the_lost_race_lookup_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  echo 'not json' >"$TEST_DIR/pr-after-failed-merge.json"
+  echo 'HTTP 405: merge conflict' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::the merge command failed at $SHA_A and the PR's state could not be read: HTTP 405: merge conflict"
+  assert_out_lacks "still open"
+}
+
+test_the_merge_step_keeps_one_line_of_ghs_reason_and_escapes_it_in_the_error() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  printf '  100%% conflicting\r\nsecond line\n\n' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "still open at that commit: 100%25 conflicting"
+  grep '^::error' "$OUTPUT" | grep -q "$(printf '\r')" && fail "the annotation carries a CR"
+  [[ "$(grep -c '^::error' "$OUTPUT")" == 1 ]] || fail "expected one error annotation"
+  grep '^::error' "$OUTPUT" | grep -q 'second line' && fail "the annotation carries a second line"
+  return 0
+}
+
+test_the_merge_step_names_the_cause_when_gh_gives_no_reason() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  printf '\n  \n' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "the merge command failed at $SHA_A and the PR is still open at that commit"
+}
+
+test_the_merge_step_leaves_no_temp_files_after_a_failed_merge() {
+  local left
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  left=$(ls "$TEST_DIR/work")
+  [[ -z "$left" ]] || fail "left [$left]"
+}
+
+test_the_merge_step_still_merges_when_the_stderr_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_failing_mktemp merge-err release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
+  assert_out_has "Merged PR #111 at $SHA_A."
 }
 
 test_a_ci_triggered_run_escapes_percent_in_the_branch_of_the_lookup_error() {

@@ -296,12 +296,13 @@ release_merge_sweep() (
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when
 # the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The
 # message says whether it was merged or closed without merging (the same PR read gives `merged`).
-# Fails for any other cause, so a real merge failure still fails the job.
+# Fails for any other cause, so a real merge failure still fails the job: returns 1 when the PR is
+# still open at <sha>, and 2 when its state could not be read.
 release_merge_lost_race() {
   local pr_fields state head merged
   pr_fields=$(set -o pipefail
     gh api "repos/$1/pulls/$2" \
-      | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 1
+      | jq -r '[.state, .head.sha, (.merged // false)] | join(" ")') || return 2
   read -r state head merged <<<"$pr_fields"
   if [[ "$state" != open && "$merged" == true ]]; then
     echo "PR #$2 is $state: another run merged it first."
@@ -320,6 +321,26 @@ release_merge_lost_race() {
 release_merge_fail() {
   echo "::error title=Release PR #$1 not merged::${2//\%/%25}"
   return 1
+}
+
+# release_merge_merge_failure_reason <tested-sha> <lost-race-status> <stderr-file>: prints why a failed
+# merge was not a lost race, for release_merge_fail: whether the PR is still open at <tested-sha>
+# (<lost-race-status> 1) or its state could not be read (2), then the first non-empty line of gh's
+# stderr in <stderr-file>, with the CR of a CRLF line and surrounding blanks removed so the
+# annotation stays on one line. Printing only: a missing or empty file just leaves out gh's reason.
+release_merge_merge_failure_reason() {
+  local cause="the PR is still open at that commit" detail
+  [[ "$2" != 2 ]] || cause="the PR's state could not be read"
+  detail=$(tr -d '\r' <"$3" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -m1 . || true)
+  echo "the merge command failed at $1 and $cause${detail:+: $detail}"
+}
+
+# release_merge_replay_stderr <file>: sends the stderr a command left in <file> to the log, as if
+# the command had not been redirected, and deletes the file. /dev/null (no temp file) is left alone.
+release_merge_replay_stderr() {
+  [[ -f "$1" ]] || return 0
+  cat "$1" >&2
+  rm -f "$1"
 }
 
 # release_merge_record_problem <ci-run-id> <number>: appends to the caller's `problems` the reason
@@ -345,7 +366,7 @@ release_merge_record_problem() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem
+  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
@@ -382,9 +403,14 @@ release_merge_pr_if_gate_passes() {
   fi
 
   echo "Merging PR #$number at $tested_sha."
+  # gh's stderr goes to a file so a failure's annotation can carry its reason; with no temp file it
+  # goes nowhere, and the annotation just leaves the reason out. The merge still runs.
+  merge_stderr=$(mktemp "$work_dir/merge-stderr.XXXXXX") || merge_stderr=/dev/null
   # One line: the workflow test selects the merge command by its start. `did_merge` tells a real
-  # merge from a lost race, which also leaves the chain successfully.
-  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null && did_merge=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "the merge failed at $tested_sha and the PR is still open at that commit, or its state could not be read" || return 1
+  # merge from a lost race, which also leaves the chain successfully. $? in the annotation is the
+  # lost-race lookup's status.
+  gh pr merge "$number" --repo "$REPO" --admin --squash --match-head-commit "$tested_sha" </dev/null 2>"$merge_stderr" && did_merge=1 || release_merge_lost_race "$REPO" "$number" "$tested_sha" || release_merge_fail "$number" "$(release_merge_merge_failure_reason "$tested_sha" "$?" "$merge_stderr")" || { release_merge_replay_stderr "$merge_stderr"; return 1; }
+  release_merge_replay_stderr "$merge_stderr"
   [[ "$did_merge" == 0 ]] || echo "Merged PR #$number at $tested_sha."
 }
 
