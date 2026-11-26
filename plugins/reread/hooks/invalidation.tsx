@@ -28,7 +28,9 @@ async function pathsNamedBy($: EngineInterface, path: string): Promise<string[]>
   }
 }
 
-async function noteDropped($: EngineInterface, state: SessionState, dropped: number, reason: DecisionReason, agentId: string | undefined, sessionId?: string) {
+type Drop = { dropped: number; reason: DecisionReason; agentId: string | undefined; sessionId?: string }
+
+async function noteDropped($: EngineInterface, state: SessionState, { dropped, reason, agentId, sessionId }: Drop) {
   if (dropped === 0) return
   const engine = await engineInfo($, state)
   await writeRecord($, engine, { decision: 'invalidate', reason, dropped, isSubagent: agentId !== undefined }, sessionId)
@@ -39,10 +41,10 @@ async function noteDropped($: EngineInterface, state: SessionState, dropped: num
 // SAFETY: every call inside the try catches its own engine failures, so no test reaches this catch.
 export async function noteToolRan($: EngineInterface, state: SessionState, call: ToolCall): Promise<void> {
   try {
-    if (call.tool === 'Bash') return await noteDropped($, state, dropAll(state.reads), 'bash', call.agentId)
+    if (call.tool === 'Bash') return await noteDropped($, state, { dropped: dropAll(state.reads), reason: 'bash', agentId: call.agentId })
     const path = FILE_EDITING_TOOLS.includes(call.tool) ? pathOf(call) : undefined
     if (path === undefined) return
-    await noteDropped($, state, dropPaths(state.reads, await pathsNamedBy($, path)), 'edit', call.agentId)
+    await noteDropped($, state, { dropped: dropPaths(state.reads, await pathsNamedBy($, path)), reason: 'edit', agentId: call.agentId })
   } catch (error) {
     debug($, `could not drop reads after ${call.tool}: ${String(error)}`)
   }
@@ -53,7 +55,7 @@ export async function noteToolRan($: EngineInterface, state: SessionState, call:
 export async function noteCompaction($: EngineInterface, state: SessionState, agentId: string | undefined, isVetoed: boolean): Promise<void> {
   try {
     if (isVetoed) return
-    await noteDropped($, state, dropContext(state.reads, contextOf(agentId)), 'compaction', agentId)
+    await noteDropped($, state, { dropped: dropContext(state.reads, contextOf(agentId)), reason: 'compaction', agentId })
   } catch (error) {
     debug($, `could not drop reads after a compaction: ${String(error)}`)
   }
@@ -62,7 +64,7 @@ export async function noteCompaction($: EngineInterface, state: SessionState, ag
 // SAFETY: as for noteToolRan, no test reaches the catch.
 export async function noteSessionEnd($: EngineInterface, state: SessionState, sessionId: string): Promise<void> {
   try {
-    await noteDropped($, state, endSession(state), 'clear', undefined, sessionId)
+    await noteDropped($, state, { dropped: endSession(state), reason: 'clear', agentId: undefined, sessionId })
   } catch (error) {
     debug($, `could not drop reads at the end of a session: ${String(error)}`)
   }
