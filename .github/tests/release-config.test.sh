@@ -147,11 +147,13 @@ test_a_marketplace_with_no_plugins_has_no_problems() {
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
-# release-please groups every package into one PR unless this is set, once there are two or more.
-test_the_config_opens_a_separate_release_pr_per_plugin() {
+# With separate pull requests, one fix that releases several plugins opens one release PR each, and
+# each rewrites .release-please-manifest.json, so after the first merges the others conflict (#207).
+# Tags and GitHub releases stay per plugin because every package sets include-component-in-tag.
+test_the_config_groups_every_plugin_release_into_one_pr_so_manifest_edits_cannot_conflict() {
   local got
   got=$(jq '."separate-pull-requests"' "$REPO_ROOT/release-please-config.json")
-  [[ "$got" == true ]] || fail "separate-pull-requests is $got"
+  [[ "$got" == false ]] || fail "separate-pull-requests is $got"
 }
 
 run_tests "$@"
