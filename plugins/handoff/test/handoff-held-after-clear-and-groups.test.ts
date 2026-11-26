@@ -9,7 +9,7 @@ import {
   noteTookGroupAlong,
   speaksForPerson,
 } from '../hooks/handoff-note'
-import { answered, dropOf, entered, submitPerson, writingTheNote } from './helpers'
+import { answered, dropOf, entered, submitPerson, writingTheNote, scheduled } from './helpers'
 import {
   ASK,
   HELD_FOR_HANDOFF,
@@ -80,7 +80,7 @@ describe('prompts that arrive after the clear', () => {
     expect(outcome.repeat).not.toBeNull()
     expect([dropOf(await outcome.repeat), entered(world)]).toEqual([
       HELD_FOR_HANDOFF,
-      ['entered:composer:start on ENG-1', 'entered:plugin:nightly job'],
+      ['entered:composer:start on ENG-1', `entered:plugin:${scheduled('nightly job')}`],
     ])
   })
 })

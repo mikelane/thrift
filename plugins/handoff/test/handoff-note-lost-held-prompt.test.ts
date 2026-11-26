@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { entered, lastRecord, submitPerson, writingTheNote, type World } from './helpers'
+import { entered, lastRecord, submitPerson, writingTheNote, type World, scheduled } from './helpers'
 import { NOTE_MESSAGE, unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 
 // The note is refused on its own; whatever is submitted after it goes through.
@@ -82,7 +82,7 @@ describe('where a held prompt goes when the note did not enter the fresh session
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     noteRefusedApart(world)
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin:nightly job'])
+    expect(entered(world)).toEqual([`entered:plugin:${scheduled('nightly job')}`])
   })
 
   test('It holds back a person prompt that arrives mid-delivery when the note could only go in the prompt box', async ($, on) => {
@@ -111,7 +111,7 @@ describe('where a held prompt goes when the note did not enter the fresh session
       },
     ]
     await finishNote()
-    expect([entered(world), world.box.text]).toEqual([['entered:plugin:nightly job'], NOTE_MESSAGE])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduled('nightly job')}`], NOTE_MESSAGE])
   })
 
   test('It leaves one box copy of the held prompt', async ($, on) => {

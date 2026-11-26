@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
 import { announce } from './announcement'
+import { withPreface } from './carried-preface'
 import { CONTINUE_PROMPT, decideContinue, type ContinueFields, type SessionCheck } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
@@ -53,6 +54,12 @@ const UNSENT_NOTE_AND_OTHER_PROMPT = 'The handoff note and a prompt could not be
 // the running turn, so a resolved submit does not mean its turn has begun. So the origin goes into a queue here and the
 // turn.start hook takes it. A hook beneath the plugin that refuses the prompt makes submit resolve with { drop } instead of
 // rejecting.
+// A prompt someone else sent says where it came from; the plugin's own note and continue prompt are not carried prompts. The
+// queued entry holds the text that is submitted, because the turn it starts is matched back to it by that text.
+function prefacedIfCarried(prompt: HeldPrompt): HeldPrompt {
+  return prompt.author === 'person' ? { ...prompt, text: withPreface(prompt) } : prompt
+}
+
 async function submitEntered(
   $: EngineInterface,
   state: SessionState,
@@ -60,15 +67,16 @@ async function submitEntered(
   failureLabel: string,
   asUser: boolean,
 ): Promise<boolean> {
-  queueResubmittedPrompt(state, prompt)
+  const submission = asUser ? prompt : prefacedIfCarried(prompt)
+  queueResubmittedPrompt(state, submission)
   try {
-    const result = await $.prompt.submit(asUser ? { text: prompt.text, asUser: true } : { text: prompt.text })
+    const result = await $.prompt.submit(asUser ? { text: submission.text, asUser: true } : { text: submission.text })
     if (result.drop === undefined) return true
     debug($, `${failureLabel}: ${result.drop}`)
   } catch (error) {
     debug($, `${failureLabel}: ${String(error)}`)
   }
-  removeResubmittedPrompt(state, prompt)
+  removeResubmittedPrompt(state, submission)
   return false
 }
 
@@ -209,7 +217,7 @@ async function deliverNoteAsPrompt(
   // always undefined today and no test can tell whether it is passed on. It stays so a group that does carry one is not lost.
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
   const note: HeldPrompt = {
-    text: joinPrompts(message, sameOriginGroup?.text),
+    text: joinPrompts(message, sameOriginGroup === undefined ? undefined : withPreface(sameOriginGroup)),
     isUnattended: settledHandoff.isUnattended,
     origin,
     author: 'plugin',

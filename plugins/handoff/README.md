@@ -136,8 +136,18 @@ claude --plugin-dir ~/dev/thrift/plugins/handoff
       words, so the model reads it bare, with no "The handoff plugin sent a message" in front. That
       goes for every way the plugin sends one again: after the clear, a prompt that arrived while the
       delivery ran, Hand off and send it, Send here, and the restore after an abandoned handoff. The
-      plugin's own note and a scheduled prompt keep the plugin's name in front. Hooks and the
-      transcript still show the plugin as the sender of all of them.
+      plugin's own note keeps the plugin's name in front. A prompt the person did not type, such as
+      a scheduled task's, is submitted under the plugin's name too, but its text starts with a line
+      saying where it came from, so the model does not read it as the plugin's own instruction:
+      "A scheduled task fired while the handoff was under way, so the handoff carried its prompt
+      here. The task's prompt:" for a scheduled task, "A message from another Claude session
+      arrived while the handoff was under way, so the handoff carried it here:" for a peer, and
+      "A prompt (<origin>) arrived while the handoff was under way, so the handoff carried it here:"
+      for any other origin. It is not sent as the person's own words, which would give a scheduler
+      or a peer the person's authority. When a scheduled handoff's note rides with the scheduled
+      prompts, only the scheduled part has the line; the note stays as it was. A prompt put in the
+      prompt box or written to the transcript gets no line: it is not submitted, and the person
+      reads it there. Hooks and the transcript still show the plugin as the sender of all of them.
       A person's prompt follows the note, so it is not submitted when the note did not enter the
       fresh session as a message (it was left in the prompt box or written to the transcript), for
       an attended and a scheduled handoff alike. It is held back after the note instead: in the prompt
