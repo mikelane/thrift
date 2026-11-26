@@ -135,3 +135,21 @@ describe('a held resume replay that never returns', () => {
     expect(world.debugLines).toContain(`handoff: a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
   })
 })
+
+describe('a later handoff after a held resume replay that never returned', () => {
+  test('It does not wait again for a replay an earlier handoff already gave up on', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.resumeHangs = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
+    world.onClearIssued = undefined
+    const recordsBefore = world.records.length
+    await runCommand($, 'handoff')
+    await world.clock.advance(1)
+    expect(world.records.length).toBeGreaterThan(recordsBefore)
+  })
+})
