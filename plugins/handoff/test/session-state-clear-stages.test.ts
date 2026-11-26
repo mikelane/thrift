@@ -10,6 +10,7 @@ import {
   shouldHoldResume,
   holdResume,
   takeHeldResumes,
+  forgetHeldResumeReplay,
   markOwnClearReturned,
   createState,
   endHandoff,
@@ -209,4 +210,20 @@ test('It appends the args to heldResumeArgs in holdResume', () => {
   const state = createState(settings)
   holdResume(state, 'a')
   expect(state.heldResumeArgs).toEqual(['a'])
+})
+
+test('It clears heldResumeReplay when it is the replay being forgotten in forgetHeldResumeReplay', () => {
+  const state = createState(settings)
+  const replay = Promise.resolve(true)
+  state.heldResumeReplay = replay
+  forgetHeldResumeReplay(state, replay)
+  expect(state.heldResumeReplay).toBeNull()
+})
+
+test('It keeps a newer heldResumeReplay when an older replay is forgotten in forgetHeldResumeReplay', () => {
+  const state = createState(settings)
+  const newer = Promise.resolve(true)
+  state.heldResumeReplay = newer
+  forgetHeldResumeReplay(state, Promise.resolve(false))
+  expect(state.heldResumeReplay).toBe(newer)
 })

@@ -76,6 +76,34 @@ describe('replayHeldResumes', () => {
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
   })
 
+  test('It does not take the replay for a move when only the session id before it cannot be read', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.denyIdUntilResume = true
+    world.resumeKeepsSession = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.debugLines.some(line => line.includes('could not read the session id around the /resume replay'))).toBe(true)
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
+  test('It does not take the replay for a move when only the session id after it cannot be read', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.denyIdAfterResume = true
+    world.resumeKeepsSession = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.debugLines.filter(line => line.includes('could not read the session id around the /resume replay'))).toHaveLength(1)
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
+
   test('It reports session_moved when the first held resume runs and a later one throws', COMPACTING, async ($, on) => {
     const world = install($, on)
     let reads = 0
