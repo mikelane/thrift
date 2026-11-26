@@ -204,7 +204,7 @@ test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr
 
 # A pr.json that is not one JSON object is an unreadable fetch, like a files response that is not
 # JSON: one error annotation, a failed job, no refusal reasons built from empty fields, no merge.
-assert_unparseable_pr_fails_the_gate() {
+assert_unparseable_pr_fails_with_one_error() {
   stage_release_pr 111 "$SHA_A" handoff success
   printf '%s' "$1" >"$TEST_DIR/pr-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
@@ -217,19 +217,19 @@ assert_unparseable_pr_fails_the_gate() {
 }
 
 test_the_merge_step_fails_with_one_error_when_the_pr_is_not_json() {
-  assert_unparseable_pr_fails_the_gate 'not json'
+  assert_unparseable_pr_fails_with_one_error 'not json'
 }
 
 test_the_merge_step_fails_with_one_error_when_the_pr_is_empty() {
-  assert_unparseable_pr_fails_the_gate ''
+  assert_unparseable_pr_fails_with_one_error ''
 }
 
 test_the_merge_step_fails_with_one_error_when_the_pr_is_json_null() {
-  assert_unparseable_pr_fails_the_gate 'null'
+  assert_unparseable_pr_fails_with_one_error 'null'
 }
 
 test_the_merge_step_fails_with_one_error_when_the_pr_is_a_json_array() {
-  assert_unparseable_pr_fails_the_gate '[]'
+  assert_unparseable_pr_fails_with_one_error '[]'
 }
 
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_read() {
@@ -567,7 +567,7 @@ test_the_merge_step_says_the_pr_state_could_not_be_read_when_the_lost_race_looku
 
 # A failed merge's error annotation says which cause it was: gh's own reason on one line, and
 # whether the PR is still open at the tested commit or its state could not be read.
-test_the_merge_step_puts_ghs_reason_in_the_error_when_the_merge_fails_and_the_pr_is_still_open() {
+test_the_merge_step_puts_the_gh_reason_in_the_error_when_the_merge_fails_and_the_pr_is_still_open() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'GraphQL: Pull Request is not mergeable (mergePullRequest)' >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
@@ -576,7 +576,7 @@ test_the_merge_step_puts_ghs_reason_in_the_error_when_the_merge_fails_and_the_pr
   assert_out_lacks "state could not be read"
 }
 
-test_the_merge_step_keeps_ghs_stderr_in_the_log_when_the_merge_fails() {
+test_the_merge_step_keeps_the_gh_stderr_in_the_log_when_the_merge_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'GraphQL: Pull Request is not mergeable (mergePullRequest)' >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
@@ -584,7 +584,7 @@ test_the_merge_step_keeps_ghs_stderr_in_the_log_when_the_merge_fails() {
   assert_out_line "GraphQL: Pull Request is not mergeable (mergePullRequest)"
 }
 
-test_the_merge_step_says_the_state_could_not_be_read_and_gives_ghs_reason_when_the_lost_race_lookup_fails() {
+test_the_merge_step_says_the_state_could_not_be_read_and_gives_the_gh_reason_when_the_lost_race_lookup_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'not json' >"$TEST_DIR/pr-after-failed-merge.json"
   echo 'HTTP 405: merge conflict' >"$TEST_DIR/merge.error"
@@ -594,7 +594,7 @@ test_the_merge_step_says_the_state_could_not_be_read_and_gives_ghs_reason_when_t
   assert_out_lacks "still open"
 }
 
-test_the_merge_step_keeps_one_line_of_ghs_reason_and_escapes_it_in_the_error() {
+test_the_merge_step_keeps_one_line_of_the_gh_reason_and_escapes_it_in_the_error() {
   stage_release_pr 111 "$SHA_A" handoff success
   printf '  100%% conflicting\r\nsecond line\n\n' >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
@@ -629,7 +629,7 @@ test_the_merge_step_still_merges_when_the_stderr_temp_file_cannot_be_made() {
   assert_out_line "Merged PR #111 at $SHA_A."
 }
 
-test_the_merge_step_names_the_cause_without_ghs_reason_when_the_stderr_temp_file_cannot_be_made() {
+test_the_merge_step_names_the_cause_without_the_gh_reason_when_the_stderr_temp_file_cannot_be_made() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'GraphQL: Pull Request is not mergeable (mergePullRequest)' >"$TEST_DIR/merge.error"
   run_merge_step with_failing_mktemp merge-stderr release_merge_pr_if_gate_passes 111 "$SHA_A" 211
