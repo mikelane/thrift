@@ -1,11 +1,11 @@
 import type { HeldPrompt } from './session-state'
 
-const SCHEDULED_PREFACE = "A scheduled task fired while the handoff was under way, so the handoff carried its prompt here. The task's prompt:"
+const SCHEDULED_PREFACE = "A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:"
 
 const PREFACE_SEPARATOR = '\n\n'
 
-// The engine frames a plugin's submission as the plugin's own message, so a prompt the person did not type needs its origin
-// said in the text, or the model reads it as the plugin's instruction with no provenance.
+// The engine presents a plugin's submission as the plugin's own message. A prompt the person did not type must say where it
+// came from in its text, or the model takes it for the plugin's own instruction.
 // SAFETY: only a scheduled prompt is ever carried this way. Held prompts are authored by the person, and speaksForPerson sends
 // every one but the unattended (scheduled) ones asUser, so a submission without asUser that carries a person's prompt is a
 // scheduled task's. A peer's message is never held (see the SAFETY note on groupOrigin in handoff-note.ts), so no peer,

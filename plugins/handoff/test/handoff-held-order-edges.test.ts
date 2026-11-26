@@ -35,7 +35,7 @@ describe('the origin of the first of several resubmitted turns', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await finishNote()
     expect(enteredPrompts(world)).toEqual([
-      "entered:plugin:A scheduled task fired while the handoff was under way, so the handoff carried its prompt here. The task's prompt:\n\nnightly job",
+      "entered:plugin:A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:\n\nnightly job",
     ])
   })
 

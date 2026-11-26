@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { carriedText, withPreface } from '../hooks/carried-preface'
 
-const SCHEDULED = "A scheduled task fired while the handoff was under way, so the handoff carried its prompt here. The task's prompt:"
+const SCHEDULED = "A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:"
 
 describe('withPreface', () => {
   test('It puts the scheduled preface, a blank line, then the prompt text', () => {
