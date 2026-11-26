@@ -176,4 +176,20 @@ test_has_user_text_matches_the_raw_text_of_a_wrapped_entry() {
   report test_has_user_text_matches_the_raw_text_of_a_wrapped_entry "$status" 0
 }
 
+test_has_user_text_containing_fails_when_the_transcript_is_missing() {
+  local status=0
+  transcript_has_user_text_containing /nonexistent/t.jsonl 'SCHEDTOKEN:' 2>/dev/null || status=$?
+  report test_has_user_text_containing_fails_when_the_transcript_is_missing "$status" 1
+}
+
+test_has_user_text_fails_when_the_transcript_cannot_be_parsed() {
+  local T status=0
+  T=$(mktemp -d)
+  write_transcript "$T/t.jsonl" "$STRING_USER" '{"type":"user","message":{"con'
+  transcript_has_user_text "$T/t.jsonl" five 2>/dev/null || status=$?
+  rm -rf "$T"
+  # Any non-zero status is a failure: jq -e exits 5 on a parse error, 1 on no match.
+  report test_has_user_text_fails_when_the_transcript_cannot_be_parsed "$((status != 0))" 1
+}
+
 run_tests "$@"
