@@ -180,6 +180,35 @@ test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr
   assert_out_has "::error title=Release PR #111 not merged::the merge command failed at $SHA_A"
 }
 
+# A pr.json that is not one JSON object is an unreadable fetch, like a files response that is not
+# JSON: one error annotation, a failed job, no refusal reasons built from empty fields, no merge.
+assert_unparseable_pr_fails_the_gate() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  printf '%s' "$1" >"$TEST_DIR/pr-111.json"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 1
+  assert_out_has "::error title=Release PR #111 not merged::cannot parse the PR (at $SHA_A)"
+  assert_out_lacks "::warning"
+  assert_out_lacks "not open"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_fails_with_one_error_when_the_pr_is_not_json() {
+  assert_unparseable_pr_fails_the_gate 'not json'
+}
+
+test_the_merge_step_fails_with_one_error_when_the_pr_is_empty() {
+  assert_unparseable_pr_fails_the_gate ''
+}
+
+test_the_merge_step_fails_with_one_error_when_the_pr_is_json_null() {
+  assert_unparseable_pr_fails_the_gate 'null'
+}
+
+test_the_merge_step_fails_with_one_error_when_the_pr_is_a_json_array() {
+  assert_unparseable_pr_fails_the_gate '[]'
+}
+
 test_the_merge_step_names_the_pr_in_an_error_when_the_changed_files_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
   echo 'not json' >"$TEST_DIR/files-111.json"

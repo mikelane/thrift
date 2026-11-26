@@ -364,7 +364,7 @@ release_merge_record_problem() {
 # gate also requires the pr-record of CI run <ci-run-id> to name <number> into $BASE; an empty id is
 # refused. The CI path passes the triggering run, the sweep the run release_merge_ci_outcome chose
 # (so a swept PR's record is downloaded twice). A refusal returns 0, so the job stays green. A
-# failed lookup, or a failed merge that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
+# failed lookup (including a PR response that is not a JSON object), or a failed merge that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
@@ -386,6 +386,9 @@ release_merge_pr_if_gate_passes() {
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
+  # A fetch that is not one JSON object would otherwise read as refusals built from empty fields.
+  jq -e 'type == "object"' "$pr" >/dev/null 2>&1 \
+    || release_merge_fail "$number" "cannot parse the PR (at $tested_sha)" || return 1
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
     "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
     || release_merge_fail "$number" "cannot check the gate (at $tested_sha)" || return 1
