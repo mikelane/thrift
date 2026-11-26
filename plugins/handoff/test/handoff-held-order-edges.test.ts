@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { bash, completeTurn, growTo200k, runCommand, startTurn, submitPerson, writingTheNote, type World } from './helpers'
+import { bash, completeTurn, entered as enteredPrompts, growTo200k, runCommand, startTurn, submitPerson, writingTheNote, type World, scheduledText } from './helpers'
 
 const entered = (world: World) => world.effects.filter(effect => effect.startsWith('entered:'))
 
@@ -30,12 +30,21 @@ describe('the origin of the first of several resubmitted turns', () => {
     expect(handoffsStarted(world)).toBe(1)
   })
 
+  test('It submits a carried scheduled group under the scheduled-task preface and as the plugin, not asUser', ASK, async ($, on) => {
+    const { world, finishNote } = await writingTheNote($, on)
+    await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
+    await finishNote()
+    expect(enteredPrompts(world)).toEqual([
+      "entered:plugin:A scheduled task the person set up fired while the handoff was under way. The handoff plugin is passing its prompt on. The prompt:\n\nnightly job",
+    ])
+  })
+
   test('It judges the turn of a resubmitted scheduled group as unattended when a person group is queued behind it', ASK, async ($, on) => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await submitPerson($, 'person says')
     await finishNote()
-    await endFirstTurnInFreshSession($, world, 'nightly job')
+    await endFirstTurnInFreshSession($, world, scheduledText('nightly job'))
     expect(handoffsStarted(world)).toBe(2)
   })
 
