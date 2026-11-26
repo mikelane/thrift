@@ -12,6 +12,8 @@ import { beginOwnClear, forgetHeldResumeReplay, markOwnClearReturned, preClearOu
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
+const RESUME_REPLAY_PHRASE = ' around the /resume replay'
+
 type RedrawBand = (band: BandState) => Promise<void>
 export type AbandonHandoff = (
   settledHandoff: SettledHandoff,
@@ -141,7 +143,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
   const replay: Promise<boolean> = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
-        const idBefore = await tryReadSessionId($, ' around the /resume replay')
+        const idBefore = await tryReadSessionId($, RESUME_REPLAY_PHRASE)
         for (const resumeArgs of heldResumeArgs) {
           try {
             await $.command.run({ command: 'resume', args: resumeArgs })
@@ -149,7 +151,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
             debug($, `/resume replay failed: ${String(error)}`)
           }
         }
-        const idAfter = await tryReadSessionId($, ' around the /resume replay')
+        const idAfter = await tryReadSessionId($, RESUME_REPLAY_PHRASE)
         forgetHeldResumeReplay(state, replay)
         // A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
         resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
