@@ -152,4 +152,20 @@ describe('a later handoff after a held resume replay that never returned', () =>
     await world.clock.advance(1)
     expect(world.records.length).toBeGreaterThan(recordsBefore)
   })
+
+  test('It does not mark a later handoff as moved when the replay it gave up on returns after the move', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    world.resumeHangs = true
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.advance(HELD_RESUME_REPLAY_TIMEOUT_MS)
+    world.onClearIssued = undefined
+    await runCommand($, 'handoff')
+    world.releaseHungResume?.()
+    await world.clock.settle()
+    expect(lastRecord(world).trigger_values.reason).toBeUndefined()
+  })
 })

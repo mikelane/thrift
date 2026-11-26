@@ -58,6 +58,8 @@ export type World = {
   resumeThrows: boolean
   // A plugin-origin /resume that never returns.
   resumeHangs: boolean
+  // Set while a hung /resume waits; calling it makes that /resume return having moved the person.
+  releaseHungResume: (() => void) | undefined
   // A plugin-origin /resume that returns without leaving the session, as a picker the person cancels does.
   resumeKeepsSession: boolean
   appendDenied: boolean
@@ -183,7 +185,14 @@ export const installCommandMocks = ($: Engine, on: On, world: World) => {
   })
   on('command.run', async (_$, e) => {
     if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeThrows) throw new Error('resume refused')
-    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeHangs) return new Promise(() => undefined)
+    if (e.command === 'resume' && e.origin.kind === 'plugin' && world.resumeHangs) {
+      return new Promise(resolve => {
+        world.releaseHungResume = () => {
+          world.sessionId = `resumed-${e.args}`
+          resolve({ text: 'ran resume' })
+        }
+      })
+    }
     if (e.command === 'resume') world.effects.push(`resume:${e.args}`)
     if (e.command === 'resume' && e.origin.kind === 'plugin' && !world.resumeKeepsSession) world.sessionId = `resumed-${e.args}`
     if (e.command !== 'clear') return { text: `ran ${e.command}` }

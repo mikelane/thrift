@@ -7,7 +7,7 @@ import { debug } from './engine-log'
 import { isBackgroundBusy } from './background-busy'
 import { CLEAR_SKIPPED_MESSAGE, busyRefusalMessage, clearFailedMessage, sessionEndedMessage } from './handoff-note'
 import { writeRecord } from './record-writer'
-import { beginOwnClear, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
+import { beginOwnClear, forgetHeldResumeReplay, markOwnClearReturned, preClearOutcome, takeHeldResumes, waitForTurnEnd, type PreClearOutcome, type SessionState } from './session-state'
 import { busyRefusalTrigger } from './signals'
 import { waitStartedLine } from './wait-started-line'
 
@@ -147,7 +147,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
   if (heldResumeArgs.length === 0) return
   // Set before the tick, so the delivery that follows the clear can wait for the outcome. A /resume that returns is not a move:
   // the picker a bare /resume opens can be cancelled. Only a session id that differs afterwards counts.
-  state.heldResumeReplay = new Promise<boolean>(resolve => {
+  const replay: Promise<boolean> = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
         const idBefore = await readSessionIdOrUndefined($)
@@ -159,11 +159,12 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
           }
         }
         const idAfter = await readSessionIdOrUndefined($)
-        state.heldResumeReplay = null
+        forgetHeldResumeReplay(state, replay)
         resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
       })()
     })
   })
+  state.heldResumeReplay = replay
 }
 
 export type AbandonCause = 'session_ended' | 'busy' | 'clear_failed' | 'compaction_preempted'

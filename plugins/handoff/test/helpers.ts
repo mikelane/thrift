@@ -70,6 +70,7 @@ const defaultWorld = (clock: MockClock): World => ({
   clearThrows: false,
   resumeThrows: false,
   resumeHangs: false,
+  releaseHungResume: undefined,
   resumeKeepsSession: false,
   appendDenied: false,
   forkPrompts: [],

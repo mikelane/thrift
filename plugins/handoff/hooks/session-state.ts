@@ -396,6 +396,11 @@ export const holdResume = (state: SessionState, args: string): void => {
 
 export const takeHeldResumes = (state: SessionState): string[] => state.heldResumeArgs.splice(0)
 
+// A newer replay may already have replaced the one being forgotten, and that one stays.
+export function forgetHeldResumeReplay(state: SessionState, replay: Promise<boolean>): void {
+  if (state.heldResumeReplay === replay) state.heldResumeReplay = null
+}
+
 // The most specific match wins: a carried prompt's text holds a fixed preface, so a short prompt queued earlier can be a word
 // of it. Of the entries whose text the turn's text contains, the longest is taken, and the earliest submitted among equals.
 const indexOfLongestQueuedMatch = (queue: readonly HeldPrompt[], turnText: string): number =>

@@ -28,6 +28,7 @@ import { noteOrigin } from './prompt-plan'
 import { writeRecord } from './record-writer'
 import {
   beginSending,
+  forgetHeldResumeReplay,
   queueResubmittedPrompt,
   releaseCarried,
   releaseCarriedGroup,
@@ -197,6 +198,8 @@ export const HELD_RESUME_REPLAY_TIMEOUT_MS = 5000
 async function hasHeldResumeMoved($: EngineInterface, state: SessionState): Promise<boolean> {
   const replay = state.heldResumeReplay
   if (replay === null) return false
+  // Only the handoff that follows the clear reads the replay. One that gave up on it must not leave it for a later handoff.
+  forgetHeldResumeReplay(state, replay)
   let hasMoved = false
   const hasSettled = await settlesWithin($, replay.then(moved => { hasMoved = moved }), HELD_RESUME_REPLAY_TIMEOUT_MS)
   if (!hasSettled) debug($, `a held /resume did not return within ${HELD_RESUME_REPLAY_TIMEOUT_MS} ms, so the session id decides whether the person moved`)
