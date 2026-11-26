@@ -1,20 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-import {
-  preClearOutcome,
-  beginBeforeClear,
-  beginOwnClear,
-  claimPending,
-  recordSessionEnd,
-  recordResumeDispatch,
-  shouldHoldResume,
-  holdResume,
-  takeHeldResumes,
-  forgetHeldResumeReplay,
-  markOwnClearReturned,
-  createState,
-  endHandoff,
-} from '../hooks/session-state'
+import { claimPending, createState } from '../hooks/session-state'
+import { preClearOutcome, beginBeforeClear, beginOwnClear, recordSessionEnd, recordResumeDispatch, shouldHoldResume, holdResume, takeHeldResumes, forgetHeldResumeReplay, markOwnClearReturned } from '../hooks/clear-stage'
+import { endHandoff } from '../hooks/handoff-hold-state'
 import { settings } from './session-state-fixtures'
 
 test('It enters the before_clear stage and forgets an earlier session end in beginBeforeClear', () => {

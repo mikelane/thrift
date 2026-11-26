@@ -20,18 +20,10 @@ import { continueInFreshSession, restoreHeldGroups, restoreLateArrivals } from '
 import { HANDOFF_PROMPT, NO_HANDOFF_MESSAGE, groupHeldPrompts, noHandoffMessage } from './handoff-note'
 import { worstDelivery } from './held-delivery'
 import { writeRecord } from './record-writer'
-import {
-  beginBeforeClear,
-  beginHandoffHold,
-  beginNoteWindow,
-  beginSending,
-  claimPending,
-  clearedByFor,
-  endHandoff,
-  hasSecondClear,
-  takeHeldPrompts,
-  type SessionState,
-} from './session-state'
+import { claimPending, type SessionState } from './session-state'
+import { beginNoteWindow } from './turn-state'
+import { beginBeforeClear, clearedByFor, hasSecondClear } from './clear-stage'
+import { beginHandoffHold, beginSending, endHandoff, takeHeldPrompts } from './handoff-hold-state'
 
 type AbandonDetails = { sessionId?: string; forkReason?: ForkReason; clearSkipCause?: ClearSkipCause }
 

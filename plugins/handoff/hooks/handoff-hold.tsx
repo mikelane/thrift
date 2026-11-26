@@ -4,16 +4,8 @@ import { debug, logFailure } from './engine-log'
 import { noteBoxLeftover, noteLeftoverStrip, typedAfterBoxLeftover } from './box-leftover'
 import { clearBoxCopyWhileHeld, returnToBox } from './prompt-box'
 import { carriesExtras, isComposerOrigin, isUnattendedOrigin, planPromptDuringHandoff, senderLabel } from './prompt-plan'
-import {
-  addHeldPrompt,
-  isAwaitingDelivery,
-  isCarriedByHandoff,
-  isHoldingForHandoff,
-  refusedPromptPlacement,
-  type BoxPlacement,
-  type HeldPrompt,
-  type SessionState,
-} from './session-state'
+import type { HeldPrompt, SessionState } from './session-state'
+import { addHeldPrompt, isAwaitingDelivery, isCarriedByHandoff, isHoldingForHandoff, refusedPromptPlacement, type BoxPlacement } from './handoff-hold-state'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
 const REPEAT_NOT_ADDED = 'The handoff already carries this prompt, so this repeat was not added.'

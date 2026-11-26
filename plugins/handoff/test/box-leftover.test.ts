@@ -7,7 +7,8 @@ import {
   noteLeftoverStrip,
   typedAfterBoxLeftover,
 } from '../hooks/box-leftover'
-import { beginHandoffHold, beginSending, createState } from '../hooks/session-state'
+import { createState } from '../hooks/session-state'
+import { beginHandoffHold, beginSending } from '../hooks/handoff-hold-state'
 import { settings } from './session-state-fixtures'
 
 test('It returns the submitted text whole from typedAfterBoxLeftover when nothing is left in the box', () => {
