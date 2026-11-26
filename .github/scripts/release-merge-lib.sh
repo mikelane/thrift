@@ -328,11 +328,12 @@ release_merge_fail() {
   return 1
 }
 
-# release_merge_merge_failure_reason <tested-sha> <lost-race-status> <stderr-file>: prints why a failed
-# merge was not a lost race, for release_merge_fail: whether the PR is still open at <tested-sha>
-# (<lost-race-status> 1) or its state could not be read (2), then the first non-empty line of gh's
-# stderr in <stderr-file>, with the CR of a CRLF line and surrounding blanks removed so the
-# annotation stays on one line. Printing only: a missing or empty file just leaves out gh's reason.
+# release_merge_merge_failure_reason <tested-sha> <lost-race-status> <stderr-file>: prints why a
+# failed merge was not a lost race, for release_merge_fail: whether the PR is still open at
+# <tested-sha> (<lost-race-status> 1) or its state could not be read (2), then the first non-empty
+# line of gh's stderr in <stderr-file>, with the CR of a CRLF line and surrounding blanks removed so
+# the annotation stays on one line. Printing only: a missing or empty file just leaves out gh's
+# reason.
 release_merge_merge_failure_reason() {
   local cause="the PR is still open at that commit" detail
   [[ "$2" != 2 ]] || cause="the PR's state could not be read"
@@ -344,7 +345,8 @@ release_merge_merge_failure_reason() {
 # the CR of a CRLF line and surrounding blanks removed, so one of them fits on an annotation line.
 # A missing or unreadable file prints nothing.
 release_merge_stderr_lines() {
-  tr -d '\r' <"$1" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep . || true
+  { LC_ALL=C tr -d '\r' <"$1"; } 2>/dev/null \
+    | LC_ALL=C sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep . || true
 }
 
 # release_merge_gate_failure_reason <tested-sha> <stderr-file>: prints why the gate could not be
@@ -364,10 +366,10 @@ release_merge_replay_stderr() {
   rm -f "$1"
 }
 
-# release_merge_record_problem <ci-run-id> <number> <tested-sha>: appends to the caller's `problems` the reason
-# the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE, and nothing
-# when it does. A lookup that fails prints an error annotation naming <tested-sha> and returns 1, as
-# a refusal would hide it.
+# release_merge_record_problem <ci-run-id> <number> <tested-sha>: appends to the caller's `problems`
+# the reason the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE,
+# and nothing when it does. A lookup that fails prints an error annotation naming <tested-sha> and
+# returns 1, as a refusal would hide it.
 release_merge_record_problem() {
   local verdict
   release_merge_run_record_verdict "$REPO" "$1" "$2" "$BASE" && verdict=0 || verdict=$?
@@ -383,8 +385,9 @@ release_merge_record_problem() {
 # gate also requires the pr-record of CI run <ci-run-id> to name <number> into $BASE; an empty id is
 # refused. The CI path passes the triggering run, the sweep the run release_merge_ci_outcome chose
 # (so a swept PR's record is downloaded twice). A refusal returns 0, so the job stays green. A
-# failed lookup (including a PR response that is not a JSON object), or a failed merge that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp files) and
-# RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
+# failed lookup (including a PR response that is not exactly one JSON object), or a failed merge
+# that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp
+# files) and RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
