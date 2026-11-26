@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { heldGroupFields, leftoverStripFields, type ClearedBy, type SettledHandoff } from './decision-record'
 import { announce } from './announcement'
-import { carriedText } from './carried-preface'
+import { submissionTextFor } from './scheduled-preface'
 import { CONTINUE_PROMPT, decideContinue, type ContinueFields, type SessionCheck } from './continue-decision'
 import { registerHandoffCommand } from './command-registration'
 import { debug } from './engine-log'
@@ -63,7 +63,7 @@ async function submitEntered(
   failureLabel: string,
   asUser: boolean,
 ): Promise<boolean> {
-  const submission = { ...prompt, text: carriedText(prompt, asUser) }
+  const submission = { ...prompt, text: submissionTextFor(prompt, asUser) }
   queueResubmittedPrompt(state, submission)
   try {
     const result = await $.prompt.submit(asUser ? { text: submission.text, asUser: true } : { text: submission.text })
@@ -213,7 +213,7 @@ async function deliverNoteAsPrompt(
   // always undefined today and no test can tell whether it is passed on. It stays so a group that does carry one is not lost.
   const boxCopy = sameOriginGroup === undefined ? undefined : boxCopyOf(sameOriginGroup)
   const note: HeldPrompt = {
-    text: joinPrompts(message, sameOriginGroup === undefined ? undefined : carriedText(sameOriginGroup, false)),
+    text: joinPrompts(message, sameOriginGroup === undefined ? undefined : submissionTextFor(sameOriginGroup, false)),
     isUnattended: settledHandoff.isUnattended,
     origin,
     author: 'plugin',

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { bash, completeTurn, entered as enteredPrompts, growTo200k, runCommand, startTurn, submitPerson, writingTheNote, type World, scheduled } from './helpers'
+import { bash, completeTurn, entered as enteredPrompts, growTo200k, runCommand, startTurn, submitPerson, writingTheNote, type World, scheduledText } from './helpers'
 
 const entered = (world: World) => world.effects.filter(effect => effect.startsWith('entered:'))
 
@@ -44,7 +44,7 @@ describe('the origin of the first of several resubmitted turns', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await submitPerson($, 'person says')
     await finishNote()
-    await endFirstTurnInFreshSession($, world, scheduled('nightly job'))
+    await endFirstTurnInFreshSession($, world, scheduledText('nightly job'))
     expect(handoffsStarted(world)).toBe(2)
   })
 

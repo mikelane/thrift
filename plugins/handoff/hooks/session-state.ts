@@ -398,7 +398,7 @@ export const takeHeldResumes = (state: SessionState): string[] => state.heldResu
 
 // The most specific match wins: a carried prompt's text holds a fixed preface, so a short prompt queued earlier can be a word
 // of it. Of the entries whose text the turn's text contains, the longest is taken, and the earliest submitted among equals.
-const longestMatchIndex = (queue: readonly HeldPrompt[], turnText: string): number =>
+const indexOfLongestQueuedMatch = (queue: readonly HeldPrompt[], turnText: string): number =>
   queue.reduce(
     (best, prompt, index) =>
       turnText.includes(prompt.text) && (best === -1 || prompt.text.length > (queue[best]?.text.length ?? 0)) ? index : best,
@@ -408,7 +408,7 @@ const longestMatchIndex = (queue: readonly HeldPrompt[], turnText: string): numb
 // A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {
   state.isTurnRunning = true
-  const matchIndex = longestMatchIndex(state.resubmittedPrompts, turnText)
+  const matchIndex = indexOfLongestQueuedMatch(state.resubmittedPrompts, turnText)
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
   recordTurnStart(state)

@@ -1,4 +1,4 @@
-import { withPreface } from '../hooks/carried-preface'
+import { withScheduledPreface } from '../hooks/scheduled-preface'
 import { mock, type Engine, type MockClock } from 'claude-code/testing'
 import type { AgentInfo, AgentStatus, ModelForkResult, On, SessionCompactResult, ToolCallResult, TurnUsage } from 'claude-code'
 
@@ -318,4 +318,4 @@ export const buttonLabels = async (band: Awaited<ReturnType<typeof mountBand>>) 
   (await band.findAll({ type: 'Button' })).map(button => button.props.label)
 
 // What the model reads for a scheduled prompt the handoff carried: the origin preface, then the prompt.
-export const scheduled = (text: string): string => withPreface(text)
+export const scheduledText = (text: string): string => withScheduledPreface(text)

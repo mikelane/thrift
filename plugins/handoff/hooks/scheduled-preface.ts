@@ -10,9 +10,9 @@ const PREFACE_SEPARATOR = '\n\n'
 // every one but the unattended (scheduled) ones asUser, so a submission without asUser that carries a person's prompt is a
 // scheduled task's. A peer's message is never held (see the SAFETY note on groupOrigin in handoff-note.ts), so no peer,
 // task-notification or other origin needs a line.
-export const withPreface = (text: string): string => `${SCHEDULED_PREFACE}${PREFACE_SEPARATOR}${text}`
+export const withScheduledPreface = (text: string): string => `${SCHEDULED_PREFACE}${PREFACE_SEPARATOR}${text}`
 
 // The one condition for the line, shared by every path that submits a held prompt, so they cannot drift apart: a person's
 // prompt that is submitted without asUser, which today means an unattended one. The plugin's own prompts are not carried.
-export const carriedText = (prompt: Pick<HeldPrompt, 'text' | 'author'>, asUser: boolean): string =>
-  !asUser && prompt.author === 'person' ? withPreface(prompt.text) : prompt.text
+export const submissionTextFor = (prompt: Pick<HeldPrompt, 'text' | 'author'>, isSubmittedAsUser: boolean): string =>
+  !isSubmittedAsUser && prompt.author === 'person' ? withScheduledPreface(prompt.text) : prompt.text

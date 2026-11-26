@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, growTo200k, lastRecord, runCommand, submitPerson, writingTheNote, type World, scheduled } from './helpers'
+import { dropOf, growTo200k, lastRecord, runCommand, submitPerson, writingTheNote, type World, scheduledText } from './helpers'
 import type { Engine } from 'claude-code/testing'
 
 const NOTE_MESSAGE = 'Handoff from the previous session (old-session), written by Claude just before a /clear:\n\nThe handoff note.'
@@ -46,7 +46,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     arriveDuringSubmits($, world, [{ text: 'late' }])
     world.submitHooks.unshift(undefined)
     await finishNote()
-    expect(entered(world)).toEqual(['entered:plugin+asUser:person says', `entered:plugin:${scheduled('nightly job')}`, 'entered:plugin+asUser:late'])
+    expect(entered(world)).toEqual(['entered:plugin+asUser:person says', `entered:plugin:${scheduledText('nightly job')}`, 'entered:plugin+asUser:late'])
   })
 
   test('It sends a held scheduled group before a prompt that arrives mid-delivery', async ($, on) => {
@@ -54,7 +54,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${scheduled('nightly job')}`, 'entered:plugin+asUser:late'])
+    expect(entered(world)).toEqual([`entered:plugin:${scheduledText('nightly job')}`, 'entered:plugin+asUser:late'])
   })
 
   test('It sends prompts that arrive mid-delivery one by one in arrival order', async ($, on) => {
@@ -65,7 +65,7 @@ describe('prompts that arrive while the handoff delivers', () => {
     expect(entered(world)).toEqual([
       'entered:plugin+asUser:held one',
       'entered:plugin+asUser:late one',
-      `entered:plugin:${scheduled('late two')}`,
+      `entered:plugin:${scheduledText('late two')}`,
       'entered:plugin+asUser:late three',
     ])
   })

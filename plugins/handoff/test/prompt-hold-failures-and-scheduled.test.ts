@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { agentIn, answered, bash, completeTurn, dropOf, entered, holdFork, lastRecord, mountBand, submitPerson, scheduled } from './helpers'
+import { agentIn, answered, bash, completeTurn, dropOf, entered, holdFork, lastRecord, mountBand, submitPerson, scheduledText } from './helpers'
 import { ASK, ACT, NOTE_HEADING, ready } from './prompt-hold-fixtures'
 
 test('It puts the prompt back in the box when the fork fails and someone is at the prompt', ACT, async ($, on) => {
@@ -72,7 +72,7 @@ test('It hands off for a scheduled prompt in ask mode without asking', ASK, asyn
   const result = await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   expect(dropOf(result)).toBe('Handing off first. Your prompt will be sent in the fresh session.')
   await world.clock.settle()
-  expect(entered(world)).toContain(`entered:plugin:${scheduled('now ENG-2')}`)
+  expect(entered(world)).toContain(`entered:plugin:${scheduledText('now ENG-2')}`)
 })
 
 test('It does nothing for a scheduled prompt in off mode', async ($, on) => {
@@ -86,7 +86,7 @@ test('It resubmits a scheduled prompt in the unchanged session after a failed fo
   world.fork = async () => ({ isAnswered: false, reason: 'nothing-to-fork' })
   await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   await world.clock.settle()
-  expect(entered(world)).toContain(`entered:plugin:${scheduled('now ENG-2')}`)
+  expect(entered(world)).toContain(`entered:plugin:${scheduledText('now ENG-2')}`)
   expect(world.effects).not.toContain('fill:now ENG-2')
 })
 
@@ -95,7 +95,7 @@ test('It still runs a scheduled prompt when /clear throws', ASK, async ($, on) =
   world.clearThrows = true
   await submitPerson($, 'now ENG-2', { kind: 'scheduled-trigger' })
   await world.clock.settle()
-  expect(entered(world)).toContain(`entered:plugin:${scheduled('now ENG-2')}`)
+  expect(entered(world)).toContain(`entered:plugin:${scheduledText('now ENG-2')}`)
 })
 
 test('It ignores a weak signal for a scheduled prompt', ASK, async ($, on) => {

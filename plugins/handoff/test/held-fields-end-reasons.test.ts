@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { DecisionReason } from '../hooks/decision-reasons'
-import { answered, bash, completeTurn, growTo200k, holdFork, install, runCommand, startSession, startTurn, submitPerson, type LogRecord, type World, scheduled } from './helpers'
+import { answered, bash, completeTurn, growTo200k, holdFork, install, runCommand, startSession, startTurn, submitPerson, type LogRecord, type World, scheduledText } from './helpers'
 
 const ACT = { options: { handoffMode: 'act' } } as const
 const ASK = { options: { handoffMode: 'ask' } } as const
@@ -154,7 +154,7 @@ test('It records held_restore submitted when an abandoned unattended handoff sub
   const { world, pending } = await unattendedHandoff($, on)
   pending.release({ isAnswered: false, reason: 'nothing-to-fork' })
   await world.clock.settle()
-  expect(world.effects).toContain(`entered:plugin:${scheduled('now ENG-2')}`)
+  expect(world.effects).toContain(`entered:plugin:${scheduledText('now ENG-2')}`)
   expect(endRecords(world)[0]?.trigger_values).toMatchObject({ held_groups: 1, held_unattended: true, handoff_unattended: true, held_restore: 'submitted' })
 })
 
@@ -162,7 +162,7 @@ test('It records held_other_delivery submitted when a cleared unattended handoff
   const { world, pending } = await unattendedHandoff($, on)
   pending.release(answered('The handoff note.'))
   await world.clock.settle()
-  expect(world.effects).toContain(`entered:plugin:${scheduled('now ENG-2')}`)
+  expect(world.effects).toContain(`entered:plugin:${scheduledText('now ENG-2')}`)
   expect(endRecords(world)[0]?.trigger_values).toMatchObject({ note: 'appended', held_groups: 1, held_other_delivery: 'submitted' })
 })
 

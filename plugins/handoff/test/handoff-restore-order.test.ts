@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { groupHeldPrompts } from '../hooks/handoff-note'
 import type { HeldPrompt } from '../hooks/session-state'
-import { answered, bash, runCommand, completeTurn, dropOf, growTo200k, holdFork, install, lastRecord, startSession, submitPerson, writingTheNote, type World, scheduled } from './helpers'
+import { answered, bash, runCommand, completeTurn, dropOf, growTo200k, holdFork, install, lastRecord, startSession, submitPerson, writingTheNote, type World, scheduledText } from './helpers'
 import { ACT, actHandoffWhileWritingTheNote, endTurn } from './wait-for-turn-helpers'
 
 const HELD_FOR_HANDOFF = "A handoff is in progress, so your prompt is held. It is sent when the handoff ends, or, if the handoff fails and a person sent it, put in this terminal's prompt box. If that can't be done, it is kept another way, at worst in the transcript."
@@ -26,7 +26,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveDuringSubmits($, world, [{ text: 'late job', kind: 'scheduled-trigger' }])
     await failNote()
-    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduled('nightly job')}`, `entered:plugin:${scheduled('late job')}`], ''])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduledText('nightly job')}`, `entered:plugin:${scheduledText('late job')}`], ''])
   })
 
   test('It holds a prompt that arrives mid-restore instead of running it', async ($, on) => {
@@ -36,7 +36,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await failNote()
     expect([dropOf(await results[0]), entered(world), world.box.text]).toEqual([
       HELD_FOR_HANDOFF,
-      [`entered:plugin:${scheduled('nightly job')}`, `entered:plugin:${scheduled('late job')}`],
+      [`entered:plugin:${scheduledText('nightly job')}`, `entered:plugin:${scheduledText('late job')}`],
       '',
     ])
   })
@@ -51,7 +51,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     ])
     await failNote()
     expect([entered(world), world.box.text]).toEqual([
-      [`entered:plugin:${scheduled('nightly job')}`, `entered:plugin:${scheduled('late one')}`, 'entered:plugin+asUser:late two', `entered:plugin:${scheduled('late three')}`],
+      [`entered:plugin:${scheduledText('nightly job')}`, `entered:plugin:${scheduledText('late one')}`, 'entered:plugin+asUser:late two', `entered:plugin:${scheduledText('late three')}`],
       '',
     ])
   })
@@ -62,7 +62,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveDuringSubmits($, world, [{ text: 'late' }])
     await failNote()
-    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduled('nightly job')}`], 'held one\nlate'])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduledText('nightly job')}`], 'held one\nlate'])
   })
 
   test('It lets a prompt through once the restore has finished', async ($, on) => {
@@ -70,7 +70,7 @@ describe('prompts that arrive while an abandoned handoff restores its held promp
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     await failNote()
     const after = await submitPerson($, 'after')
-    expect([dropOf(after), entered(world), world.box.text]).toEqual([undefined, [`entered:plugin:${scheduled('nightly job')}`, 'entered:composer:after'], ''])
+    expect([dropOf(after), entered(world), world.box.text]).toEqual([undefined, [`entered:plugin:${scheduledText('nightly job')}`, 'entered:composer:after'], ''])
   })
 
   test('It counts a prompt that arrived mid-restore in the record of the abandoned handoff', async ($, on) => {
@@ -90,7 +90,7 @@ const remoteCases = ['bridge', 'sdk', 'scheduled-trigger'] as const
 const SUBMITTED_AS = {
   bridge: 'plugin+asUser:from far away',
   sdk: 'plugin+asUser:from far away',
-  'scheduled-trigger': `plugin:${scheduled('from far away')}`,
+  'scheduled-trigger': `plugin:${scheduledText('from far away')}`,
 } as const
 
 const HANDED_OFF = 'log:Handed off. This session starts from a note summarizing the previous one. To reopen the full previous conversation: claude --resume old-session'
@@ -226,7 +226,7 @@ describe('the transcript wording for a scheduled turn handoff note that could no
     world.submitDropped = true
     fork.release(answered('The handoff note.'))
     await world.clock.settle()
-    expect([logs(world), world.box.text]).toEqual([[`log:The handoff note and a prompt could not be sent, so here they are:\n${NOTE}\n\n${scheduled('second job')}`, NOTE_NOT_ADDED], ''])
+    expect([logs(world), world.box.text]).toEqual([[`log:The handoff note and a prompt could not be sent, so here they are:\n${NOTE}\n\n${scheduledText('second job')}`, NOTE_NOT_ADDED], ''])
   })
 })
 
@@ -247,7 +247,7 @@ const arriveTogether = ($: Parameters<typeof submitPerson>[0], world: World, arr
 }
 
 const LATE: TogetherArrival[] = [{ text: 'late typed' }, { text: 'late bridge', options: { kind: 'bridge' } }]
-const RESTORED_IN_ORDER = [[`entered:plugin:${scheduled('nightly job')}`, 'entered:plugin+asUser:late bridge'], 'held one\nlate typed']
+const RESTORED_IN_ORDER = [[`entered:plugin:${scheduledText('nightly job')}`, 'entered:plugin+asUser:late bridge'], 'held one\nlate typed']
 
 describe('restore order on every abandon reason', () => {
   test('It restores held and late prompts in order when the clear fails', async ($, on) => {
@@ -301,7 +301,7 @@ describe('the box placement of a prompt refused during a handoff', () => {
     await submitPerson($, 'held one')
     arriveTogether($, world, [{ text: 'late with image', options: { attachments: IMAGE } }])
     await failNote()
-    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduled('nightly job')}`], 'held one\nlate with image'])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduledText('nightly job')}`], 'held one\nlate with image'])
   })
 
   test('It keeps a held late person prompt ahead of a later refused one in the box', async ($, on) => {
@@ -309,7 +309,7 @@ describe('the box placement of a prompt refused during a handoff', () => {
     await submitPerson($, 'nightly job', { kind: 'scheduled-trigger' })
     arriveTogether($, world, [{ text: 'late typed' }, { text: 'late with image', options: { attachments: IMAGE } }])
     await failNote()
-    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduled('nightly job')}`], 'late typed\nlate with image'])
+    expect([entered(world), world.box.text]).toEqual([[`entered:plugin:${scheduledText('nightly job')}`], 'late typed\nlate with image'])
   })
 
   test('It puts a person prompt refused while the note is written in front of the draft', async ($, on) => {

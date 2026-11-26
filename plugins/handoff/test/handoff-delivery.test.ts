@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { dropOf, entered, lastRecord, runCommand, startTurn, submitPerson, writingTheNote, scheduled } from './helpers'
+import { dropOf, entered, lastRecord, runCommand, startTurn, submitPerson, writingTheNote, scheduledText } from './helpers'
 import { ASK, HELD_FOR_HANDOFF, NOTE_MESSAGE, unattendedHandoffWriting } from './handoff-held-prompts-fixtures'
 
 const HELD_BACK_PERSON = 'log:Your prompt was held back after the handoff note, so read the note first. Here it is:\nnext thing'
@@ -11,7 +11,7 @@ describe('submitOrKeepInTranscript', () => {
     const { world, failNote } = await writingTheNote($, on)
     await submitPerson($, 'run the nightly job', { kind: 'scheduled-trigger' })
     await failNote()
-    expect(entered(world)).toEqual([`entered:plugin:${scheduled('run the nightly job')}`])
+    expect(entered(world)).toEqual([`entered:plugin:${scheduledText('run the nightly job')}`])
   })
 
   test('It submits a held person prompt as the person when the box cannot take it', async ($, on) => {
@@ -106,7 +106,7 @@ describe('restoreLateArrivals', () => {
     ]
     await failNote()
     await arrival
-    expect(entered(world)).toEqual([`entered:plugin:${scheduled('nightly job')}`, `entered:plugin:${scheduled('late job')}`])
+    expect(entered(world)).toEqual([`entered:plugin:${scheduledText('nightly job')}`, `entered:plugin:${scheduledText('late job')}`])
   })
 
   test('It puts a person prompt that arrives mid-restore in the box behind a draft the person typed since', async ($, on) => {

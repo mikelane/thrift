@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { compacted, dropOf, entered, install, runCommand, startSession, submitPerson, writingTheNote, scheduled } from './helpers'
+import { compacted, dropOf, entered, install, runCommand, startSession, submitPerson, writingTheNote, scheduledText } from './helpers'
 import { NOTE_MESSAGE, HELD_FOR_HANDOFF, IMAGE } from './handoff-held-prompts-fixtures'
 
 const REFUSED_DURING_HANDOFF =
@@ -49,7 +49,7 @@ describe('holding prompts while the note is written', () => {
     const { world, finishNote } = await writingTheNote($, on)
     await submitPerson($, 'from schedule', { kind: 'scheduled-trigger' })
     await finishNote()
-    expect(entered(world)).toEqual([`entered:plugin:${scheduled('from schedule')}`])
+    expect(entered(world)).toEqual([`entered:plugin:${scheduledText('from schedule')}`])
   })
 
   test('It does not hold a prompt from another session', async ($, on) => {
