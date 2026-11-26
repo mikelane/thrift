@@ -396,10 +396,19 @@ export const holdResume = (state: SessionState, args: string): void => {
 
 export const takeHeldResumes = (state: SessionState): string[] => state.heldResumeArgs.splice(0)
 
+// The most specific match wins: a carried prompt's text holds a fixed preface, so a short prompt queued earlier can be a word
+// of it. Of the entries whose text the turn's text contains, the longest is taken, and the earliest submitted among equals.
+const longestMatchIndex = (queue: readonly HeldPrompt[], turnText: string): number =>
+  queue.reduce(
+    (best, prompt, index) =>
+      turnText.includes(prompt.text) && (best === -1 || prompt.text.length > (queue[best]?.text.length ?? 0)) ? index : best,
+    -1,
+  )
+
 // A turn that one of the plugin's own submissions started takes that prompt's origin from the queue below.
 export const startMainTurn = (state: SessionState, turnText: string): void => {
   state.isTurnRunning = true
-  const matchIndex = state.resubmittedPrompts.findIndex(prompt => turnText.includes(prompt.text))
+  const matchIndex = longestMatchIndex(state.resubmittedPrompts, turnText)
   const resubmittedPrompt = matchIndex === -1 ? undefined : state.resubmittedPrompts.splice(matchIndex, 1)[0]
   if (resubmittedPrompt !== undefined) state.isTurnUnattended = resubmittedPrompt.isUnattended
   recordTurnStart(state)
@@ -433,12 +442,12 @@ export const endMainTurn = (state: SessionState): void => {
 }
 
 // The engine has no origin to give a prompt the plugin submits, and submit can resolve once the prompt is queued behind the
-// running turn, before its own turn starts. So the origins of the plugin's own submissions wait here in submit order, and a turn start takes the first
-// whose text the turn's text contains: turn.start gives the text, which may carry a frame around what was submitted, so the
-// match is "contains", not "equals". A turn whose text matches none (a task notification, a peer's message) leaves the queue
-// alone.
+// running turn, before its own turn starts. So the origins of the plugin's own submissions wait here in submit order, and a turn
+// start takes the entry with the longest text the turn's text contains, the earliest submitted among equals: turn.start gives
+// the text, which may carry a frame around what was submitted, so the match is "contains", not "equals". A turn whose text
+// matches none (a task notification, a peer's message) leaves the queue alone.
 // SAFETY: a turn that merely contains a queued prompt's text, such as a task notification quoting it, would take its entry,
-// and a short prompt makes that likelier. An entry stays until a turn takes it, so one whose text a hook beneath rewrote
+// and a short prompt makes that likelier (the longest-match rule keeps a short entry from beating the turn's own, longer one). An entry stays until a turn takes it, so one whose text a hook beneath rewrote
 // waits for such a turn. Either needs a turn quoting a resubmitted prompt, which is not a case worth a guard. The cost,
 // outside off, is one turn end judged as the wrong kind of sender: a person asked where a scheduled turn would act, or a scheduled turn's
 // rule applied to a person's turn, so a strong signal hands off without asking and a weak one shows no band.
