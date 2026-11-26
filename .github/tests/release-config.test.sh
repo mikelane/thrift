@@ -150,10 +150,17 @@ test_a_marketplace_with_no_plugins_has_no_problems() {
 # With separate pull requests, one fix that releases several plugins opens one release PR each, and
 # each rewrites .release-please-manifest.json, so after the first merges the others conflict (#207).
 # Tags and GitHub releases stay per plugin because every package sets include-component-in-tag.
-test_the_config_groups_every_plugin_release_into_one_pr_so_manifest_edits_cannot_conflict() {
+test_the_config_opens_one_combined_release_pr_for_every_plugin() {
   local got
   got=$(jq '."separate-pull-requests"' "$REPO_ROOT/release-please-config.json")
   [[ "$got" == false ]] || fail "separate-pull-requests is $got"
+}
+
+test_every_package_puts_its_component_in_the_tag() {
+  local got
+  got=$(jq -r '[.packages | to_entries[] | select(.value."include-component-in-tag" != true) | .key] | join(" ")' \
+    "$REPO_ROOT/release-please-config.json")
+  [[ -z "$got" ]] || fail "include-component-in-tag is not true for: $got"
 }
 
 run_tests "$@"
