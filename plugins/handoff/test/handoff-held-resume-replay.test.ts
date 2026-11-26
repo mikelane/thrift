@@ -76,6 +76,22 @@ describe('replayHeldResumes', () => {
     expect(lastRecord(world).trigger_values.reason).toBeUndefined()
   })
 
+  test('It reports session_moved when the first held resume runs and a later one throws', COMPACTING, async ($, on) => {
+    const world = install($, on)
+    let reads = 0
+    // The mock reads resumeThrows once per plugin-origin resume: only the second replay throws, before it is logged as run.
+    Object.defineProperty(world, 'resumeThrows', { get: () => reads++ === 1 })
+    await startSession($)
+    world.onClearIssued = async () => {
+      await $.command.run(composerResume('a'))
+      await $.command.run(composerResume('b'))
+    }
+    await runCommand($, 'handoff')
+    await world.clock.settle()
+    expect(world.effects.filter(e => e.startsWith('resume:'))).toEqual(['resume:a'])
+    expect(lastRecord(world)).toMatchObject({ trigger_values: { reason: 'session_moved' } })
+  })
+
   test('It answers a held resume with the clearing-first text instead of running it in the command.run hook', COMPACTING, async ($, on) => {
     const world = install($, on)
     await startSession($)
