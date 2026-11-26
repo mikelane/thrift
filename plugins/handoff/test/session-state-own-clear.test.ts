@@ -1,19 +1,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  beginBeforeClear,
-  beginOwnClear,
-  clearedByFor,
-  hasSecondClear,
-  forgetForeignClear,
-  markOwnClearReturned,
-  recordForeignClear,
-  recordForeignClearReturned,
-  recordSessionEnd,
-  createState,
-  endHandoff,
-  startMainTurn,
-} from '../hooks/session-state'
+import { createState } from '../hooks/session-state'
+import { startMainTurn } from '../hooks/turn-state'
+import { beginBeforeClear, beginOwnClear, clearedByFor, hasSecondClear, forgetForeignClear, markOwnClearReturned, recordForeignClear, recordForeignClearReturned, recordSessionEnd } from '../hooks/clear-stage'
+import { endHandoff } from '../hooks/prompt-hold-state'
 import { settings } from './session-state-fixtures'
 import type { PromptOrigin } from 'claude-code'
 

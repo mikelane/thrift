@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import { withScheduledPreface } from '../hooks/scheduled-preface'
-import { createState, queueResubmittedPrompt, startMainTurn } from '../hooks/session-state'
+import { createState } from '../hooks/session-state'
+import { queueResubmittedPrompt, startMainTurn } from '../hooks/turn-state'
 import { settings } from './session-state-fixtures'
 
 test('It keeps a scheduled turn unattended when a person prompt queued before it is a word of the preface', () => {

@@ -1,22 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  addHeldPrompt,
-  beginHandoffHold,
-  beginSending,
-  createState,
-  endHandoff,
-  isCarriedByHandoff,
-  isAwaitingDelivery,
-  isGroupOfOrigin,
-  isHoldingForHandoff,
-  releaseCarried,
-  releaseCarriedGroup,
-  resetForNewSession,
-  settlePostCompactionContext,
-  takeHeldPrompts,
-  takeLateArrivalsOrEndSending,
-} from '../hooks/session-state'
+import { createState, resetForNewSession } from '../hooks/session-state'
+import { settlePostCompactionContext } from '../hooks/turn-state'
+import { addHeldPrompt, beginHandoffHold, beginSending, endHandoff, isCarriedByHandoff, isAwaitingDelivery, isGroupOfOrigin, isHoldingForHandoff, releaseCarried, releaseCarriedGroup, takeHeldPrompts, takeLateArrivalsOrEndSending } from '../hooks/prompt-hold-state'
 import { settings, person, nightly } from './session-state-fixtures'
 
 test('It returns the settings with a closed gate and an empty session from createState', () => {

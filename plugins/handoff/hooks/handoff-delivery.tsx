@@ -27,20 +27,10 @@ import { inspectPrompt } from './prompt-inspection'
 import { canUseBox, emptySentPromptFromBox, keepInTranscript, markKeptInBox, refillBox } from './prompt-box'
 import { noteOrigin } from './prompt-plan'
 import { writeRecord } from './record-writer'
-import {
-  beginSending,
-  forgetHeldResumeReplay,
-  queueResubmittedPrompt,
-  releaseCarried,
-  releaseCarriedGroup,
-  removeResubmittedPrompt,
-  takeLateArrivalsOrEndSending,
-  whenForeignClearsSettled,
-  type BoxPlacement,
-  type HeldPrompt,
-  type HeldPromptGroup,
-  type SessionState,
-} from './session-state'
+import { type HeldPrompt, type HeldPromptGroup, type SessionState } from './session-state'
+import { queueResubmittedPrompt, removeResubmittedPrompt } from './turn-state'
+import { forgetHeldResumeReplay, whenForeignClearsSettled } from './clear-stage'
+import { beginSending, releaseCarried, releaseCarriedGroup, takeLateArrivalsOrEndSending, type BoxPlacement } from './prompt-hold-state'
 
 const UNSENT_NOTE = 'The handoff note could not be sent or put in the prompt box. Here it is:'
 const UNSENT_UNATTENDED_NOTE = 'The handoff note could not be sent, so here it is:'
