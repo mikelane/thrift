@@ -333,8 +333,24 @@ release_merge_fail() {
 release_merge_merge_failure_reason() {
   local cause="the PR is still open at that commit" detail
   [[ "$2" != 2 ]] || cause="the PR's state could not be read"
-  detail=$(tr -d '\r' <"$3" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -m1 . || true)
+  detail=$(release_merge_stderr_lines "$3" | head -n 1)
   echo "the merge command failed at $1 and $cause${detail:+: $detail}"
+}
+
+# release_merge_stderr_lines <file>: prints the non-empty lines of the stderr in <file>, each with
+# the CR of a CRLF line and surrounding blanks removed, so one of them fits on an annotation line.
+# A missing or unreadable file prints nothing.
+release_merge_stderr_lines() {
+  tr -d '\r' <"$1" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep . || true
+}
+
+# release_merge_gate_failure_reason <tested-sha> <stderr-file>: prints why the gate could not be
+# checked, for release_merge_fail: the last non-empty line release_merge_problems left in
+# <stderr-file>, which is its own reason (gh's or jq's message comes before it), then the commit.
+release_merge_gate_failure_reason() {
+  local detail
+  detail=$(release_merge_stderr_lines "$2" | tail -n 1)
+  echo "cannot check the gate${detail:+: $detail} (at $1)"
 }
 
 # release_merge_replay_stderr <file>: sends the stderr a command left in <file> to the log, as if
@@ -345,17 +361,17 @@ release_merge_replay_stderr() {
   rm -f "$1"
 }
 
-# release_merge_record_problem <ci-run-id> <number>: appends to the caller's `problems` the reason
+# release_merge_record_problem <ci-run-id> <number> <tested-sha>: appends to the caller's `problems` the reason
 # the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE, and nothing
-# when it does. A lookup that fails prints an error annotation and returns 1, as a refusal would
-# hide it.
+# when it does. A lookup that fails prints an error annotation naming <tested-sha> and returns 1, as
+# a refusal would hide it.
 release_merge_record_problem() {
   local verdict
   release_merge_run_record_verdict "$REPO" "$1" "$2" "$BASE" && verdict=0 || verdict=$?
   case "$verdict" in
     0) ;;
     1|3) problems+=${problems:+$'\n'}"the CI run ${1:+$1 }$release_merge_run_record_detail" ;;
-    *) release_merge_fail "$2" "cannot check the gate: $release_merge_run_record_detail" || return 1 ;;
+    *) release_merge_fail "$2" "cannot check the gate: $release_merge_run_record_detail (at $3)" || return 1 ;;
   esac
 }
 
@@ -368,7 +384,7 @@ release_merge_record_problem() {
 # RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr
+  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
@@ -389,10 +405,19 @@ release_merge_pr_if_gate_passes() {
   # A fetch that is not one JSON object would otherwise read as refusals built from empty fields.
   jq -e 'type == "object"' "$pr" >/dev/null 2>&1 \
     || release_merge_fail "$number" "cannot parse the PR (at $tested_sha)" || return 1
+  # The gate's stderr goes to a file so a failure's annotation can name the lookup that failed; it
+  # is replayed to the log either way. With no temp file it goes nowhere and the annotation leaves
+  # the cause out. The gate still runs.
+  gate_stderr=$(mktemp "$work_dir/gate-stderr.XXXXXX") || gate_stderr=/dev/null
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed") \
-    || release_merge_fail "$number" "cannot check the gate (at $tested_sha)" || return 1
-  release_merge_record_problem "$ci_run_id" "$number" || return 1
+    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed" 2>"$gate_stderr") && gate_status=0 || gate_status=$?
+  if [[ "$gate_status" != 0 ]]; then
+    release_merge_fail "$number" "$(release_merge_gate_failure_reason "$tested_sha" "$gate_stderr")" || true
+    release_merge_replay_stderr "$gate_stderr"
+    return 1
+  fi
+  release_merge_replay_stderr "$gate_stderr"
+  release_merge_record_problem "$ci_run_id" "$number" "$tested_sha" || return 1
   rm -f "$pr" "$files" "$raw"
   # A refusal returns 0, so the job is green. Each reason also goes out as a warning
   # annotation, which shows on the run summary without opening the log. Reasons carry

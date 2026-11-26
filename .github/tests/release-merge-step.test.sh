@@ -263,7 +263,7 @@ test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
   : >"$TEST_DIR/pulls.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot list the open PRs from release-please--branches--main--components--handoff (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -272,7 +272,7 @@ test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot read the allowlist from $TEST_DIR/missing-config.json (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -519,7 +519,7 @@ test_the_gate_fails_instead_of_refusing_when_the_record_lookup_fails() {
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot list the artifacts of CI run 211"
+  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot list the artifacts of CI run 211 (at $SHA_A)"
 }
 
 test_the_gate_fails_instead_of_refusing_when_the_record_download_fails() {
@@ -528,7 +528,7 @@ test_the_gate_fails_instead_of_refusing_when_the_record_download_fails() {
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "::error title=Release PR #111 not merged::cannot check the gate: cannot download the pr-record (artifact 5211) of CI run 211"
+  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot download the pr-record (artifact 5211) of CI run 211 (at $SHA_A)"
 }
 
 test_a_ci_triggered_run_refuses_when_the_triggering_run_id_is_unknown() {
@@ -636,6 +636,48 @@ test_the_merge_step_names_the_cause_without_ghs_reason_when_the_stderr_temp_file
   assert_exit_code 1
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
   assert_out_line "::error title=Release PR #111 not merged::the merge command failed at $SHA_A and the PR is still open at that commit"
+}
+
+test_the_merge_step_keeps_the_gates_stderr_in_the_log_when_a_gate_lookup_fails() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/pulls.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_line "HTTP 500"
+  assert_out_line "cannot list the open PRs from release-please--branches--main--components--handoff"
+}
+
+test_the_merge_step_leaves_no_temp_files_after_a_failed_gate_lookup() {
+  local left
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/pulls.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  left=$(find "$TEST_DIR/work" -name 'gate-stderr.*')
+  [[ -z "$left" ]] || fail "left [$left]"
+}
+
+test_the_merge_step_still_merges_when_the_gate_stderr_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  run_merge_step with_failing_mktemp gate-stderr release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 0
+  assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
+}
+
+test_the_merge_step_still_refuses_when_the_gate_stderr_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  edit_pr 111 '.draft = true'
+  run_merge_step with_failing_mktemp gate-stderr release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 0
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
+test_the_merge_step_names_no_cause_when_the_gate_stderr_temp_file_cannot_be_made() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  : >"$TEST_DIR/pulls.error"
+  run_merge_step with_failing_mktemp gate-stderr release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 1
+  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
+  assert_no_file "$TEST_DIR/merge-calls"
 }
 
 test_a_ci_triggered_run_escapes_percent_in_the_branch_of_the_lookup_error() {
