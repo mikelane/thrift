@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { install, runCommand, startSession } from './helpers'
 
-const readFailureLines = (debugLines: string[]) => debugLines.filter(line => line.startsWith('handoff: could not read the session id'))
+const readFailureLines = (debugLines: string[]) => debugLines.filter(line => line.startsWith('could not read the session id'))
 
 describe('tryReadSessionId', () => {
   test('It logs nothing when the session id can be read', async ($, on) => {
@@ -20,6 +20,6 @@ describe('tryReadSessionId', () => {
     await runCommand($, 'handoff')
     await world.clock.settle()
     expect(readFailureLines(world.debugLines)).toHaveLength(1)
-    expect(readFailureLines(world.debugLines)[0]).toMatch(/^handoff: could not read the session id: /)
+    expect(readFailureLines(world.debugLines)[0]).toMatch(/^could not read the session id: /)
   })
 })

@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 // Declared as functions: the engine follows `$` past an import only into a function declaration, not a const arrow.
 export function debug($: EngineInterface, line: string): void {
-  return $.ui.log(`handoff: ${line}`, { to: 'debug' })
+  return $.ui.log(line, { to: 'debug' })
 }
 
 // SAFETY: every current caller catches its own engine failures, so no test reaches this catch.

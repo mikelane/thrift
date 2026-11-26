@@ -68,7 +68,7 @@ describe('refillBox', () => {
     await world.clock.settle()
     world.isFillRefusedOverText = true
     await failNote()
-    expect(world.debugLines).toContain('handoff: the prompt box refused the prompt: refused by a hook')
+    expect(world.debugLines).toContain('the prompt box refused the prompt: refused by a hook')
   })
 
   test('It says why when the box cannot be read', async ($, on) => {
@@ -77,7 +77,7 @@ describe('refillBox', () => {
     await world.clock.settle()
     world.boxReadDenied = true
     await failNote()
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not refill the prompt box'))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not refill the prompt box'))).toBe(true)
   })
 })
 
@@ -107,7 +107,7 @@ describe('emptySentPromptFromBox', () => {
     world.box = { text: 'next thing', cursor: 10 }
     world.isFillRefusedOverText = true
     await finishNote()
-    expect(world.debugLines).toContain('handoff: the prompt box refused to be emptied: refused by a hook')
+    expect(world.debugLines).toContain('the prompt box refused to be emptied: refused by a hook')
   })
 })
 
@@ -162,7 +162,7 @@ describe('emptyBoxIfHolding', () => {
     world.isFillRefusedOverText = true
     await submitPerson($, 'next thing')
     await world.clock.settle()
-    expect(world.debugLines).toContain('handoff: the prompt box refused to be emptied: refused by a hook')
+    expect(world.debugLines).toContain('the prompt box refused to be emptied: refused by a hook')
   })
 
   test('It says why when the box cannot be read', async ($, on) => {
@@ -170,7 +170,7 @@ describe('emptyBoxIfHolding', () => {
     world.boxReadDenied = true
     await submitPerson($, 'next thing')
     await world.clock.settle()
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not empty the prompt box'))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not empty the prompt box'))).toBe(true)
   })
 })
 

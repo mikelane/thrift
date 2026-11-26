@@ -201,7 +201,7 @@ describe('noteToolRan after a file-editing tool', () => {
     const world = install($, on)
     world.statThrowsFor.add('/work/new.ts')
     await runTool($, 'Write', { file_path: '/work/new.ts' })
-    expect(world.debugLines).toEqual([expect.stringMatching(/^reread: could not resolve an edited path: /)])
+    expect(world.debugLines).toEqual([expect.stringMatching(/^could not resolve an edited path: /)])
   })
 
   test('It drops the path the tool was given when the engine resolves no real path', ACT, async ($, on) => {

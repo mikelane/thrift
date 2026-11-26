@@ -65,7 +65,7 @@ describe('a person clear that never returns', () => {
     const world = await waitingForATurn($, on)
     await personClearStillFinishing($, world)
     await world.clock.advance(FOREIGN_CLEAR_TIMEOUT_MS)
-    expect(world.debugLines).toContain(`handoff: a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
+    expect(world.debugLines).toContain(`a clear did not return within ${FOREIGN_CLEAR_TIMEOUT_MS} ms, so the note goes to the session the engine names now`)
   })
 
   test('It holds the note back until the wait ran out', async ($, on) => {

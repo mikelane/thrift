@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { completeTurn, growTo200k, install, lastRecord, startSession } from './helpers'
 
-const NO_LOCATION = 'handoff: no log location: neither THRIFT_HOME nor HOME is set'
+const NO_LOCATION = 'no log location: neither THRIFT_HOME nor HOME is set'
 
 describe('writeRecord', () => {
   test('It appends a record for an evaluation', async ($, on) => {
@@ -34,7 +34,7 @@ describe('writeRecord', () => {
     await startSession($)
     await growTo200k($, world)
     await completeTurn($)
-    expect(world.debugLines).toContain('handoff: THRIFT_HOME is not an absolute path, so the default log location is used')
+    expect(world.debugLines).toContain('THRIFT_HOME is not an absolute path, so the default log location is used')
   })
 
   test('It writes no record when neither THRIFT_HOME nor HOME is set', async ($, on) => {
@@ -59,7 +59,7 @@ describe('writeRecord', () => {
     await startSession($)
     await growTo200k($, world)
     await completeTurn($)
-    expect(world.debugLines).toContain('handoff: log write failed: disk full')
+    expect(world.debugLines).toContain('log write failed: disk full')
   })
 
   test('It says why when the log write throws', async ($, on) => {
@@ -68,6 +68,6 @@ describe('writeRecord', () => {
     await startSession($)
     await growTo200k($, world)
     await completeTurn($)
-    expect(world.debugLines.some(line => line.startsWith('handoff: log write failed'))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('log write failed'))).toBe(true)
   })
 })

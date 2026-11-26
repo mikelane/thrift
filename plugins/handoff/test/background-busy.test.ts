@@ -34,6 +34,6 @@ describe('isBackgroundBusy', () => {
     world.agentListThrows = true
     await startSession($)
     await completeTurn($)
-    expect(world.debugLines.some(line => line.startsWith('handoff: could not list agents, treating background work as busy: '))).toBe(true)
+    expect(world.debugLines.some(line => line.startsWith('could not list agents, treating background work as busy: '))).toBe(true)
   })
 })

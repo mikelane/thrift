@@ -101,8 +101,8 @@ describe('engineInfo: the engine version', () => {
     expect([isStub(second), world.debugLines]).toEqual([
       false,
       [
-        expect.stringMatching(/^reread: could not read the engine version: /),
-        'reread: engine unknown is not a release at or before the one reread was tested through, so it runs as off',
+        expect.stringMatching(/^could not read the engine version: /),
+        'engine unknown is not a release at or before the one reread was tested through, so it runs as off',
       ],
     ])
   })

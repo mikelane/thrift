@@ -20,7 +20,7 @@ describe('registerHandoffCommand', () => {
     const world = install($, on)
     world.registerThrows = true
     await startSession($)
-    expect(world.debugLines).toEqual(['handoff: could not register /handoff: HooksError: no implementation for command.register'])
+    expect(world.debugLines).toEqual(['could not register /handoff: HooksError: no implementation for command.register'])
   })
 
   test('It still delivers the note when registering /handoff after the clear is refused', async ($, on) => {

@@ -3,11 +3,11 @@ import { describe, expect, test } from 'claude-code/testing'
 import { install, startSession, submitPerson, writingTheNote } from './helpers'
 
 describe('debug', () => {
-  test('It starts every debug line with the plugin name', async ($, on) => {
+  test('It passes a debug line through without the plugin name, which the engine adds', async ($, on) => {
     const world = install($, on)
     world.registerThrows = true
     await startSession($)
-    expect(world.debugLines.every(line => line.startsWith('handoff: '))).toBe(true)
+    expect(world.debugLines).toEqual(['could not register /handoff: HooksError: no implementation for command.register'])
   })
 })
 
@@ -16,6 +16,6 @@ describe('logFailure', () => {
     const { world } = await writingTheNote($, on)
     await submitPerson($, 'next thing')
     await world.clock.settle()
-    expect(world.debugLines.some(line => line.startsWith('handoff: background work failed'))).toBe(false)
+    expect(world.debugLines.some(line => line.startsWith('background work failed'))).toBe(false)
   })
 })
