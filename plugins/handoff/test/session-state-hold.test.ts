@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { createState, resetForNewSession } from '../hooks/session-state'
-import { settlePostCompactionContext } from '../hooks/turn-state'
+import { createState, resetForNewSession, settlePostCompactionContext } from '../hooks/session-state'
 import { addHeldPrompt, beginHandoffHold, beginSending, endHandoff, isCarriedByHandoff, isAwaitingDelivery, isGroupOfOrigin, isHoldingForHandoff, releaseCarried, releaseCarriedGroup, takeHeldPrompts, takeLateArrivalsOrEndSending } from '../hooks/prompt-hold-state'
 import { settings, person, nightly } from './session-state-fixtures'
 

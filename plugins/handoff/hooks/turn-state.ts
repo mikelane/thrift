@@ -86,21 +86,3 @@ export const releaseTurnEndWaiter = (state: SessionState): void => {
   state.turnEndWaiter = null
   waiter?.()
 }
-
-export const claimPending = (state: SessionState, kind: NonNullable<SessionState['pending']>): boolean => {
-  if (state.pending !== null) return false
-  state.pending = kind
-  return true
-}
-
-export const noteCacheReads = (state: SessionState, cacheReadTokens: number | undefined): void => {
-  state.cacheReadTokens = cacheReadTokens ?? 0
-}
-
-// tokensAfter has read well below the next turn's real context, so the first measured context after a compaction anchors the backoff and the floor.
-export const settlePostCompactionContext = (state: SessionState, measuredTokens: number): void => {
-  if (!state.isAwaitingPostCompactionContext || measuredTokens <= 0) return
-  state.isAwaitingPostCompactionContext = false
-  state.backoffFrom = measuredTokens
-  state.floorTokens = measuredTokens
-}

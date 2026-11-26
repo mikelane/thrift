@@ -1,7 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { createState } from '../hooks/session-state'
-import { claimPending } from '../hooks/turn-state'
+import { claimPending, createState } from '../hooks/session-state'
 import { preClearOutcome, beginBeforeClear, beginOwnClear, recordSessionEnd, recordResumeDispatch, shouldHoldResume, holdResume, takeHeldResumes, forgetHeldResumeReplay, markOwnClearReturned } from '../hooks/clear-stage'
 import { endHandoff } from '../hooks/prompt-hold-state'
 import { settings } from './session-state-fixtures'

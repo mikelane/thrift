@@ -32,8 +32,8 @@ import {
   isUnattendedOrigin,
   planNewWorkPrompt,
 } from './prompt-plan'
-import { createState, resetForNewSession, type SessionState } from './session-state'
-import { endMainTurn, noteCacheReads, releaseTurnEndWaiter, settlePostCompactionContext, startMainTurn, startSubagentTurn, endSubagentTurn } from './turn-state'
+import { createState, noteCacheReads, resetForNewSession, settlePostCompactionContext, type SessionState } from './session-state'
+import { endMainTurn, releaseTurnEndWaiter, startMainTurn, startSubagentTurn, endSubagentTurn } from './turn-state'
 import { forgetForeignClear, recordForeignClearDone, recordForeignClearRunning, recordForeignClear, recordForeignClearReturned, holdResume, recordResumeDispatch, shouldHoldResume, recordSessionEnd } from './clear-stage'
 import { asMode, asThreshold, contextFromStep, type Mode } from './signals'
 import { notifiedTaskId } from './tasks'

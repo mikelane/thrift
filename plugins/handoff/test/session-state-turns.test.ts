@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { createState, resetForNewSession } from '../hooks/session-state'
-import { noteCacheReads, beginNoteWindow, endMainTurn, startMainTurn, startSubagentTurn, endSubagentTurn, releaseTurnEndWaiter, waitForTurnEnd } from '../hooks/turn-state'
+import { createState, noteCacheReads, resetForNewSession } from '../hooks/session-state'
+import { beginNoteWindow, endMainTurn, startMainTurn, startSubagentTurn, endSubagentTurn, releaseTurnEndWaiter, waitForTurnEnd } from '../hooks/turn-state'
 import { beginBeforeClear, beginOwnClear, recordSessionEnd } from '../hooks/clear-stage'
 import { settings } from './session-state-fixtures'
 
