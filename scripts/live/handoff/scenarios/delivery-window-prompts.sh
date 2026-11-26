@@ -88,5 +88,5 @@ show_transcript_lookup() {
 
 both_held_in_sending_stage() { log_has a 'held a prompt for the handoff \(2 held\)'; }
 # Both read the transcript, so a missing one fails them instead of passing for want of a "fivesix".
-not_joined() { [[ -f "$1" ]] && ! transcript_has_user_text "$1" fivesix; }
+not_joined() { [[ -f "$1" ]] && transcript_user_texts "$1" >/dev/null && ! transcript_has_user_text "$1" fivesix; }
 both_delivered() { transcript_has_user_text "$1" five && transcript_has_user_text "$1" six; }
