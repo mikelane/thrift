@@ -85,6 +85,15 @@ test_the_merge_step_emits_no_notice_when_another_run_merged_the_pr_first() {
   assert_out_lacks "::notice"
 }
 
+test_the_merge_step_keeps_the_gh_stderr_in_the_log_when_another_run_merged_the_pr_first() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  jq '.state = "closed" | .merged = true' "$TEST_DIR/pr-111.json" >"$TEST_DIR/pr-after-failed-merge.json"
+  echo 'GraphQL: Pull Request is already merged' >"$TEST_DIR/merge.error"
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_exit_code 0
+  assert_out_line "GraphQL: Pull Request is already merged"
+}
+
 test_the_merge_step_emits_no_notice_when_the_merge_fails() {
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
