@@ -131,7 +131,7 @@ export async function waitForClearWindow(
 }
 
 // A session id the engine could not name is no id: a replay is not taken for a move unless both ids are known.
-async function readSessionIdOrUndefined($: EngineInterface): Promise<string | undefined> {
+async function tryReadSessionId($: EngineInterface): Promise<string | undefined> {
   try {
     return await $.session.id()
   } catch (error) {
@@ -150,7 +150,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
   const replay: Promise<boolean> = new Promise<boolean>(resolve => {
     $.clock.after(0, () => {
       void (async () => {
-        const idBefore = await readSessionIdOrUndefined($)
+        const idBefore = await tryReadSessionId($)
         for (const resumeArgs of heldResumeArgs) {
           try {
             await $.command.run({ command: 'resume', args: resumeArgs })
@@ -158,7 +158,7 @@ function replayHeldResumes($: EngineInterface, state: SessionState): void {
             debug($, `/resume replay failed: ${String(error)}`)
           }
         }
-        const idAfter = await readSessionIdOrUndefined($)
+        const idAfter = await tryReadSessionId($)
         forgetHeldResumeReplay(state, replay)
         resolve(idBefore !== undefined && idAfter !== undefined && idBefore !== idAfter)
       })()
