@@ -87,12 +87,20 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
-# The lib sources its siblings (release_merge_load_sibling <file>) from its own directory; the sparse checkout must fetch each one, or
+# lib_sibling_names: the file each sibling-sourcing line of the lib names, one per line. A sibling is
+# loaded by `release_merge_load_sibling <file>` (text may follow the name) or by
+# `source "$release_merge_lib_dir/<file>"`.
+lib_sibling_names() {
+  sed -n -e 's|^release_merge_load_sibling \([^ ]*\).*|\1|p' \
+    -e 's|^source "\$release_merge_lib_dir/\([^"]*\)".*|\1|p' "$RELEASE_MERGE_LIB"
+}
+
+# The lib sources its siblings from its own directory; the sparse checkout must fetch each one, or
 # the live step fails at `source` while every test (which runs from a full checkout) passes.
 test_the_sparse_checkout_includes_every_file_the_lib_sources() {
   local lib_dir siblings missing
   lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
-  siblings=$(sed -n "s|^release_merge_load_sibling \\([^ ]*\\) .*|$lib_dir/\\1|p" "$RELEASE_MERGE_LIB" | sort)
+  siblings=$(lib_sibling_names | sed "s|^|$lib_dir/|" | sort)
   [[ -n "$siblings" ]] || fail 'the lib sources no siblings'
   missing=$(comm -23 <(printf '%s\n' "$siblings") <(sparse_checkout_paths | sort))
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
@@ -123,6 +131,19 @@ test_the_lib_sources_check_fails_for_a_load_sibling_call_with_nothing_after_the_
   run_lib_sources_check_with_lib_line 'release_merge_load_sibling helper.sh'
   assert_exit_code 1
   assert_out_has "the sparse checkout omits"
+}
+
+# lib_source_lines_outside_the_known_forms: the lib's source/. commands that are neither a sibling
+# load (see lib_sibling_names) nor the `source "$file"` inside release_merge_load_sibling itself.
+lib_source_lines_outside_the_known_forms() {
+  grep -nE '(^|&& |\|\| |; )[[:space:]]*(source|\.) +["$./]' "$RELEASE_MERGE_LIB" \
+    | grep -vE ':(source "\$release_merge_lib_dir/[^"]*"|.*source "\$file")' || true
+}
+
+test_the_lib_sources_nothing_outside_the_forms_the_sparse_checkout_check_reads() {
+  local stray
+  stray=$(lib_source_lines_outside_the_known_forms)
+  [[ -z "$stray" ]] || fail "the lib sources a file in a form the sparse checkout check cannot see: $stray"
 }
 
 # A sibling the lib reaches some other way than a `release_merge_load_sibling X` line still has
