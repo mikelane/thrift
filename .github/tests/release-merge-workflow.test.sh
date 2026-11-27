@@ -87,6 +87,57 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
+# The lib sources its siblings from its own directory; the sparse checkout must fetch each one, or
+# the live step fails at `source` while every test (which runs from a full checkout) passes.
+test_the_sparse_checkout_includes_every_file_the_lib_sources() {
+  local lib_dir siblings missing
+  lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
+  siblings=$(sed -n "s|^source \"\\\$release_merge_lib_dir/\\([^\"]*\\)\"\$|$lib_dir/\\1|p" "$RELEASE_MERGE_LIB" | sort)
+  [[ -n "$siblings" ]] || fail 'the lib sources no siblings'
+  missing=$(comm -23 <(printf '%s\n' "$siblings") <(sparse_checkout_paths | sort))
+  [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
+}
+
+# A sibling the lib reaches some other way than a `source "$release_merge_lib_dir/X"` line still has
+# to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
+test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
+  local lib_dir on_disk missing
+  lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
+  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/release-merge-*.sh)
+  [[ -n "$on_disk" ]] || fail "no release-merge-*.sh files under $lib_dir"
+  missing=$(comm -23 <(printf '%s\n' "$on_disk" | sort) <(sparse_checkout_paths | sort))
+  [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
+}
+
+# The step sources the lib by a relative path, so the lib's `cd "$(dirname ...)"` is a relative cd,
+# which consults CDPATH: with a CDPATH entry the cd prints the directory, and the sibling path
+# becomes two lines; with an entry holding .github/scripts the siblings come from that tree.
+test_the_lib_sources_its_siblings_from_its_own_directory_when_cdpath_is_set() {
+  local sourced decoy_cdpath_dir got
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  # Under the per-test TEST_DIR, which the harness's EXIT trap removes, so no decoy outlives the run.
+  decoy_cdpath_dir=$TEST_DIR/cdpath-decoy
+  mkdir -p "$decoy_cdpath_dir/$(dirname "$sourced")" || { fail "could not make the CDPATH decoy under $decoy_cdpath_dir"; return; }
+  got=$(cd "$REPO_ROOT" && CDPATH="$decoy_cdpath_dir" "$BASH" -c 'set -euo pipefail; source "$1"; printf %s "$release_merge_lib_dir"' _ "$sourced" 2>&1)
+  [[ "$got" == "$REPO_ROOT/$(dirname "$sourced")" ]] || fail "with CDPATH set, the lib resolved its directory as: $got"
+}
+
+# Without set -e, a failed cd must stop the source with a non-zero status, not go on to source
+# /release-merge-ci-lookup.sh from the root directory. A `cd` function makes the cd fail.
+test_the_lib_stops_sourcing_when_it_cannot_enter_its_own_directory_without_set_e() {
+  local sourced got
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  got=$(cd "$REPO_ROOT" && "$BASH" -c 'cd() { return 1; }; source "$1"; printf "status=%s" "$?"' _ "$sourced" 2>&1)
+  [[ "$got" == "status=1" ]] || fail "expected the source to stop with status 1 and no output, got: $got"
+}
+
+test_the_lib_defines_its_sibling_functions_when_cdpath_lists_the_current_directory() {
+  local sourced
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  (cd "$REPO_ROOT" && CDPATH=.:/nonexistent "$BASH" -c 'set -euo pipefail; source "$1"; declare -F release_merge_sweep release_merge_lost_race >/dev/null' _ "$sourced") \
+    || fail 'with CDPATH=.:/nonexistent, sourcing the lib failed or left the sibling functions undefined'
+}
+
 # The tests source the lib by their own path; this ties that path to the one the workflow sources,
 # so a move that updates one side only (the tests, or the workflow and its fixture) fails here.
 test_the_file_the_merge_step_sources_is_the_lib_the_tests_exercise() {

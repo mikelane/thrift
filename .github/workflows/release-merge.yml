@@ -95,6 +95,8 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             .github/scripts/release-merge-lib.sh
+            .github/scripts/release-merge-ci-lookup.sh
+            .github/scripts/release-merge-failure.sh
             release-please-config.json
           sparse-checkout-cone-mode: false
 

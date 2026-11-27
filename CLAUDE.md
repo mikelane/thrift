@@ -86,13 +86,20 @@ specific to this repo.
     reopen the PR, which starts a fresh CI run with a record. The remaining limit: a base branch whose `ci.yml` was edited
     by someone with write access can write any record it likes. The author, SHA and allowlist
     checks still apply.
-  - Where the code lives: the gate, the sweep and the merge step all live in
-    `.github/scripts/release-merge-lib.sh` (production code, so not under `.github/tests/`). The
-    workflow step only sources it and calls `release_merge_run`. The tests find it through
-    `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh` files are
-    split by subject (gate, sweep, step, workflow, adversarial) and run the lib against the stub
-    `gh` in `release-merge-stubs-lib.sh`. `release-merge-adversarial.test.sh` holds cases where the
-    gate disagrees with what release-please writes or with the PR the workflow should merge.
+  - Where the code lives: the gate, the sweep and the merge step live in three files under
+    `.github/scripts/` (production code, so not under `.github/tests/`): `release-merge-lib.sh`
+    (the gate and the merge step), `release-merge-ci-lookup.sh` (the CI-run and `pr-record`
+    lookups, and the sweep) and `release-merge-failure.sh` (the helpers that say how a merge
+    attempt ended). The workflow step only sources `release-merge-lib.sh`, which sources the other
+    two from its own directory, and calls `release_merge_run`. The merge job's sparse checkout lists
+    each lib file by name, so a new lib file must be added there, and to
+    `release-merge-workflow.expected.json`, or the step cannot source it. The tests find the lib
+    through `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh`
+    files are split by subject (gate, sweep, record-check, step, ci-path, run, workflow,
+    unparsed-pr, adversarial) and run the lib against the stub `gh` in `release-merge-stubs-lib.sh`;
+    the step, ci-path, run and unparsed-pr files share `release-merge-step-lib.sh`.
+    `release-merge-adversarial.test.sh` holds cases where the gate disagrees with what
+    release-please writes or with the PR the workflow should merge.
   - Running that family: the name fragment `canary-report.sh` takes matches test *function* names,
     so `release_merge` matches almost nothing. Run the `release-merge-*.test.sh` files directly.
   - The workflow fixture: the workflow test compares the whole parsed `release-merge.yml` with

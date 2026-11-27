@@ -6,19 +6,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 # shellcheck source=release-merge-stubs-lib.sh
 source "$HARNESS_DIR/release-merge-stubs-lib.sh"
-
-# run_merge_step <command>...: runs a lib function the way the workflow step does (set -euo
-# pipefail, the step's variables), leaving its output in $OUTPUT and its status in $EXIT_CODE.
-run_merge_step() {
-  mkdir -p "$TEST_DIR/work"
-  stub_gh
-  (
-    set -euo pipefail
-    BASE=main BOT_LOGIN=$BOT OWNER=mikelane work_dir=$TEST_DIR/work RELEASE_MERGE_CONFIG=$CONFIG "$@"
-  ) >"$OUTPUT" 2>&1
-  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
-  EXIT_CODE=$?
-}
+# shellcheck source=release-merge-step-lib.sh
+source "$HARNESS_DIR/release-merge-step-lib.sh"
 
 # prepend_to_pr <number> <json>: puts <json> in front of the staged PR, so the PR response is a
 # stream of two JSON values whose last one is the real PR object.
