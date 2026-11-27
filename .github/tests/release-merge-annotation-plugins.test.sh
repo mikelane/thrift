@@ -175,6 +175,15 @@ test_a_missing_ci_lookup_sibling_writes_an_error_annotation_naming_the_file() {
   assert_out_lacks "the-gate-ran"
 }
 
+# Like the self-location line, a missing sibling must stop the source with a non-zero status when the
+# lib is sourced without set -e, not go on to define the gate without the sibling's functions.
+test_a_missing_sibling_stops_sourcing_the_lib_without_set_e() {
+  copy_lib_with_bad_sibling release-merge-ci-lookup.sh missing
+  "$BASH" -c 'source "$1"; printf "status=%s\n" "$?"' _ "$TEST_DIR/lib/release-merge-lib.sh" >"$OUTPUT" 2>&1
+  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh"
+  assert_out_has "status=1"
+}
+
 test_a_sibling_that_fails_while_loading_stops_the_step_without_an_annotation() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'return 1'
   source_lib_copy || true

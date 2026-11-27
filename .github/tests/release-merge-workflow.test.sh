@@ -137,6 +137,22 @@ test_the_sparse_load_check_fails_for_a_source_of_an_unlisted_sibling_inside_brac
   assert_out_has "sourcing the lib from only the sparse checkout paths failed"
 }
 
+# A sibling the lib loads only when the gate runs (inside release_merge_run) is fetched no earlier than
+# one loaded at the top, so the sparse-checkout check must fail for it too, not only for top-level loads.
+test_the_sparse_load_check_fails_for_an_unlisted_sibling_loaded_inside_release_merge_run() {
+  local repo=$TEST_DIR/repo lib
+  mkdir -p "$repo"
+  (cd "$REPO_ROOT" && /usr/bin/git ls-files -z .github release-please-config.json | xargs -0 tar cf -) | tar xf - -C "$repo"
+  echo 'helper_fn() { :; }' >"$repo/.github/scripts/helper.sh"
+  lib=$repo/.github/scripts/release-merge-lib.sh
+  awk '{print} /^release_merge_run\(\) \{/{print "  release_merge_load_sibling helper.sh"}' "$lib" >"$lib.new" && mv "$lib.new" "$lib"
+  grep -qxF '  release_merge_load_sibling helper.sh' "$lib" || { fail 'could not insert the lazy load'; return; }
+  bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_lib_loads_from_a_checkout_of_only_the_sparse_checkout_paths >"$OUTPUT" 2>&1
+  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
+  EXIT_CODE=$?
+  assert_exit_code 1
+}
+
 # A sibling the lib reaches some other way than a `release_merge_load_sibling X` line still has
 # to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
 test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
