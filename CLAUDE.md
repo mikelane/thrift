@@ -97,7 +97,7 @@ specific to this repo.
     through `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh`
     files are split by subject (gate, sweep, record-check, step, ci-path, run, workflow,
     unparsed-pr, adversarial) and run the lib against the stub `gh` in `release-merge-stubs-lib.sh`;
-    the step, ci-path and run files share `release-merge-step-lib.sh`.
+    the step, ci-path, run and unparsed-pr files share `release-merge-step-lib.sh`.
     `release-merge-adversarial.test.sh` holds cases where the gate disagrees with what
     release-please writes or with the PR the workflow should merge.
   - Running that family: the name fragment `canary-report.sh` takes matches test *function* names,

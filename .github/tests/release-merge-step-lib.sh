@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Helpers shared by the release-merge-step, -ci-path and -run test files.
+# Helpers shared by the release-merge-step, -ci-path, -run and -unparsed-pr test files.
 # Sourced after canary-report-lib.sh and release-merge-stubs-lib.sh.
 
 
