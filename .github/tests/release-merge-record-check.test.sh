@@ -6,6 +6,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 # shellcheck source=release-merge-stubs-lib.sh
 source "$HARNESS_DIR/release-merge-stubs-lib.sh"
 
+# record_check <run-id>: "<code> <reason>" from release_merge_run_record_verdict for PR 111 into
+# main, run with pipefail as the workflow step runs it. The reason is read in the same shell.
 record_check() {
   stub_gh
   (

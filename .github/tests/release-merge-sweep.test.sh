@@ -530,7 +530,4 @@ test_the_ci_lookup_returns_2_when_the_newest_runs_record_lookup_fails_ahead_of_a
   [[ "$(ci_status)" == 2 ]] || fail "got $(ci_status)"
 }
 
-# record_check <run-id>: "<code> <reason>" from release_merge_run_record_verdict for PR 111 into
-# main, run with pipefail as the workflow step runs it. The reason is read in the same shell.
-
 run_tests "$@"

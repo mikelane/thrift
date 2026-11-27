@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 # Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
-#
-# release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
-# every package in release-please-config.json its changelog, its version file and its extra-files.
-# A simple package's version file defaults to version.txt, as release-please's Simple strategy does
-# (the effective release-type is the package's, else the top level's, else release-please's node).
 
 # The CI-run lookups and the sweep, and the merge-outcome helpers, live beside this file. The merge
 # job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml too.
@@ -14,6 +9,10 @@ source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
 # shellcheck source=.github/scripts/release-merge-outcome.sh
 source "$release_merge_lib_dir/release-merge-outcome.sh"
 
+# release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
+# every package in release-please-config.json its changelog, its version file and its extra-files.
+# A simple package's version file defaults to version.txt, as release-please's Simple strategy does
+# (the effective release-type is the package's, else the top level's, else release-please's node).
 release_merge_allowlist() {
   jq -r '
     def path_in_package($dir; $file):
