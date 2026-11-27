@@ -16,9 +16,9 @@ SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 # write_pr <file> [jq filter]: a release PR that passes the gate (one changed file), edited by the filter.
 write_pr() {
-  jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" '{
+  jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" --arg branch "$RELEASE_BRANCH" '{
     number: 111, state: "open", changed_files: 1, base: {ref: "main"},
-    head: {ref: "release-please--branches--main", sha: $sha,
+    head: {ref: $branch, sha: $sha,
            repo: {full_name: $repo}},
     user: {login: $bot}}' | jq "${2:-.}" >"$1"
 }
@@ -78,9 +78,9 @@ stub_gh() {
 
 # open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
 open_pr() {
-  jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" '{
+  jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" --arg branch "$RELEASE_BRANCH" '{
     number: ($n | tonumber), state: "open", base: {ref: "main"},
-    head: {ref: "release-please--branches--main", sha: $sha, repo: {full_name: $repo}}}' \
+    head: {ref: $branch, sha: $sha, repo: {full_name: $repo}}}' \
     | jq -c "${3:-.}"
 }
 

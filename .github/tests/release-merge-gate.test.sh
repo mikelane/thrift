@@ -71,7 +71,6 @@ test_a_pr_that_changes_only_some_allowed_files_has_no_problems() {
 # One fix that releases several plugins makes release-please open a single PR on
 # release-please--branches--main that changes the manifest and every released package (#207).
 # No plugin has a version.txt and the Simple strategy never creates one, so the PR has none.
-COMBINED_BRANCH=release-please--branches--main
 COMBINED_FILES='.release-please-manifest.json
 plugins/handoff/CHANGELOG.md
 plugins/handoff/.claude-plugin/plugin.json
@@ -80,28 +79,27 @@ plugins/meter/.claude-plugin/plugin.json'
 
 test_a_combined_release_pr_that_changes_two_packages_has_no_problems() {
   local got
-  got=$(problems ".head.ref = \"$COMBINED_BRANCH\"" "$COMBINED_FILES")
+  got=$(problems . "$COMBINED_FILES")
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
 test_a_combined_release_pr_that_changes_every_package_has_no_problems() {
   local got
-  got=$(problems ".head.ref = \"$COMBINED_BRANCH\"" "$(release_merge_allowlist "$CONFIG")")
+  got=$(problems . "$(release_merge_allowlist "$CONFIG")")
   [[ -z "$got" ]] || fail "got [$got]"
 }
 
 test_a_combined_release_pr_with_an_extra_file_blocks_the_merge() {
   local got
-  got=$(problems ".head.ref = \"$COMBINED_BRANCH\"" "$COMBINED_FILES"$'\nplugins/reread/hooks/register.tsx')
+  got=$(problems . "$COMBINED_FILES"$'\nplugins/reread/hooks/register.tsx')
   [[ "$got" == 'plugins/reread/hooks/register.tsx is not a file a release PR changes' ]] || fail "got [$got]"
 }
 
 test_a_combined_release_pr_blocks_the_merge_when_another_open_pr_shares_its_branch() {
-  local got combined_head_ref_filter
-  combined_head_ref_filter=".head.ref = \"$COMBINED_BRANCH\""
-  write_pulls "$(open_pr 111 "$SHA" "$combined_head_ref_filter")" "$(open_pr 999 "$SHA" "$combined_head_ref_filter")"
-  got=$(gate_problems "$combined_head_ref_filter" "$COMBINED_FILES")
-  [[ "$got" == "another open PR shares the branch $COMBINED_BRANCH: #999" ]] || fail "got [$got]"
+  local got
+  write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA")"
+  got=$(gate_problems . "$COMBINED_FILES")
+  [[ "$got" == "another open PR shares the branch $RELEASE_BRANCH: #999" ]] || fail "got [$got]"
 }
 
 test_an_extra_file_blocks_the_merge() {
