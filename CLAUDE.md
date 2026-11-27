@@ -44,18 +44,20 @@ specific to this repo.
   - Which plugins a release-merge annotation covers: the gate's annotations name the plugins the
     PR changes, taken from the `plugins/<name>/` paths in its file list, sorted and unique, in
     parentheses after the number: `Release PR #N (handoff%2C meter) not merged`. The `%2C` is an
-    escaped comma (the runner shows it as ", "); a name's `%`, `,` and `:` are escaped too, and a
-    PR with no `plugins/` path names none. This covers the merged notice, the closed-without-merging
-    notice, and the refusal warnings and failure errors that come after the file list is read
-    (`release_merge_set_plugin_label`). Annotations raised before that name only the number: the
-    sweep's (`CI concluded failure`, `cannot read the CI runs`, skipped decoy runs), the CI path's
-    "not the latest CI run" warning, and the errors for a PR or file list that could not be fetched
-    (the sweep has no file list without an extra API call per PR). Two failures name no PR,
+    escaped comma (the runner shows it as ", "); a raw one would end the title. Only a `<name>` made
+    of letters, digits, `.`, `_` and `-` is named; any other is left out, so a PR file path can't put
+    `%`, `,`, `:` or a workflow command in a title. A PR with no such path names none. This covers
+    the merged notice, the closed-without-merging notice, and the refusal warnings and failure
+    errors that come after the file list is read (`release_merge_set_plugin_label`). Annotations
+    raised before that name only the number: the sweep's (`CI concluded failure`, `cannot read the
+    CI runs`, skipped decoy runs; #219 tracks naming plugins there), the CI path's "not the latest
+    CI run" warning, and the errors for a PR or file list that could not be fetched (the sweep has
+    no file list without an extra API call per PR). Two failures name no PR,
     `Release PR sweep failed` and `Release merge failed`; the latter is also what a lib sibling that
-    is missing or unreadable writes, naming the file, on every bash. A sibling that fails while
-    loading (a syntax error, a failing command, an unset variable) stops the step non-zero before
-    the gate with no annotation, the same on bash 3.2 and 5. A refusal for a file outside the allowlist names that file
-    (`plugins/<name>/... is not a file a release PR changes`).
+    is missing or unreadable writes, naming the file. A sibling that fails while loading (a syntax
+    error, a failing command, an unset variable) stops the step non-zero before the gate with no
+    annotation. Both are the same on bash 3.2 and 5. A refusal for a file outside the allowlist
+    names that file (`plugins/<name>/... is not a file a release PR changes`).
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
     the component is not the marketplace name, or when a manifest version differs from
@@ -98,14 +100,16 @@ specific to this repo.
     `.github/scripts/` (production code, so not under `.github/tests/`): `release-merge-lib.sh`
     (the gate and the merge step), `release-merge-ci-lookup.sh` (the CI-run and `pr-record`
     lookups, and the sweep) and `release-merge-failure.sh` (the helpers that say how a merge
-    attempt ended). The workflow step only sources `release-merge-lib.sh`, which sources the other
-    two from its own directory, and calls `release_merge_run`. The merge job's sparse checkout lists
-    each file in that directory by name, so any new file there must be added to the list, and to
+    attempt ended, and the annotation titles, plugin label included). The workflow step only
+    sources `release-merge-lib.sh`, which sources the other two from its own directory, and calls
+    `release_merge_run`. The merge job's sparse checkout lists each file in that directory by name,
+    so any new file there must be added to the list, and to
     `release-merge-workflow.expected.json`, or the step cannot source it. The tests find the lib
     through `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh`
     files are split by subject (gate, sweep, record-check, step, ci-path, run, workflow,
-    unparsed-pr, annotation-plugins, adversarial) and run the lib against the stub `gh` in `release-merge-stubs-lib.sh`;
-    the step, ci-path, run and unparsed-pr files share `release-merge-step-lib.sh`.
+    unparsed-pr, annotation-plugins, sibling-load, adversarial) and run the lib against the stub
+    `gh` in `release-merge-stubs-lib.sh`; the step, ci-path, run, unparsed-pr, annotation-plugins
+    and sibling-load files share `release-merge-step-lib.sh`.
     `release-merge-adversarial.test.sh` holds cases where the gate disagrees with what
     release-please writes or with the PR the workflow should merge.
   - Running that family: the name fragment `canary-report.sh` takes matches test *function* names,

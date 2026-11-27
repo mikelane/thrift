@@ -219,7 +219,8 @@ release_merge_pr_if_gate_passes() {
 # newer failure is not, and gets a warning annotation naming both run ids. Returns 1 for that
 # refusal and 2 when the lookup fails (after an error annotation), which turns the job red. It only
 # picks the run: the gate still checks that run's record at its own site.
-# shellcheck disable=SC2154 # BASE comes from the caller
+# shellcheck disable=SC2154 # REPO and BASE come from the caller; release_merge_run_record_detail and
+# release_merge_ci_run_id are set by the ci-lookup sibling
 release_merge_triggering_run_is_latest() {
   local outcome latest
   release_merge_ci_outcome "$REPO" "$2" "$3" "$1" "$BASE" && outcome=0 || outcome=$?
