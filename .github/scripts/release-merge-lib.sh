@@ -20,8 +20,12 @@ release_merge_load_sibling() {
   # shellcheck disable=SC1090 # the two siblings are named by the calls below
   source "$file"
 }
+# The status check is its own statement, not `|| return 1` on the load: that would suspend set -e inside
+# the sibling on bash 5. Under set -e a failed load exits the shell; without it, this line stops the source.
 release_merge_load_sibling release-merge-ci-lookup.sh
+(( $? == 0 )) || return 1
 release_merge_load_sibling release-merge-failure.sh
+(( $? == 0 )) || return 1
 
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
