@@ -60,6 +60,9 @@ test_a_ci_triggered_run_fails_when_the_latest_runs_record_cannot_be_downloaded()
   assert_out_has "cannot read the CI runs at $SHA_A (cannot download the pr-record (artifact 5211) of CI run 211)"
 }
 
+# The gate checks the chosen run's own pr-record: a run whose record does not name this PR into main
+# (a decoy from another base, issue #117) merges nothing. The CI path reaches the gate only for a run
+# release_merge_triggering_run_is_latest accepts.
 test_the_gate_refuses_a_run_whose_record_names_another_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
   write_record 211 999@old-feature

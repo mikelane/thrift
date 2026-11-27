@@ -36,9 +36,8 @@ with_failing_mktemp() {
   "$@"
 }
 
-# The gate checks the chosen run's own pr-record: a run whose record does not name this PR into main
-# (a decoy from another base, issue #117) merges nothing. The CI path reaches the gate only for a run
-# release_merge_triggering_run_is_latest accepts, so these call the gate directly.
+# run_ci_path [run-id]: release_merge_run as the CI-completion step runs it: trigger CI, the release
+# branch, tested SHA $SHA_A, and CI run 211 unless <run-id> says otherwise.
 run_ci_path() {
   TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=${1:-211} run_merge_step release_merge_run
 }
