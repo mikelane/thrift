@@ -10,9 +10,9 @@ Success means fewer bytes of repeat file contents entering the context, measured
 `bytes_saved` summed per session in `decisions.jsonl` against the `bytes_would_save` baseline that
 `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.330, and the plugin is tested through
-> that release. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 in the
-> terminal CLI; see [What has been verified live](#what-has-been-verified-live).
+> **Status:** early. The tests pass against Claude Code 2.1.332, and the plugin is tested through
+> that release. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 and
+> 2.1.332 in the terminal CLI; see [What has been verified live](#what-has-been-verified-live).
 
 ## Install
 
@@ -161,9 +161,9 @@ first.
 ## Compatibility
 
 The plugin API is early access and changes between Claude Code releases, so an update can break a
-plugin without any error. The plugin was tested through Claude Code 2.1.330. On the first `Read` of a
+plugin without any error. The plugin was tested through Claude Code 2.1.332. On the first `Read` of a
 session it reads `$.session.version()`. If the `base` is missing, is not exactly `MAJOR.MINOR.PATCH`
-(a development build such as `2.1.330-dev`), or names a release newer than 2.1.330, it runs as `off`
+(a development build such as `2.1.332-dev`), or names a release newer than 2.1.332, it runs as `off`
 for the rest of the plugin's life and writes one `untested_engine` record. It says nothing in the
 session. Every record carries `engine_version`, so a change in behavior shows up as a split between
 versions.
@@ -211,8 +211,8 @@ means fewer stubs until the files are read once more.
 ## What has been verified live
 
 The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
-log. Two live checks ran on top of them: the terminal CLI on 2.1.330 (the current one, below), and
-before it the Code tab of the Claude Desktop app, with `engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
+log. Two live checks ran on top of them: the terminal CLI on 2.1.332 (the current one) and on 2.1.330 (both below), and
+before them the Code tab of the Claude Desktop app, with `engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
 `readMode` set to `ask`. The main probe file had 80 lines (`Read` showed 81, the last one empty).
 Every step ran in one user turn, and every record had `mode: active` and `effective_mode: ask`.
 
@@ -269,6 +269,29 @@ full as a `first_read` and not as a full-range repeat. Dropping a read that race
 the fail-safe result. A `Bash` call followed by a separate read logs the `invalidate` first.
 
 An earlier live check, at `cba0844`, also passed steps A to J, before the content-match fix.
+
+### Terminal CLI, Claude Code 2.1.332
+
+The same scenario, `scripts/live/live.sh reread ask-mode-core-steps`, ran on 2.1.332 with the plugin
+loaded from `plugins/reread` at head `4765874` and `readMode` set to `ask`. It passed (11 checks).
+Every record has `engine_version` 2.1.332, `mode` active and `effective_mode` ask. The file has 80
+lines (`Read` shows 81). The steps and byte counts are the ones of the 2.1.330 run below:
+
+| Step | Outcome |
+|---|---|
+| A. Read the whole file | Full: `pass`, `first_read` |
+| B. Read it again | Stub: `dedupe`, `exact_repeat`, `gross_bytes` 5265, `stub_bytes` 367, `bytes_saved` 4898 |
+| C. Read it a third time | Full: `override`, `override_after_stub` |
+| E. `Edit` line 40 | Applied, no "has not been read" refusal. `invalidate`, `edit`, 1 dropped |
+| K. A 30-line CRLF file, read twice | Full, then a stub (1935/365/1570), `lines` 31 |
+| L. A 30-line file with a BOM, read twice | Full, then a stub (1905/363/1542), `lines` 31 |
+
+Before the constant moved, the same scenario on 2.1.332 (head `463a473`) failed 9 of 11 checks: the
+plugin wrote one `untested_engine` record and then only `mode` shadow, `action` none records with
+`effective_mode` off, so no stub was sent.
+
+The `ask` line was drawn once with the plugin's name, as on 2.1.330. Steps D, F to J and M, `off` and
+`act`, and a subagent were not run.
 
 ### Terminal CLI, Claude Code 2.1.330
 
