@@ -200,7 +200,7 @@ run directory.
 
 | Scenario | Tracks | Passes when |
 |---|---|---|
-| `ask-mode-core-steps` | #147 | In `ask` mode, one session runs steps A, B, C, E, K and L of the plugin README's "What has been verified live" table. A: a first read is a `pass` (`first_read`). B: the same read again is a `dedupe` (`exact_repeat`) whose `bytes_saved` is `gross_bytes - stub_bytes`. C: a third read is an `override` (`override_after_stub`). E: an `Edit` is applied, the screen shows no "has not been read" refusal, and an `invalidate` (`edit`) drops at least one read. K and L: a CRLF file and a BOM file are each a `first_read` and then a stub. Every record of the run is `reread`, `mode` active, `effective_mode` ask and carries the installed build's `engine_version`, so a build newer than `TESTED_THROUGH` (which holds the plugin at `off`, `mode` shadow) fails it. |
+| `ask-mode-core-steps` | #147 | In `ask` mode, one session runs steps A, B, C, E, K and L of the plugin README's "What has been verified live" table. A: a first read is a `pass` (`first_read`). B: the same read again is a `dedupe` (`exact_repeat`) whose `bytes_saved` is `gross_bytes - stub_bytes`. C: a third read is an `override` (`override_after_stub`). E: an `Edit` is applied, the screen shows no "has not been read" refusal, and an `invalidate` (`edit`) drops at least one read. K and L: a CRLF file and a BOM file are each a `first_read` and then a stub. Every record of the run is `reread`, `mode` active, `effective_mode` ask and carries the installed build's `engine_version`, so a build older than reread's minimum (`MINIMUM_ENGINE`, 2.1.308) or one that is not a release (which holds the plugin at `off`, `mode` shadow) fails it. |
 
 ## How it works
 

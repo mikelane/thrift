@@ -171,10 +171,10 @@ A newer release runs in the mode you set. There is no version cap, because the p
 already fall back to an unchanged read when what `Read` returns no longer fits a stub: the earlier
 result must still be in context and begin with the text the model read (`not_in_context`), the
 result must be text and not an error (`not_text`, `error_result`), the stub must be smaller
-(`stub_not_smaller`), and Claude Code's own `file_unchanged` is left alone (`core_dedup`). The CI
-`latest` channel runs the tests against each new release and opens an issue when they fail. Every
-record carries `engine_version`, so a change in behavior shows up as a split between versions: it
-shows where a behavior change starts.
+(`stub_not_smaller`), and Claude Code's own `file_unchanged` is left alone (`core_dedup`). CI's
+`latest` channel runs the tests against the newest release on every push and every Monday, and
+the Monday run opens an issue when they fail. Every record carries `engine_version`, so a change in
+behavior shows up as a split between versions.
 
 State lives in memory. If the engine starts the plugin again mid-session (a change in `/config` did
 on 2.1.299), the tracked reads are lost and the plugin starts again from empty. That is safe: it only
