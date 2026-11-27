@@ -325,7 +325,8 @@ test_a_failed_open_pr_lookup_fails_the_gate_instead_of_reading_as_a_refusal() {
   status=$?
   [[ "$status" != 0 ]] || fail 'a failed PR list returned 0, which reads as "no problems" or a refusal'
   [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
-  assert_file_has "$TEST_DIR/err" 'cannot list the open PRs from release-please--branches--main'
+  grep -qaxF -- "cannot list the open PRs from $RELEASE_BRANCH" "$TEST_DIR/err" \
+    || fail "no line names the branch $RELEASE_BRANCH in the lookup failure"
 }
 
 test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {

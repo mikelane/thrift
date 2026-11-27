@@ -32,9 +32,9 @@ workflow_is_pinned() {
   [[ "$got" == "$(jq -S . "$EXPECTED_WORKFLOW")" ]]
 }
 
-# variant_workflow <old> <new>: writes the workflow with its one occurrence of <old> replaced by <new>
+# write_variant_workflow <old> <new>: writes the workflow with its one occurrence of <old> replaced by <new>
 # to VARIANT, and fails when <old> is not in the file, so a variant can never be the unedited workflow.
-variant_workflow() {
+write_variant_workflow() {
   VARIANT=$TEST_DIR/variant.yml
   python3 -I - "$WORKFLOW" "$VARIANT" "$1" "$2" <<'PY'
 import sys
@@ -47,7 +47,8 @@ PY
 
 # refuses_variant <old> <new> <what the variant does>: fails the test when the pinned check passes.
 refuses_variant() {
-  variant_workflow "$1" "$2" || fail "could not build the variant where $3"
+  write_variant_workflow "$1" "$2" || fail "could not build the variant where $3"
+  workflow_json "$VARIANT" >/dev/null || fail "the variant where $3 does not parse, so refusing it proves nothing"
   workflow_is_pinned "$VARIANT" && fail "the check passed a workflow where $3"
   return 0
 }
@@ -59,18 +60,18 @@ test_the_whole_parsed_workflow_equals_the_expected_fixture() {
 }
 
 test_the_unedited_workflow_is_what_the_variants_start_from() {
-  variant_workflow 'config-file: release-please-config.json' 'config-file: release-please-config.json'
+  write_variant_workflow 'config-file: release-please-config.json' 'config-file: release-please-config.json'
   workflow_is_pinned "$VARIANT" || fail 'the unedited workflow failed the check'
 }
 
 test_a_variant_of_text_the_workflow_lacks_cannot_be_built() {
-  variant_workflow 'no-such-key: anywhere' 'other: value' 2>/dev/null \
+  write_variant_workflow 'no-such-key: anywhere' 'other: value' 2>/dev/null \
     && fail 'built a variant from text the workflow does not hold, which is the unedited workflow'
   return 0
 }
 
 test_a_variant_of_text_the_workflow_holds_twice_cannot_be_built() {
-  variant_workflow ': write' ': read' 2>/dev/null \
+  write_variant_workflow ': write' ': read' 2>/dev/null \
     && fail 'built a variant from text the workflow holds more than once'
   return 0
 }
