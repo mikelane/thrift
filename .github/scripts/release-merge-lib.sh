@@ -2,13 +2,30 @@
 # Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
 
 # The CI-run lookups and the sweep, and the merge-failure helpers, live beside this file. The merge
-# job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml and to
-# .github/tests/release-merge-workflow.expected.json too.
+# job sparse-checks-out each file by name, so any new file in this directory must be added to
+# release-merge.yml and to .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
-# shellcheck source=.github/scripts/release-merge-ci-lookup.sh
-source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
-# shellcheck source=.github/scripts/release-merge-failure.sh
-source "$release_merge_lib_dir/release-merge-failure.sh"
+# release_merge_load_sibling <file>: sources <file> from this directory. Whatever goes wrong, the step
+# stops before any gate runs, on bash 3.2 and 5 alike. Only a missing or unreadable sibling also gets
+# an ::error annotation naming the file. A sibling that fails while loading (a syntax error, a failing
+# command, an unset variable) stops the step non-zero with no annotation: `source` is a plain
+# statement so set -e stays in force inside the sibling, which `source "$file" || ...` or
+# `[[ ... ]] && source "$file"` would suspend on bash 5.
+release_merge_load_sibling() {
+  local file=$release_merge_lib_dir/$1
+  if [[ ! -r "$file" ]]; then
+    echo "::error title=Release merge failed::cannot load $file: missing or unreadable (is it in the merge job's sparse checkout?)"
+    return 1
+  fi
+  # shellcheck disable=SC1090 # the two siblings are named by the calls below
+  source "$file"
+}
+# The status check is its own statement, not `|| return 1` on the load: that would suspend set -e inside
+# the sibling on bash 5. Under set -e a failed load exits the shell; without it, this line stops the source.
+release_merge_load_sibling release-merge-ci-lookup.sh
+(( $? == 0 )) || return 1
+release_merge_load_sibling release-merge-failure.sh
+(( $? == 0 )) || return 1
 
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
@@ -109,6 +126,7 @@ release_merge_problems() {
 # the reason the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE,
 # and nothing when it does. A lookup that fails prints an error annotation naming <tested-sha> and
 # returns 1, as a refusal would hide it.
+# shellcheck disable=SC2154 # release_merge_run_record_detail is set by the ci-lookup sibling
 release_merge_record_problem() {
   local verdict
   release_merge_run_record_verdict "$REPO" "$1" "$2" "$BASE" && verdict=0 || verdict=$?
@@ -130,6 +148,7 @@ release_merge_record_problem() {
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
+  release_merge_clear_plugin_label
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
@@ -144,6 +163,7 @@ release_merge_pr_if_gate_passes() {
     || release_merge_fail "$number" "cannot fetch the changed files (at $tested_sha)" || return 1
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files (at $tested_sha)" || return 1
+  release_merge_set_plugin_label "$files"
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
@@ -173,7 +193,7 @@ release_merge_pr_if_gate_passes() {
     echo "Not merging PR #$number at $tested_sha:"
     while IFS= read -r problem; do
       echo "- $problem"
-      echo "::warning title=Release PR #$number not merged::${problem//\%/%25} (at $tested_sha)"
+      echo "::warning title=$(release_merge_annotation_title "$number" "not merged")::${problem//\%/%25} (at $tested_sha)"
     done <<<"$problems"
     return 0
   fi
@@ -189,7 +209,7 @@ release_merge_pr_if_gate_passes() {
   release_merge_replay_stderr "$merge_stderr"
   [[ "$did_merge" == 0 ]] || {
     echo "Merged PR #$number at $tested_sha."
-    echo "::notice title=Release PR #$number merged::Merged PR #$number at $tested_sha."
+    echo "::notice title=$(release_merge_annotation_title "$number" "merged")::Merged PR #$number at $tested_sha."
   }
 }
 
@@ -199,7 +219,8 @@ release_merge_pr_if_gate_passes() {
 # newer failure is not, and gets a warning annotation naming both run ids. Returns 1 for that
 # refusal and 2 when the lookup fails (after an error annotation), which turns the job red. It only
 # picks the run: the gate still checks that run's record at its own site.
-# shellcheck disable=SC2154 # BASE comes from the caller
+# shellcheck disable=SC2154 # REPO and BASE come from the caller; release_merge_run_record_detail and
+# release_merge_ci_run_id are set by the ci-lookup sibling
 release_merge_triggering_run_is_latest() {
   local outcome latest
   release_merge_ci_outcome "$REPO" "$2" "$3" "$1" "$BASE" && outcome=0 || outcome=$?
@@ -210,7 +231,7 @@ release_merge_triggering_run_is_latest() {
     return 0
   fi
   latest=${release_merge_ci_run_id:+run $release_merge_ci_run_id}
-  echo "::warning title=Release PR #$1 not merged::the CI run ${4:-(unknown)} that triggered this merge is not the latest CI run at $2 for this PR (latest: ${latest:-none})"
+  echo "::warning title=$(release_merge_annotation_title "$1" "not merged")::the CI run ${4:-(unknown)} that triggered this merge is not the latest CI run at $2 for this PR (latest: ${latest:-none})"
   return 1
 }
 

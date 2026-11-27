@@ -87,24 +87,81 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
-# The lib sources its siblings from its own directory; the sparse checkout must fetch each one, or
-# the live step fails at `source` while every test (which runs from a full checkout) passes.
-test_the_sparse_checkout_includes_every_file_the_lib_sources() {
-  local lib_dir siblings missing
-  lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
-  siblings=$(sed -n "s|^source \"\\\$release_merge_lib_dir/\\([^\"]*\\)\"\$|$lib_dir/\\1|p" "$RELEASE_MERGE_LIB" | sort)
-  [[ -n "$siblings" ]] || fail 'the lib sources no siblings'
-  missing=$(comm -23 <(printf '%s\n' "$siblings") <(sparse_checkout_paths | sort))
-  [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
+# copy_sparse_checkout_paths_to <dir>: copies each file the merge job's sparse-checkout lists from the
+# repo into <dir>, at the same path, as the checkout step would fetch them. Fails on a listed file the
+# repo lacks.
+copy_sparse_checkout_paths_to() {
+  local dir=$1 path
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    mkdir -p "$dir/$(dirname "$path")"
+    cp "$REPO_ROOT/$path" "$dir/$path" || { echo "the sparse checkout lists $path, which is not in the repo" >&2; return 1; }
+  done < <(sparse_checkout_paths)
 }
 
-# A sibling the lib reaches some other way than a `source "$release_merge_lib_dir/X"` line still has
-# to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
-test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
+# The merge job checks out only the files its sparse-checkout lists, and the step then sources the lib.
+# This sources the lib from a directory holding exactly those files, so a sibling the lib loads but the
+# list omits fails here, however the lib spells the load.
+test_the_lib_loads_from_a_checkout_of_only_the_sparse_checkout_paths() {
+  local got
+  copy_sparse_checkout_paths_to "$TEST_DIR/sparse" || fail 'could not build the sparse checkout'
+  got=$(cd "$TEST_DIR/sparse" && "$BASH" -c 'set -euo pipefail; source "$1"; declare -F release_merge_run release_merge_sweep release_merge_lost_race' \
+    _ "$(merge_step_script | sed -n 's/^source //p')" 2>&1) \
+    || fail "sourcing the lib from only the sparse checkout paths failed: $got"
+}
+
+# copy_repo_with_unlisted_helper: copies the tracked .github tree into $TEST_DIR/repo and adds a
+# helper.sh sibling that no sparse checkout lists.
+copy_repo_with_unlisted_helper() {
+  local repo=$TEST_DIR/repo
+  mkdir -p "$repo"
+  (cd "$REPO_ROOT" && /usr/bin/git ls-files -z .github release-please-config.json | xargs -0 tar cf -) | tar xf - -C "$repo"
+  echo 'helper_fn() { :; }' >"$repo/.github/scripts/helper.sh"
+}
+
+# run_sparse_load_check_with_lib_line <line>: on the copy from copy_repo_with_unlisted_helper, inserts
+# <line> after the lib's self-location line and runs the sparse-checkout load test.
+run_sparse_load_check_with_lib_line() {
+  local repo=$TEST_DIR/repo lib
+  copy_repo_with_unlisted_helper
+  lib=$repo/.github/scripts/release-merge-lib.sh
+  awk -v line="$1" '{print} /^release_merge_lib_dir=/{print line}' "$lib" >"$lib.new" && mv "$lib.new" "$lib"
+  bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_lib_loads_from_a_checkout_of_only_the_sparse_checkout_paths >"$OUTPUT" 2>&1
+  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
+  EXIT_CODE=$?
+}
+
+test_the_sparse_load_check_fails_for_an_indented_load_of_an_unlisted_sibling() {
+  run_sparse_load_check_with_lib_line '  release_merge_load_sibling helper.sh'
+  assert_exit_code 1
+  assert_out_has "sourcing the lib from only the sparse checkout paths failed"
+}
+
+test_the_sparse_load_check_fails_for_a_source_of_an_unlisted_sibling_inside_braces() {
+  run_sparse_load_check_with_lib_line '{ source "$release_merge_lib_dir/helper.sh"; }'
+  assert_exit_code 1
+  assert_out_has "sourcing the lib from only the sparse checkout paths failed"
+}
+
+# Every sibling resolves from the lib's own directory, so a file there that the sparse checkout does not
+# list can be loaded from anywhere in the lib (a function body included) and would be missing in the job.
+test_the_scripts_dir_check_fails_for_an_unlisted_file() {
+  local repo=$TEST_DIR/repo
+  copy_repo_with_unlisted_helper
+  bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_sparse_checkout_includes_every_file_in_the_scripts_dir >"$OUTPUT" 2>&1
+  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
+  EXIT_CODE=$?
+  assert_exit_code 1
+  assert_out_has "the sparse checkout omits .github/scripts/helper.sh"
+}
+
+# Every sibling resolves from the lib's own directory, wherever in the lib it is loaded, so every file in
+# that directory must be in the sparse checkout, whatever its name.
+test_the_sparse_checkout_includes_every_file_in_the_scripts_dir() {
   local lib_dir on_disk missing
   lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
-  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/release-merge-*.sh)
-  [[ -n "$on_disk" ]] || fail "no release-merge-*.sh files under $lib_dir"
+  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/*)
+  [[ -n "$on_disk" ]] || fail "no files under $lib_dir"
   missing=$(comm -23 <(printf '%s\n' "$on_disk" | sort) <(sparse_checkout_paths | sort))
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
 }

@@ -41,7 +41,7 @@ test_the_merge_step_logs_a_merged_line_after_a_successful_merge() {
 test_the_merge_step_emits_a_notice_annotation_after_a_successful_merge() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_line "::notice title=Release PR #111 merged::Merged PR #111 at $SHA_A."
+  assert_out_line "::notice title=Release PR #111 (handoff) merged::Merged PR #111 at $SHA_A."
 }
 
 test_the_merge_step_emits_a_notice_annotation_when_the_pr_was_closed_without_merging() {
@@ -51,7 +51,7 @@ test_the_merge_step_emits_a_notice_annotation_when_the_pr_was_closed_without_mer
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 0
-  assert_out_line "::notice title=Release PR #111 not merged::PR #111 was closed without being merged."
+  assert_out_line "::notice title=Release PR #111 (handoff) not merged::PR #111 was closed without being merged."
 }
 
 test_the_merge_step_emits_no_notice_when_another_run_merged_the_pr_first() {
@@ -101,7 +101,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.state = "closed" | .draft = true'
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  count=$(grep -c '^::warning title=Release PR #111 not merged::' "$OUTPUT")
+  count=$(grep -c '^::warning title=Release PR #111 (handoff) not merged::' "$OUTPUT")
   [[ "$count" == 2 ]] || fail "got $count warnings"
 }
 
@@ -112,14 +112,14 @@ test_the_merge_step_names_the_stray_file_in_the_warning_for_a_combined_pr() {
   echo '[{"filename":"plugins/handoff/CHANGELOG.md"},{"filename":"plugins/reread/hooks/register.tsx"}]' \
     >"$TEST_DIR/files-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::warning title=Release PR #111 not merged::plugins/reread/hooks/register.tsx is not a file a release PR changes (at $SHA_A)"
+  assert_out_has "::warning title=Release PR #111 (handoff%2C reread) not merged::plugins/reread/hooks/register.tsx is not a file a release PR changes (at $SHA_A)"
 }
 
 test_the_merge_step_escapes_percent_in_a_warning_annotation() {
   stage_release_pr 111 "$SHA_A" handoff success
   edit_pr 111 '.user.login = "100%25"'
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::warning title=Release PR #111 not merged::the PR author is 100%2525, not $BOT"
+  assert_out_has "::warning title=Release PR #111 (handoff) not merged::the PR author is 100%2525, not $BOT"
 }
 
 test_the_merge_step_starts_each_logged_reason_with_a_dash_so_pr_text_is_no_workflow_command() {
@@ -197,7 +197,7 @@ test_the_merge_step_closes_a_failed_merge_with_an_error_annotation_naming_the_pr
   stage_release_pr 111 "$SHA_A" handoff success
   : >"$TEST_DIR/merge.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::error title=Release PR #111 not merged::the merge command failed at $SHA_A"
+  assert_out_has "::error title=Release PR #111 (handoff) not merged::the merge command failed at $SHA_A"
 }
 
 # A pr.json that is not one JSON object is an unreadable fetch, like a files response that is not
@@ -207,7 +207,7 @@ assert_unparseable_pr_fails_with_one_error() {
   printf '%s' "$1" >"$TEST_DIR/pr-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot parse the PR (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot parse the PR (at $SHA_A)"
   assert_out_line_count "::error" 1
   assert_out_lacks "::warning"
   assert_out_lacks "not open"
@@ -248,7 +248,7 @@ test_the_merge_step_names_the_pr_in_an_error_when_the_gate_cannot_be_checked() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step merge_step_with_a_failing_problem_check_for_pr_111
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot check the gate (at $SHA_A)"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
@@ -266,7 +266,7 @@ test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
   : >"$TEST_DIR/pulls.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot list the open PRs from release-please--branches--main--components--handoff (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot check the gate: cannot list the open PRs from release-please--branches--main--components--handoff (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -275,7 +275,7 @@ test_the_merge_step_fails_without_merging_when_the_allowlist_cannot_be_read() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step with_config "$TEST_DIR/missing-config.json" release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 not merged::cannot check the gate: cannot read the allowlist from $TEST_DIR/missing-config.json (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot check the gate: cannot read the allowlist from $TEST_DIR/missing-config.json (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }

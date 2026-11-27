@@ -20,7 +20,7 @@ release_merge_lost_race() {
     echo "PR #$2 is $state: another run merged it first."
   elif [[ "$state" != open ]]; then
     echo "PR #$2 was $state without being merged."
-    echo "::notice title=Release PR #$2 not merged::PR #$2 was $state without being merged." >&2
+    echo "::notice title=$(release_merge_annotation_title "$2" "not merged")::PR #$2 was $state without being merged." >&2
   elif [[ "$head" != "$3" ]]; then
     echo "PR #$2 head moved to $head since CI tested $3."
   else
@@ -28,11 +28,37 @@ release_merge_lost_race() {
   fi
 }
 
+# release_merge_set_plugin_label <files>: sets release_merge_plugin_label to the plugins the PR
+# changes, as "(a%2C b)": the sorted, unique <name> of each plugins/<name>/ path in <files> (one path
+# per line), or empty when there is none. A name comes from a PR's file paths, so only a name made of
+# letters, digits, `.`, `_` and `-` is named; any other is left out, which keeps `%`, `,`, `:` and
+# the start of a workflow command out of the title. The `%2C ` between names is the separator the
+# runner reads back as ", " (a raw `,` would end the title property).
+release_merge_set_plugin_label() {
+  local names
+  names=$(LC_ALL=C sed -n 's|^plugins/\([A-Za-z0-9._-][A-Za-z0-9._-]*\)/.*|\1|p' "$1" | LC_ALL=C sort -u \
+    | paste -sd, - | sed 's/,/%2C /g') || names=
+  release_merge_plugin_label=${names:+($names)}
+}
+
+# release_merge_clear_plugin_label: names no plugin, until release_merge_set_plugin_label runs.
+# Each PR starts from here, so the plugins of one PR never reach the annotations of the next.
+release_merge_clear_plugin_label() {
+  release_merge_plugin_label=
+}
+
+# release_merge_annotation_title <number> <outcome>: prints the title of an annotation about PR
+# <number>: "Release PR #<number> <outcome>", with the plugins of the PR in parentheses after the
+# number once release_merge_set_plugin_label has run for it.
+release_merge_annotation_title() {
+  echo "Release PR #$1${release_merge_plugin_label:+ $release_merge_plugin_label} $2"
+}
+
 # release_merge_fail <number> <reason>: prints an error annotation naming PR <number> and returns 1.
 # Each failing step of release_merge_pr_if_gate_passes ends with it, so the log says which PR
 # failed.
 release_merge_fail() {
-  echo "::error title=Release PR #$1 not merged::${2//\%/%25}"
+  echo "::error title=$(release_merge_annotation_title "$1" "not merged")::${2//\%/%25}"
   return 1
 }
 

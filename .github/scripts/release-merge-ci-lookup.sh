@@ -153,7 +153,7 @@ release_merge_ci_outcome() {
 release_merge_sweep_warn_decoys() {
   local decoy
   while IFS= read -r decoy; do
-    [[ -z "$decoy" ]] || echo "::warning title=Release PR #$1 skipped a CI run for another PR::${decoy//\%/%25}" >&2
+    [[ -z "$decoy" ]] || echo "::warning title=$(release_merge_annotation_title "$1" "skipped a CI run for another PR")::${decoy//\%/%25}" >&2
   done <<<"$release_merge_ci_decoy_runs"
 }
 
@@ -187,10 +187,10 @@ release_merge_sweep() (
                [[ -z "$release_merge_ci_skip_reasons" ]] || sed 's/^/  - /' <<<"${release_merge_ci_skip_reasons%$'\n'}" >&2 ;;
             3) echo "Skipping PR #$number at $sha: CI is still running;" \
                  "its completion triggers the merge." >&2 ;;
-            4) printf '%s%s\n' "::warning title=Release PR #$number not merged::" \
+            4) printf '%s%s\n' "::warning title=$(release_merge_annotation_title "$number" "not merged")::" \
                  "CI concluded ${release_merge_ci_conclusion//\%/%25} at $sha; fix it or rerun CI." >&2 ;;
             *)
-              echo "::error title=Release PR #$number not merged::cannot read the CI runs at $sha${release_merge_run_record_detail:+ (${release_merge_run_record_detail//\%/%25})}" >&2
+              echo "::error title=$(release_merge_annotation_title "$number" "not merged")::cannot read the CI runs at $sha${release_merge_run_record_detail:+ (${release_merge_run_record_detail//\%/%25})}" >&2
               lookup_failed=1 ;;
           esac
         done

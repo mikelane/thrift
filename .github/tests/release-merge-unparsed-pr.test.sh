@@ -23,7 +23,7 @@ test_the_merge_step_does_not_merge_when_the_pr_response_is_an_array_followed_by_
   prepend_to_pr 111 '[]'
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_has "::error title=Release PR #111 not merged::cannot parse the PR (at $SHA_A)"
+  assert_out_has "::error title=Release PR #111 (handoff) not merged::cannot parse the PR (at $SHA_A)"
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
