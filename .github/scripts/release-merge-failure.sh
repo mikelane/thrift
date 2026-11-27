@@ -30,13 +30,14 @@ release_merge_lost_race() {
 
 # release_merge_set_plugin_label <files>: sets release_merge_plugin_label to the plugins the PR
 # changes, as "(a%2C b)": the sorted, unique <name> of each plugins/<name>/ path in <files> (one path
-# per line), or empty when there is none. A name comes from a PR's file paths, so it is escaped for
-# an annotation title: % is %25, and the `,` and `:` that would end a title property are %2C and
-# %3A. The `%2C ` between names is the separator the runner reads back as ", ".
+# per line), or empty when there is none. A name comes from a PR's file paths, so only a name made of
+# letters, digits, `.`, `_` and `-` is named; any other is left out, which keeps `%`, `,`, `:` and
+# the start of a workflow command out of the title. The `%2C ` between names is the separator the
+# runner reads back as ", " (a raw `,` would end the title property).
 release_merge_set_plugin_label() {
   local names
-  names=$(LC_ALL=C sed -n 's|^plugins/\([^/][^/]*\)/.*|\1|p' "$1" | LC_ALL=C sort -u \
-    | sed -e 's/%/%25/g' -e 's/,/%2C/g' -e 's/:/%3A/g' | paste -sd, - | sed 's/,/%2C /g') || names=
+  names=$(LC_ALL=C sed -n 's|^plugins/\([A-Za-z0-9._-][A-Za-z0-9._-]*\)/.*|\1|p' "$1" | LC_ALL=C sort -u \
+    | paste -sd, - | sed 's/,/%2C /g') || names=
   release_merge_plugin_label=${names:+($names)}
 }
 
