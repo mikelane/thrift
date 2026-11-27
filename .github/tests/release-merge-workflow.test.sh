@@ -98,6 +98,17 @@ test_the_sparse_checkout_includes_every_file_the_lib_sources() {
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
 }
 
+# A sibling the lib reaches some other way than a `source "$release_merge_lib_dir/X"` line still has
+# to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
+test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
+  local lib_dir on_disk missing
+  lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
+  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/release-merge-*.sh)
+  [[ -n "$on_disk" ]] || fail "no release-merge-*.sh files under $lib_dir"
+  missing=$(comm -23 <(printf '%s\n' "$on_disk" | sort) <(sparse_checkout_paths | sort))
+  [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
+}
+
 # The step sources the lib by a relative path, so the lib's `cd "$(dirname ...)"` is a relative cd,
 # which consults CDPATH: with a CDPATH entry the cd prints the directory, and the sibling path
 # becomes two lines; with an entry holding .github/scripts the siblings come from that tree.
