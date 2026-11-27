@@ -41,18 +41,40 @@ test_a_refusal_warning_names_no_plugin_when_no_changed_file_is_under_plugins() {
   assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
 }
 
-test_a_refusal_warning_escapes_percent_in_a_plugin_name() {
+# draft_pr_changing <path>: the staged PR 111 is a draft and changes only <path>.
+draft_pr_changing() {
   stage_release_pr 111 "$SHA_A" handoff success
-  stage_files 111 'plugins/100%/CHANGELOG.md'
+  stage_files 111 "$1"
+  edit_pr 111 '.draft = true'
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::warning title=Release PR #111 (100%25) not merged::"
 }
 
-test_a_refusal_warning_escapes_colon_and_comma_in_a_plugin_name() {
+test_a_plugin_name_with_a_percent_is_not_named() {
+  draft_pr_changing 'plugins/100%/CHANGELOG.md'
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
+}
+
+test_a_plugin_name_with_a_colon_is_not_named() {
+  draft_pr_changing 'plugins/a:b/CHANGELOG.md'
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
+}
+
+test_a_plugin_name_with_a_comma_is_not_named() {
+  draft_pr_changing 'plugins/a,b/CHANGELOG.md'
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
+}
+
+test_a_plugin_name_that_opens_a_workflow_command_is_not_named() {
+  draft_pr_changing 'plugins/##[add-mask]t/f'
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
+}
+
+test_a_plugin_name_with_an_unsafe_character_is_left_out_but_the_others_are_named() {
   stage_release_pr 111 "$SHA_A" handoff success
-  stage_files 111 'plugins/a:b,c/CHANGELOG.md'
+  stage_files 111 'plugins/a,b/CHANGELOG.md' plugins/handoff/CHANGELOG.md
+  edit_pr 111 '.draft = true'
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has "::warning title=Release PR #111 (a%3Ab%2Cc) not merged::"
+  assert_out_line "::warning title=Release PR #111 (handoff) not merged::the PR is a draft (at $SHA_A)"
 }
 
 test_the_merged_notice_names_the_plugin() {
@@ -122,11 +144,9 @@ test_a_carriage_return_in_a_plugin_name_names_no_plugin() {
   assert_out_has "::warning title=Release PR #111 not merged::"
 }
 
-test_a_literal_backslash_escape_in_a_plugin_name_is_named_as_written() {
-  stage_release_pr 111 "$SHA_A" handoff success
-  stage_files 111 'plugins/a\nb/CHANGELOG.md'
-  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
-  assert_out_has '::warning title=Release PR #111 (a\nb) not merged::'
+test_a_plugin_name_with_a_literal_backslash_is_not_named() {
+  draft_pr_changing 'plugins/a\nb/CHANGELOG.md'
+  assert_out_line "::warning title=Release PR #111 not merged::the PR is a draft (at $SHA_A)"
 }
 
 test_a_renamed_file_names_the_plugin_of_its_previous_path_too() {
