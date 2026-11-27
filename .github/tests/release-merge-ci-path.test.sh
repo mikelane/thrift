@@ -136,6 +136,20 @@ test_a_sweep_run_does_not_merge_a_pr_whose_newer_failed_run_has_an_unreadable_re
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# The sweep calls the merge step inside `||`, where set -e is off, so only the step's own
+# `|| return 1` after the PR fetch stops it. A response of `[]` then the PR fails the parse check
+# (#174); without that return the gate reads the PR's fields past the array and merges it.
+test_a_sweep_run_does_not_merge_a_pr_whose_response_is_an_array_followed_by_the_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  { echo '[]'; jq . "$TEST_DIR/pr-111.json"; } >"$TEST_DIR/pr-stream.json"
+  mv "$TEST_DIR/pr-stream.json" "$TEST_DIR/pr-111.json"
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot parse the PR (at $SHA_A)"
+  assert_out_lacks "Merging PR #111"
+}
+
 test_the_merge_step_refuses_a_pr_whose_run_id_is_empty() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" ''
