@@ -5,10 +5,12 @@
 # job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml and to
 # .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
-# release_merge_load_sibling <file>: sources <file> from this directory. A sibling that is missing or
-# fails to load stops the step before any gate runs, and the run summary names the file, not only
-# the step log. The readable check comes first because bash 3.2 exits the shell when `source` cannot
-# find a file, before an `||` could report it.
+# release_merge_load_sibling <file>: sources <file> from this directory. Whatever goes wrong, the step
+# stops before any gate runs. The run summary also names the file (an ::error annotation) when the
+# sibling is missing or unreadable, on every bash, and when it has a syntax error or a top-level
+# command that fails, on bash 5 (the runner's). On bash 3.2 those last two exit the shell before the
+# `||` runs, so there is no annotation, only the non-zero exit. The readable check comes first because
+# bash 3.2 also exits when `source` cannot find a file.
 release_merge_load_sibling() {
   local file=$release_merge_lib_dir/$1
   # shellcheck disable=SC1090 # the two siblings are named by the calls below

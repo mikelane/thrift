@@ -96,15 +96,15 @@ release_merge_run_two_prs() {
   release_merge_pr_if_gate_passes 112 "$SHA_B" 212
 }
 
-# copy_lib_with_bad_sibling <sibling> <how>: a copy of the lib in $TEST_DIR/lib whose <sibling> fails
-# to load: absent when <how> is missing, a file that returns 1 otherwise.
+# copy_lib_with_bad_sibling <sibling> <contents>: a copy of the lib in $TEST_DIR/lib whose <sibling>
+# fails to load: absent when <contents> is "missing", otherwise a file holding <contents>.
 copy_lib_with_bad_sibling() {
-  local sibling=$1 how=$2
+  local sibling=$1 contents=$2
   mkdir -p "$TEST_DIR/lib"
   cp "$RELEASE_MERGE_LIB" "$(dirname "$RELEASE_MERGE_LIB")"/release-merge-ci-lookup.sh \
     "$(dirname "$RELEASE_MERGE_LIB")"/release-merge-failure.sh "$TEST_DIR/lib/"
   rm "$TEST_DIR/lib/$sibling"
-  [[ "$how" == missing ]] || echo 'return 1' >"$TEST_DIR/lib/$sibling"
+  [[ "$contents" == missing ]] || printf '%s\n' "$contents" >"$TEST_DIR/lib/$sibling"
 }
 
 # source_lib_copy: sources the copied lib the way the workflow step does, then reaches the gate.
@@ -131,10 +131,26 @@ test_a_missing_ci_lookup_sibling_writes_an_error_annotation_naming_the_file() {
 }
 
 test_a_sibling_that_fails_while_loading_writes_an_error_annotation_naming_the_file() {
-  copy_lib_with_bad_sibling release-merge-ci-lookup.sh broken
+  copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'return 1'
   source_lib_copy || true
   assert_exit_code 1
   assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh"
+  assert_out_lacks "the-gate-ran"
+}
+
+# On bash 3.2 a syntax error or a failing top-level command under `set -e` exits the shell before the
+# loader's `||` runs, so no annotation is promised here; the step must still stop before the gate.
+test_a_sibling_with_a_syntax_error_stops_the_step_before_the_gate() {
+  copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'if then'
+  source_lib_copy || true
+  assert_exit_code_nonzero
+  assert_out_lacks "the-gate-ran"
+}
+
+test_a_sibling_whose_top_level_command_fails_stops_the_step_before_the_gate() {
+  copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'false'
+  source_lib_copy || true
+  assert_exit_code_nonzero
   assert_out_lacks "the-gate-ran"
 }
 

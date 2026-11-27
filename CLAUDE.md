@@ -52,7 +52,9 @@ specific to this repo.
     "not the latest CI run" warning, and the errors for a PR or file list that could not be fetched
     (the sweep has no file list without an extra API call per PR). Two failures name no PR,
     `Release PR sweep failed` and `Release merge failed`; the latter is also what a lib sibling that
-    fails to load writes, naming the file. A refusal for a file outside the allowlist names that file
+    is missing or unreadable writes, naming the file, on every bash; one with a syntax error or a
+    failing top-level command writes it on bash 5 (the runner's), and on bash 3.2 the step still
+    exits non-zero before the gate, without the annotation. A refusal for a file outside the allowlist names that file
     (`plugins/<name>/... is not a file a release PR changes`).
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
