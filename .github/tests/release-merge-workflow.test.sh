@@ -87,18 +87,18 @@ test_the_sparse_checkout_includes_the_file_the_merge_step_sources() {
   sparse_checkout_paths | grep -qxF "$sourced" || fail "the sparse checkout omits $sourced"
 }
 
-# The lib sources its siblings from its own directory; the sparse checkout must fetch each one, or
+# The lib sources its siblings (release_merge_load_sibling <file>) from its own directory; the sparse checkout must fetch each one, or
 # the live step fails at `source` while every test (which runs from a full checkout) passes.
 test_the_sparse_checkout_includes_every_file_the_lib_sources() {
   local lib_dir siblings missing
   lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
-  siblings=$(sed -n "s|^source \"\\\$release_merge_lib_dir/\\([^\"]*\\)\"\$|$lib_dir/\\1|p" "$RELEASE_MERGE_LIB" | sort)
+  siblings=$(sed -n "s|^release_merge_load_sibling \\([^ ]*\\) .*|$lib_dir/\\1|p" "$RELEASE_MERGE_LIB" | sort)
   [[ -n "$siblings" ]] || fail 'the lib sources no siblings'
   missing=$(comm -23 <(printf '%s\n' "$siblings") <(sparse_checkout_paths | sort))
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
 }
 
-# A sibling the lib reaches some other way than a `source "$release_merge_lib_dir/X"` line still has
+# A sibling the lib reaches some other way than a `release_merge_load_sibling X` line still has
 # to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
 test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
   local lib_dir on_disk missing

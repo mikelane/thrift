@@ -5,10 +5,17 @@
 # job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml and to
 # .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
-# shellcheck source=.github/scripts/release-merge-ci-lookup.sh
-source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
-# shellcheck source=.github/scripts/release-merge-failure.sh
-source "$release_merge_lib_dir/release-merge-failure.sh"
+# release_merge_load_sibling <file>: sources <file> from this directory. A sibling that is missing or
+# fails to load stops the step before any gate runs, and the run summary names the file, not only
+# the step log. The readable check comes first because bash 3.2 exits the shell when `source` cannot
+# find a file, before an `||` could report it.
+release_merge_load_sibling() {
+  local file=$release_merge_lib_dir/$1
+  # shellcheck disable=SC1090 # the two siblings are named by the calls below
+  [[ -r "$file" ]] && source "$file" || { echo "::error title=Release merge failed::cannot load $file"; return 1; }
+}
+release_merge_load_sibling release-merge-ci-lookup.sh || return 1
+release_merge_load_sibling release-merge-failure.sh || return 1
 
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
@@ -109,6 +116,7 @@ release_merge_problems() {
 # the reason the pr-record of CI run <ci-run-id> does not tie that run to PR <number> into $BASE,
 # and nothing when it does. A lookup that fails prints an error annotation naming <tested-sha> and
 # returns 1, as a refusal would hide it.
+# shellcheck disable=SC2154 # release_merge_run_record_detail is set by the ci-lookup sibling
 release_merge_record_problem() {
   local verdict
   release_merge_run_record_verdict "$REPO" "$1" "$2" "$BASE" && verdict=0 || verdict=$?
@@ -130,6 +138,8 @@ release_merge_record_problem() {
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
+  # shellcheck disable=SC2034 # read by release_merge_annotation_title in release-merge-failure.sh
+  release_merge_plugin_label=
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
@@ -144,6 +154,7 @@ release_merge_pr_if_gate_passes() {
     || release_merge_fail "$number" "cannot fetch the changed files (at $tested_sha)" || return 1
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files (at $tested_sha)" || return 1
+  release_merge_set_plugin_label "$files"
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
@@ -173,7 +184,7 @@ release_merge_pr_if_gate_passes() {
     echo "Not merging PR #$number at $tested_sha:"
     while IFS= read -r problem; do
       echo "- $problem"
-      echo "::warning title=Release PR #$number not merged::${problem//\%/%25} (at $tested_sha)"
+      echo "::warning title=$(release_merge_annotation_title "$number" "not merged")::${problem//\%/%25} (at $tested_sha)"
     done <<<"$problems"
     return 0
   fi
@@ -189,7 +200,7 @@ release_merge_pr_if_gate_passes() {
   release_merge_replay_stderr "$merge_stderr"
   [[ "$did_merge" == 0 ]] || {
     echo "Merged PR #$number at $tested_sha."
-    echo "::notice title=Release PR #$number merged::Merged PR #$number at $tested_sha."
+    echo "::notice title=$(release_merge_annotation_title "$number" merged)::Merged PR #$number at $tested_sha."
   }
 }
 
