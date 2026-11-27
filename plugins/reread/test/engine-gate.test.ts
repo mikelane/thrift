@@ -9,7 +9,7 @@ const ACT = { options: { readMode: 'act' } }
 describe('engineInfo: an engine newer than the one the plugin was tested through', () => {
   test('It runs as off and does not answer a repeat with a stub', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.331', base: '2.1.331' }
+    world.version = { version: '2.1.333', base: '2.1.333' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     const second = await read($, '/work/a.ts')
@@ -18,7 +18,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 
   test('It logs one untested_engine record for the session', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.331', base: '2.1.331' }
+    world.version = { version: '2.1.333', base: '2.1.333' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
@@ -27,7 +27,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 
   test('It records the untested engine before the first read', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.331', base: '2.1.331' }
+    world.version = { version: '2.1.333', base: '2.1.333' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect(world.records[0]?.trigger_values.reason).toBe('untested_engine')
@@ -35,7 +35,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 
   test('It keeps the setting apart from the effective mode in later records', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.331', base: '2.1.331' }
+    world.version = { version: '2.1.333', base: '2.1.333' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
@@ -44,7 +44,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 
   test('It logs what a stub would have saved, as in off', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.331', base: '2.1.331' }
+    world.version = { version: '2.1.333', base: '2.1.333' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     await read($, '/work/a.ts')
@@ -61,7 +61,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 
   test('It answers a repeat with a stub on the engine it was tested through', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.330', base: '2.1.330' }
+    world.version = { version: '2.1.332', base: '2.1.332' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     const second = await read($, '/work/a.ts')
@@ -72,7 +72,7 @@ describe('engineInfo: an engine newer than the one the plugin was tested through
 describe('engineInfo: the engine version', () => {
   test('It runs as off on a development build', ACT, async ($, on) => {
     const world = install($, on)
-    world.version = { version: '2.1.330-dev.20260920.t101500.sha1a2b3c4', base: '2.1.330-dev' }
+    world.version = { version: '2.1.332-dev.20260920.t101500.sha1a2b3c4', base: '2.1.332-dev' }
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect(isStub(await read($, '/work/a.ts'))).toBe(false)
