@@ -148,8 +148,7 @@ release_merge_record_problem() {
 # shellcheck disable=SC2154,SC2153 # the variables above come from the caller
 release_merge_pr_if_gate_passes() {
   local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
-  # shellcheck disable=SC2034 # read by release_merge_annotation_title in release-merge-failure.sh
-  release_merge_plugin_label=
+  release_merge_clear_plugin_label
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1

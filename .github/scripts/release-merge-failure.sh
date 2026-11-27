@@ -41,6 +41,12 @@ release_merge_set_plugin_label() {
   release_merge_plugin_label=${names:+($names)}
 }
 
+# release_merge_clear_plugin_label: names no plugin, until release_merge_set_plugin_label runs.
+# Each PR starts from here, so the plugins of one PR never reach the annotations of the next.
+release_merge_clear_plugin_label() {
+  release_merge_plugin_label=
+}
+
 # release_merge_annotation_title <number> <outcome>: prints the title of an annotation about PR
 # <number>: "Release PR #<number> <outcome>", with the plugins of the PR in parentheses after the
 # number once release_merge_set_plugin_label has run for it.
