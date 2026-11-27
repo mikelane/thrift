@@ -25,6 +25,7 @@ async function settle($: EngineInterface, setting: ReadMode): Promise<EngineInfo
   const engine: EngineInfo = { engineVersion, setting, effectiveMode: isUnsupported ? 'off' : setting }
   if (isUnsupported) {
     debug($, `engine ${engineVersion} is older than the minimum reread runs on, or is not a release, so it runs as off`)
+    // `untested_engine` is the logged name for an unsupported build; it is kept so earlier logs stay comparable.
     await writeRecord($, engine, { decision: 'untested_engine', reason: 'untested_engine', isSubagent: false })
   }
   return engine

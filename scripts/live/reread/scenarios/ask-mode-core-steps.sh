@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # #147: reread in ask mode on the installed build. One session runs steps A, B, C, E, K and L of the
 # README's "What has been verified live" table, each as its own turn, and judges the decision
-# records each step wrote. A plugin held at off by an untested build writes mode shadow, so it fails
-# here.
+# records each step wrote. A plugin held at off by a build older than 2.1.308 or not a release writes
+# mode shadow, so it fails here.
 
 REREAD_FIRST_READ='.action == "pass" and .trigger_values.reason == "first_read"'
 REREAD_STUB='.action == "dedupe" and .trigger_values.reason == "exact_repeat"

@@ -165,16 +165,18 @@ plugin without any error. The plugin runs on Claude Code 2.1.308 and newer, the 
 was verified live on. On the first `Read` of a session it reads `$.session.version()`. If the `base`
 is missing, is not exactly `MAJOR.MINOR.PATCH` (a development build such as `2.1.332-dev`), or names
 a release older than 2.1.308, it runs as `off` for the rest of the plugin's life and writes one
-`untested_engine` record. It says nothing in the session.
+`untested_engine` record. It says nothing in the session. The record keeps the name
+`untested_engine` so earlier logs stay comparable.
 
 A newer release runs in the mode you set. There is no version cap, because the per-read checks
 already fall back to an unchanged read when what `Read` returns no longer fits a stub: the earlier
 result must still be in context and begin with the text the model read (`not_in_context`), the
 result must be text and not an error (`not_text`, `error_result`), the stub must be smaller
 (`stub_not_smaller`), and Claude Code's own `file_unchanged` is left alone (`core_dedup`). CI's
-`latest` channel runs the tests against the newest release on every push and every Monday, and
-the Monday run opens an issue when they fail. Every record carries `engine_version`, so a change in
-behavior shows up as a split between versions.
+`latest` channel runs the tests against the newest release on pull requests into `main`, on pushes
+to `main`, and every Monday. It never blocks a change, and only the Monday run opens an issue when
+the tests fail. Every record carries `engine_version`, so a change in behavior shows up as a split
+between versions.
 
 State lives in memory. If the engine starts the plugin again mid-session (a change in `/config` did
 on 2.1.299), the tracked reads are lost and the plugin starts again from empty. That is safe: it only
@@ -219,7 +221,7 @@ means fewer stubs until the files are read once more.
 ## What has been verified live
 
 The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
-log. Two live checks ran on top of them: the terminal CLI on 2.1.332 (the current one) and on 2.1.330 (both below), and
+log. Two live checks ran on top of them: the terminal CLI on 2.1.332 (the newest one checked) and on 2.1.330 (both below), and
 before them the Code tab of the Claude Desktop app, with `engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
 `readMode` set to `ask`. The main probe file had 80 lines (`Read` showed 81, the last one empty).
 Every step ran in one user turn, and every record had `mode: active` and `effective_mode: ask`.
