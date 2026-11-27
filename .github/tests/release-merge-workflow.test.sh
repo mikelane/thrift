@@ -152,7 +152,7 @@ test_the_sparse_checkout_check_fails_for_an_unlisted_file_in_the_scripts_dir() {
 }
 
 # Every sibling resolves from the lib's own directory, wherever in the lib it is loaded, so every file in
-# that directory must be in the sparse checkout, not only the release-merge-*.sh ones.
+# that directory must be in the sparse checkout, whatever its name.
 test_the_sparse_checkout_includes_every_file_in_the_scripts_dir() {
   local lib_dir on_disk missing
   lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")

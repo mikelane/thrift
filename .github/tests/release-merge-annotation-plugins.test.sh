@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Issue #215: a release-merge annotation names the plugins its PR changes, taken from the
-# plugins/<name>/ paths in the PR's file list, and a lib sibling that fails to load is reported.
+# plugins/<name>/ paths in the PR's file list, and a lib sibling that fails to load stops the step
+# before the gate (a missing or unreadable one with an error annotation naming it).
 # Usage: release-merge-annotation-plugins.test.sh [name-fragment]   (runs the tests whose name contains it)
 # shellcheck source=canary-report-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
