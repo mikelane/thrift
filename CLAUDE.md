@@ -18,7 +18,7 @@ specific to this repo.
     - `dash`: three live-harness tests run the session command under a POSIX `sh`.
     - `ruby`: the release-merge and release-please workflow tests parse `release-merge.yml` and
       `release-please.yml` with Psych and compare them as data. `ubuntu-latest` has Ruby.
-    - `python3`: the same test builds its workflow variants with it, and the release-merge stubs
+    - `python3`: those tests build their workflow variants with it, and the release-merge stubs
       build the `pr-record` zips with it.
     - `unzip`: the release-merge gate reads each CI run's `pr-record` artifact with it, in the
       tests and in the workflow. `ubuntu-latest` and macOS have it.

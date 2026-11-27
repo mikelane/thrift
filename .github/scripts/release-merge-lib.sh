@@ -257,7 +257,7 @@ release_merge_triggering_run_is_latest() {
 # release PR whose CI passed at its head; otherwise merges the open PR from BRANCH at
 # CI_TESTED_SHA. Returns 1 when any lookup or merge failed, and goes on to the other PRs first.
 # Reads REPO, OWNER, BASE, TRIGGER, BRANCH, CI_TESTED_SHA, CI_RUN_ID (the triggering run) and what
-# the function above reads.
+# release_merge_pr_if_gate_passes reads.
 release_merge_run() {
   local failed=0 candidates number sha run_id latest_status
   if [[ "$TRIGGER" == "Release Please" ]]; then
