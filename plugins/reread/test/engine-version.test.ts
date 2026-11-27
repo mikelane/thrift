@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { isUntestedEngine, TESTED_THROUGH } from '../hooks/engine-version'
 
-const untestedCases = [
+const isUntestedEngineCases = [
   ['2.1.332', false],
   ['2.1.331', false],
   ['2.1.330', false],
@@ -17,9 +17,11 @@ const untestedCases = [
   ['3.0.0', true],
   ['2.1.1000', true],
   ['2.1.332-dev', true],
+  ['2.1.333-dev', true],
   ['2.1.330-dev', true],
   ['2.1.311-dev', true],
   ['2.1.100-dev', true],
+  [' 2.1.332', true],
   [undefined, true],
   ['', true],
   ['2.1', true],
@@ -32,7 +34,7 @@ test('It names 2.1.332 as the engine the plugin was tested through', () => {
   expect(TESTED_THROUGH).toBe('2.1.332')
 })
 
-for (const [base, expected] of untestedCases) {
+for (const [base, expected] of isUntestedEngineCases) {
   test(`It returns ${expected} from isUntestedEngine for ${JSON.stringify(base)}`, () => {
     expect(isUntestedEngine(base)).toBe(expected)
   })
