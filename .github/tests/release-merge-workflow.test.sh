@@ -338,7 +338,7 @@ test_the_check_fails_a_workflow_level_default_shell_that_skips_the_script() {
 
 # AQA run 6: only .jobs.merge is pinned, so a second job in the release environment can mint the App token.
 test_the_check_fails_a_second_job_that_mints_the_app_token() {
-  refuses_variant 'o + "\n  also:\n    runs-on: ubuntu-latest\n    environment: release\n    steps:\n      - id: t\n        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510\n        with:\n          client-id: ${{ vars.RELEASE_APP_ID }}\n          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}\n      - run: echo \"$T\"\n        env:\n          T: ${{ steps.t.outputs.token }}\n"' \
+  refuses_variant 'o + "\n  also:\n    runs-on: ubuntu-latest\n    environment: release\n    steps:\n      - id: t\n        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc\n        with:\n          client-id: ${{ vars.RELEASE_APP_ID }}\n          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}\n      - run: echo \"$T\"\n        env:\n          T: ${{ steps.t.outputs.token }}\n"' \
     'a second job mints the App token outside the gated merge job'
 }
 
