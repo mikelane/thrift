@@ -98,6 +98,33 @@ test_the_sparse_checkout_includes_every_file_the_lib_sources() {
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
 }
 
+# run_lib_sources_check_with_lib_line <line>: copies the tracked .github tree into $TEST_DIR/repo, adds
+# a helper.sh sibling that is in no sparse checkout and matches no release-merge-*.sh glob, inserts
+# <line> after the lib's self-location line, and runs the "every file the lib sources" test on the copy.
+run_lib_sources_check_with_lib_line() {
+  local repo=$TEST_DIR/repo lib
+  mkdir -p "$repo"
+  (cd "$REPO_ROOT" && /usr/bin/git ls-files -z .github release-please-config.json | xargs -0 tar cf -) | tar xf - -C "$repo"
+  echo 'helper_fn() { :; }' >"$repo/.github/scripts/helper.sh"
+  lib=$repo/.github/scripts/release-merge-lib.sh
+  awk -v line="$1" '{print} /^release_merge_lib_dir=/{print line}' "$lib" >"$lib.new" && mv "$lib.new" "$lib"
+  bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_sparse_checkout_includes_every_file_the_lib_sources >"$OUTPUT" 2>&1
+  # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
+  EXIT_CODE=$?
+}
+
+test_the_lib_sources_check_fails_for_a_sibling_sourced_with_plain_source() {
+  run_lib_sources_check_with_lib_line 'source "$release_merge_lib_dir/helper.sh"'
+  assert_exit_code 1
+  assert_out_has "the sparse checkout omits"
+}
+
+test_the_lib_sources_check_fails_for_a_load_sibling_call_with_nothing_after_the_name() {
+  run_lib_sources_check_with_lib_line 'release_merge_load_sibling helper.sh'
+  assert_exit_code 1
+  assert_out_has "the sparse checkout omits"
+}
+
 # A sibling the lib reaches some other way than a `release_merge_load_sibling X` line still has
 # to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
 test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
