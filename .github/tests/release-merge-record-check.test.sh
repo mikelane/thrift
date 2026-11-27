@@ -11,6 +11,7 @@ record_check() {
   (
     set -o pipefail
     release_merge_run_record_verdict "$REPO" "$1" 111 main && code=0 || code=$?
+    # shellcheck disable=SC2154 # set by release_merge_run_record_verdict in the lib
     echo "$code $release_merge_run_record_detail"
   )
 }
@@ -360,6 +361,7 @@ assert_record_check_with_failing_mktemp() {
   echo 0 >"$TEST_DIR/mktemp-calls"
   got=$(
     stub_gh
+    # shellcheck disable=SC2034 # read by the lib
     work_dir=$TEST_DIR/work
     FAILING_MKTEMP_CALL=$1
     mktemp() {

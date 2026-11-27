@@ -9,9 +9,9 @@
 # The CI-run lookups and the sweep, and the merge-outcome helpers, live beside this file. The merge
 # job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml too.
 release_merge_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=release-merge-ci-lookup.sh
+# shellcheck source=.github/scripts/release-merge-ci-lookup.sh
 source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
-# shellcheck source=release-merge-outcome.sh
+# shellcheck source=.github/scripts/release-merge-outcome.sh
 source "$release_merge_lib_dir/release-merge-outcome.sh"
 
 release_merge_allowlist() {
