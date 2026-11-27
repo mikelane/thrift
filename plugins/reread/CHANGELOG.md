@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/mikelane/thrift/compare/reread-v1.0.3...reread-v1.0.4) (2026-11-27)
+
+
+### Bug Fixes
+
+* **reread:** test through Claude Code 2.1.332 ([#223](https://github.com/mikelane/thrift/issues/223)) ([1fc20f1](https://github.com/mikelane/thrift/commit/1fc20f16024559fded5e1fdc7af71f05d07f0863))
+
 ## [1.0.3](https://github.com/mikelane/thrift/compare/reread-v1.0.2...reread-v1.0.3) (2026-11-26)
 
 
