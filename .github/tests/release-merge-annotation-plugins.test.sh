@@ -91,6 +91,51 @@ test_the_plugins_of_one_pr_do_not_carry_over_to_the_next_pr_of_a_sweep() {
   assert_out_line "::warning title=Release PR #112 (meter) not merged::the PR is a draft (at $SHA_B)"
 }
 
+test_the_plugins_of_one_pr_do_not_carry_over_to_a_next_pr_whose_file_list_cannot_be_fetched() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  stage_release_pr 112 "$SHA_B" meter success
+  edit_pr 111 '.draft = true'
+  rm "$TEST_DIR/files-112.json"
+  run_merge_step release_merge_run_two_prs
+  assert_out_has "::error title=Release PR #112 not merged::cannot fetch the changed files"
+}
+
+# stage_files_json <number> <count> <json>: the files API response the stub serves for the staged PR.
+stage_files_json() {
+  printf '%s\n' "$3" >"$TEST_DIR/files-$1.json"
+  edit_pr "$1" ".changed_files = $2"
+}
+
+test_a_newline_in_a_path_names_no_plugin_from_the_text_after_it() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  stage_files_json 111 1 '[{"filename":"plugins/a\nplugins/evil/CHANGELOG.md"}]'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "::warning title=Release PR #111 not merged::"
+  assert_out_lacks "(evil)"
+}
+
+test_a_carriage_return_in_a_plugin_name_names_no_plugin() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  stage_files_json 111 1 '[{"filename":"plugins/a\rb/CHANGELOG.md"}]'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has "::warning title=Release PR #111 not merged::"
+}
+
+test_a_literal_backslash_escape_in_a_plugin_name_is_named_as_written() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  stage_files 111 'plugins/a\nb/CHANGELOG.md'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_has '::warning title=Release PR #111 (a\nb) not merged::'
+}
+
+test_a_renamed_file_names_the_plugin_of_its_previous_path_too() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  stage_files_json 111 1 '[{"filename":"plugins/meter/CHANGELOG.md","previous_filename":"plugins/handoff/CHANGELOG.md"}]'
+  edit_pr 111 '.draft = true'
+  run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
+  assert_out_line "::warning title=Release PR #111 (handoff%2C meter) not merged::the PR is a draft (at $SHA_A)"
+}
+
 release_merge_run_two_prs() {
   release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   release_merge_pr_if_gate_passes 112 "$SHA_B" 212
@@ -149,6 +194,15 @@ test_a_sibling_with_a_syntax_error_stops_the_step_before_the_gate() {
 
 test_a_sibling_whose_top_level_command_fails_stops_the_step_before_the_gate() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'false'
+  source_lib_copy || true
+  assert_exit_code_nonzero
+  assert_out_lacks "the-gate-ran"
+}
+
+# Under `[[ -r ]] && source`, bash 5 does not apply set -e inside the sourced file, so a failing
+# command that is not the sibling's last is ignored and source returns 0.
+test_a_sibling_whose_earlier_top_level_command_fails_stops_the_step_before_the_gate() {
+  copy_lib_with_bad_sibling release-merge-ci-lookup.sh $'false\ntrue'
   source_lib_copy || true
   assert_exit_code_nonzero
   assert_out_lacks "the-gate-ran"
