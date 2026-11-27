@@ -63,6 +63,18 @@ test_the_unedited_workflow_is_what_the_variants_start_from() {
   workflow_is_pinned "$VARIANT" || fail 'the unedited workflow failed the check'
 }
 
+test_a_variant_of_text_the_workflow_lacks_cannot_be_built() {
+  variant_workflow 'no-such-key: anywhere' 'other: value' 2>/dev/null \
+    && fail 'built a variant from text the workflow does not hold, which is the unedited workflow'
+  return 0
+}
+
+test_a_variant_of_text_the_workflow_holds_twice_cannot_be_built() {
+  variant_workflow ': write' ': read' 2>/dev/null \
+    && fail 'built a variant from text the workflow holds more than once'
+  return 0
+}
+
 test_a_workflow_with_another_app_token_action_pin_is_refused() {
   refuses_variant 'create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc' \
     'create-github-app-token@0000000000000000000000000000000000000000' \
