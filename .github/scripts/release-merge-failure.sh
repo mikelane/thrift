@@ -96,7 +96,8 @@ release_merge_gate_failure_reason() {
 # the command had not been redirected, and deletes the file. /dev/null (no temp file) is left alone.
 release_merge_replay_stderr() {
   [[ -f "$1" ]] || return 0
-  cat "$1" >&2
+  # Callers run this under `|| return 1`, where set -e is off, so a failed read must return here.
+  cat "$1" >&2 || return 1
   rm -f "$1"
 }
 
