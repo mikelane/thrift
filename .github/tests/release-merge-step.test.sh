@@ -108,7 +108,7 @@ test_the_merge_step_writes_one_warning_annotation_per_reason() {
 # A combined release PR refused for a stray plugin file gets a warning naming that file (#207, #215).
 test_the_merge_step_names_the_stray_file_in_the_warning_for_a_combined_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
-  edit_pr 111 '.head.ref = "release-please--branches--main" | .changed_files = 2'
+  edit_pr 111 '.changed_files = 2'
   echo '[{"filename":"plugins/handoff/CHANGELOG.md"},{"filename":"plugins/reread/hooks/register.tsx"}]' \
     >"$TEST_DIR/files-111.json"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
@@ -266,7 +266,7 @@ test_the_merge_step_fails_without_merging_when_the_open_prs_cannot_be_listed() {
   : >"$TEST_DIR/pulls.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_exit_code 1
-  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot check the gate: cannot list the open PRs from release-please--branches--main--components--handoff (at $SHA_A)"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot check the gate: cannot list the open PRs from release-please--branches--main (at $SHA_A)"
   assert_out_lacks "Not merging PR"
   assert_no_file "$TEST_DIR/merge-calls"
 }
@@ -354,7 +354,7 @@ test_the_merge_step_fails_and_names_the_pr_when_it_cannot_create_the_raw_temp_fi
 
 test_a_ci_triggered_run_merges_the_open_pr_from_the_triggering_branch_at_the_tested_commit() {
   stage_release_pr 111 "$SHA_A" handoff success
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
+  TRIGGER=CI BRANCH=release-please--branches--main CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 0
   assert_file_has "$TEST_DIR/merge-calls" "--match-head-commit $SHA_A"

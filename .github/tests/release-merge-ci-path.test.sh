@@ -136,6 +136,20 @@ test_a_sweep_run_does_not_merge_a_pr_whose_newer_failed_run_has_an_unreadable_re
   assert_no_file "$TEST_DIR/merge-calls"
 }
 
+# The sweep calls the merge step inside `||`, where set -e is off, so only the step's own
+# `|| return 1` after the PR fetch stops it. A response of `[]` then the PR fails the parse check
+# (#174); without that return the gate reads the PR's fields past the array and merges it.
+test_a_sweep_run_does_not_merge_a_pr_whose_response_is_an_array_followed_by_the_pr() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  { echo '[]'; jq . "$TEST_DIR/pr-111.json"; } >"$TEST_DIR/pr-stream.json"
+  mv "$TEST_DIR/pr-stream.json" "$TEST_DIR/pr-111.json"
+  TRIGGER='Release Please' run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+  assert_out_line "::error title=Release PR #111 (handoff) not merged::cannot parse the PR (at $SHA_A)"
+  assert_out_lacks "Merging PR #111"
+}
+
 test_the_merge_step_refuses_a_pr_whose_run_id_is_empty() {
   stage_release_pr 111 "$SHA_A" handoff success
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" ''
@@ -179,17 +193,17 @@ test_a_ci_triggered_run_refuses_when_the_triggering_run_id_is_unknown() {
 
 test_a_ci_triggered_run_with_no_open_pr_from_the_branch_merges_nothing_and_succeeds() {
   write_pulls
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
+  TRIGGER=CI BRANCH=release-please--branches--main CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 0
   assert_no_file "$TEST_DIR/merge-calls"
-  assert_out_has "No open PR from release-please--branches--main--components--handoff in $REPO. Nothing to merge."
+  assert_out_has "No open PR from release-please--branches--main in $REPO. Nothing to merge."
 }
 
 test_a_ci_triggered_run_fails_when_the_gate_cannot_fetch_the_pr() {
   stage_release_pr 111 "$SHA_A" handoff success
   rm "$TEST_DIR/pr-111.json"
-  TRIGGER=CI BRANCH=release-please--branches--main--components--handoff CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
+  TRIGGER=CI BRANCH=release-please--branches--main CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
     run_merge_step release_merge_run
   assert_exit_code 1
   assert_no_file "$TEST_DIR/merge-calls"
@@ -281,7 +295,7 @@ test_the_merge_step_keeps_the_gates_stderr_in_the_log_when_a_gate_lookup_fails()
   : >"$TEST_DIR/pulls.error"
   run_merge_step release_merge_pr_if_gate_passes 111 "$SHA_A" 211
   assert_out_line "HTTP 500"
-  assert_out_line "cannot list the open PRs from release-please--branches--main--components--handoff"
+  assert_out_line "cannot list the open PRs from release-please--branches--main"
 }
 
 test_the_merge_step_leaves_no_temp_files_after_a_failed_gate_lookup() {

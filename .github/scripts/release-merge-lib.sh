@@ -137,18 +137,14 @@ release_merge_record_problem() {
   esac
 }
 
-# release_merge_pr_if_gate_passes <number> <tested-sha> <ci-run-id>: runs the gate on PR <number>
-# against <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. The
-# gate also requires the pr-record of CI run <ci-run-id> to name <number> into $BASE; an empty id is
-# refused. The CI path passes the triggering run, the sweep the run release_merge_ci_outcome chose
-# (so a swept PR's record is downloaded twice). A refusal returns 0, so the job stays green. A
-# failed lookup (including a PR response that is not exactly one JSON object), or a failed merge
-# that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp
-# files) and RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
-# shellcheck disable=SC2154,SC2153 # the variables above come from the caller
-release_merge_pr_if_gate_passes() {
-  local number=$1 tested_sha=$2 ci_run_id=$3 did_merge=0 pr files raw listed problems problem merge_stderr gate_stderr gate_status
-  release_merge_clear_plugin_label
+# release_merge_fetch_pr <number> <tested-sha>: reads PR <number> and its changed files into temp files
+# and sets the caller's `pr`, `files` and `raw` to the paths of the files holding the PR JSON, the
+# changed paths (one per line) and the files API response, `listed` to how many files it listed, and
+# the plugin label. Each failing step prints an error annotation naming the PR and <tested-sha> and
+# returns 1, including a PR response that is not exactly one JSON object.
+# shellcheck disable=SC2154,SC2034 # work_dir and REPO come from the caller; the outputs are read by it
+release_merge_fetch_pr() {
+  local number=$1 tested_sha=$2
   # The sweep calls this inside `||`, where set -e is off: each step that can fail returns.
   pr=$(mktemp "$work_dir/pr.XXXXXX") \
     || release_merge_fail "$number" "cannot create a temp file for the PR (at $tested_sha)" || return 1
@@ -163,41 +159,42 @@ release_merge_pr_if_gate_passes() {
     || release_merge_fail "$number" "cannot fetch the changed files (at $tested_sha)" || return 1
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files (at $tested_sha)" || return 1
-  release_merge_set_plugin_label "$files"
+  release_merge_set_plugin_label "$files" || return 1
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
-  # A fetch that is not exactly one JSON object would otherwise read as refusals built from empty
-  # fields; `jq -e` alone checks only the last value of a stream, so slurp and count.
+  # `jq -e` alone checks only the last value of a stream, so slurp and count.
   jq -se 'length == 1 and (.[0] | type) == "object"' "$pr" >/dev/null 2>&1 \
     || release_merge_fail "$number" "cannot parse the PR (at $tested_sha)" || return 1
+}
+
+# release_merge_check_gate <number> <tested-sha> <ci-run-id>: runs the gate on the PR that
+# release_merge_fetch_pr read (the caller's `pr`, `files`, `listed`) and on the pr-record of CI run
+# <ci-run-id>, and sets the caller's `problems` to the reasons not to merge, one per line, or nothing.
+# A lookup that fails prints an error annotation and returns 1.
+# shellcheck disable=SC2154,SC2153 # the variables above and BASE, BOT_LOGIN come from the caller
+release_merge_check_gate() {
+  local gate_stderr gate_status
   # The gate's stderr goes to a file so a failure's annotation can name the lookup that failed; it
   # is replayed to the log either way. With no temp file it goes nowhere and the annotation leaves
   # the cause out. The gate still runs.
   gate_stderr=$(mktemp "$work_dir/gate-stderr.XXXXXX") || gate_stderr=/dev/null
   problems=$(release_merge_problems "$pr" "$files" "${RELEASE_MERGE_CONFIG:-release-please-config.json}" \
-    "$REPO" "$BASE" "$BOT_LOGIN" "$tested_sha" "$listed" 2>"$gate_stderr") && gate_status=0 || gate_status=$?
+    "$REPO" "$BASE" "$BOT_LOGIN" "$2" "$listed" 2>"$gate_stderr") && gate_status=0 || gate_status=$?
   if [[ "$gate_status" != 0 ]]; then
-    release_merge_fail "$number" "$(release_merge_gate_failure_reason "$tested_sha" "$gate_stderr")" || true
+    release_merge_fail "$1" "$(release_merge_gate_failure_reason "$2" "$gate_stderr")" || true
     release_merge_replay_stderr "$gate_stderr"
     return 1
   fi
-  release_merge_replay_stderr "$gate_stderr"
-  release_merge_record_problem "$ci_run_id" "$number" "$tested_sha" || return 1
-  rm -f "$pr" "$files" "$raw"
-  # A refusal returns 0, so the job is green. Each reason also goes out as a warning
-  # annotation, which shows on the run summary without opening the log. Reasons carry
-  # PR-controlled text (branch, author, file paths): each log line starts with "- " so
-  # none is read as a workflow command, and % is escaped as the annotation format requires.
-  if [[ -n "$problems" ]]; then
-    echo "Not merging PR #$number at $tested_sha:"
-    while IFS= read -r problem; do
-      echo "- $problem"
-      echo "::warning title=$(release_merge_annotation_title "$number" "not merged")::${problem//\%/%25} (at $tested_sha)"
-    done <<<"$problems"
-    return 0
-  fi
+  release_merge_replay_stderr "$gate_stderr" || return 1
+  release_merge_record_problem "$3" "$1" "$2" || return 1
+}
 
+# release_merge_squash_merge <number> <tested-sha>: squash-merges PR <number> at <tested-sha>. A failed
+# merge that is not a lost race returns 1. Reads REPO and work_dir.
+# shellcheck disable=SC2154 # REPO and work_dir come from the caller
+release_merge_squash_merge() {
+  local number=$1 tested_sha=$2 did_merge=0 merge_stderr
   echo "Merging PR #$number at $tested_sha."
   # gh's stderr goes to a file so a failure's annotation can carry its reason; with no temp file it
   # goes nowhere, and the annotation just leaves the reason out. The merge still runs.
@@ -211,6 +208,27 @@ release_merge_pr_if_gate_passes() {
     echo "Merged PR #$number at $tested_sha."
     echo "::notice title=$(release_merge_annotation_title "$number" "merged")::Merged PR #$number at $tested_sha."
   }
+}
+
+# release_merge_pr_if_gate_passes <number> <tested-sha> <ci-run-id>: runs the gate on PR <number>
+# against <tested-sha>, the commit CI tested, and squash-merges it when the gate finds nothing. The
+# gate also requires the pr-record of CI run <ci-run-id> to name <number> into $BASE; an empty id is
+# refused. The CI path passes the triggering run, the sweep the run release_merge_ci_outcome chose
+# (so a swept PR's record is downloaded twice). A refusal returns 0, so the job stays green. A
+# failed lookup (including a PR response that is not exactly one JSON object), or a failed merge
+# that is not a lost race, returns 1. Reads REPO, BASE, BOT_LOGIN, work_dir (a directory for temp
+# files) and RELEASE_MERGE_CONFIG (the release-please config, default release-please-config.json).
+release_merge_pr_if_gate_passes() {
+  local pr files raw listed problems
+  release_merge_clear_plugin_label
+  release_merge_fetch_pr "$1" "$2" || return 1
+  release_merge_check_gate "$1" "$2" "$3" || return 1
+  rm -f "$pr" "$files" "$raw"
+  if [[ -n "$problems" ]]; then
+    release_merge_report_refusal "$1" "$2" "$problems"
+    return 0
+  fi
+  release_merge_squash_merge "$1" "$2"
 }
 
 # release_merge_triggering_run_is_latest <number> <tested-sha> <head-ref> <ci-run-id>: succeeds when
@@ -239,7 +257,7 @@ release_merge_triggering_run_is_latest() {
 # release PR whose CI passed at its head; otherwise merges the open PR from BRANCH at
 # CI_TESTED_SHA. Returns 1 when any lookup or merge failed, and goes on to the other PRs first.
 # Reads REPO, OWNER, BASE, TRIGGER, BRANCH, CI_TESTED_SHA, CI_RUN_ID (the triggering run) and what
-# the function above reads.
+# release_merge_pr_if_gate_passes reads.
 release_merge_run() {
   local failed=0 candidates number sha run_id latest_status
   if [[ "$TRIGGER" == "Release Please" ]]; then

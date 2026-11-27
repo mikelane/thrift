@@ -96,6 +96,21 @@ release_merge_gate_failure_reason() {
 # the command had not been redirected, and deletes the file. /dev/null (no temp file) is left alone.
 release_merge_replay_stderr() {
   [[ -f "$1" ]] || return 0
-  cat "$1" >&2
+  # Callers run this under `|| return 1`, where set -e is off, so a failed read must return here.
+  cat "$1" >&2 || return 1
   rm -f "$1"
+}
+
+# release_merge_report_refusal <number> <tested-sha> <problems>: says why the gate refused PR <number>
+# (<problems> is one reason per line), as a log line and a warning annotation for each, which shows
+# on the run summary without opening the log. Reasons carry PR-controlled text (branch, author, file
+# paths): each log line starts with "- " so none is read as a workflow command, and % is escaped as
+# the annotation format requires.
+release_merge_report_refusal() {
+  local problem
+  echo "Not merging PR #$1 at $2:"
+  while IFS= read -r problem; do
+    echo "- $problem"
+    echo "::warning title=$(release_merge_annotation_title "$1" "not merged")::${problem//\%/%25} (at $2)"
+  done <<<"$3"
 }

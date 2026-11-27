@@ -8,7 +8,7 @@ source "$RELEASE_MERGE_LIB"
 
 REPO=mikelane/thrift
 BOT='thrift-release[bot]'
-RELEASE_BRANCH=release-please--branches--main--components--handoff
+RELEASE_BRANCH=release-please--branches--main
 SHA=0123456789abcdef0123456789abcdef01234567
 CONFIG=$REPO_ROOT/release-please-config.json
 SHA_A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -16,9 +16,9 @@ SHA_B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 # write_pr <file> [jq filter]: a release PR that passes the gate (one changed file), edited by the filter.
 write_pr() {
-  jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" '{
+  jq -n --arg repo "$REPO" --arg bot "$BOT" --arg sha "$SHA" --arg branch "$RELEASE_BRANCH" '{
     number: 111, state: "open", changed_files: 1, base: {ref: "main"},
-    head: {ref: "release-please--branches--main--components--handoff", sha: $sha,
+    head: {ref: $branch, sha: $sha,
            repo: {full_name: $repo}},
     user: {login: $bot}}' | jq "${2:-.}" >"$1"
 }
@@ -78,9 +78,9 @@ stub_gh() {
 
 # open_pr <number> <sha> [jq filter]: one entry of the open-pull-requests list.
 open_pr() {
-  jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" '{
+  jq -n --arg n "$1" --arg sha "$2" --arg repo "$REPO" --arg branch "$RELEASE_BRANCH" '{
     number: ($n | tonumber), state: "open", base: {ref: "main"},
-    head: {ref: "release-please--branches--main--components--handoff", sha: $sha, repo: {full_name: $repo}}}' \
+    head: {ref: $branch, sha: $sha, repo: {full_name: $repo}}}' \
     | jq -c "${3:-.}"
 }
 
@@ -175,8 +175,11 @@ with zipfile.ZipFile(sys.argv[1], "w") as z:
 
 # stage_release_pr <number> <sha> <component> <ci-conclusion>: a release PR that passes the gate,
 # with its changed files and its CI run (id 100 + the number, its pr-record naming the PR), in $TEST_DIR. Each call adds the PR to the open list.
+# The first PR staged is on $RELEASE_BRANCH; open PRs may not share a head ref, so each later one gets
+# $RELEASE_BRANCH--<component>.
 stage_release_pr() {
-  local branch=release-please--branches--main--components--$3
+  local branch=$RELEASE_BRANCH
+  [[ ! -s "$TEST_DIR/open-prs.jsonl" ]] || branch=$RELEASE_BRANCH--$3
   write_pr "$TEST_DIR/pr-$1.json" ".number = $1 | .head.sha = \"$2\" | .head.ref = \"$branch\""
   echo "[{\"filename\":\"plugins/$3/CHANGELOG.md\"}]" >"$TEST_DIR/files-$1.json"
   write_runs "$2" "CI completed $4 2026-10-18T10:00:00Z .github/workflows/ci.yml $REPO $branch $1 $((100 + $1))"
