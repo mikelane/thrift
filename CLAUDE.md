@@ -89,7 +89,7 @@ specific to this repo.
   - Where the code lives: the gate, the sweep and the merge step live in three files under
     `.github/scripts/` (production code, so not under `.github/tests/`): `release-merge-lib.sh`
     (the gate and the merge step), `release-merge-ci-lookup.sh` (the CI-run and `pr-record`
-    lookups, and the sweep) and `release-merge-outcome.sh` (the helpers that say how a merge
+    lookups, and the sweep) and `release-merge-failure.sh` (the helpers that say how a merge
     attempt ended). The workflow step only sources `release-merge-lib.sh`, which sources the other
     two from its own directory, and calls `release_merge_run`. The merge job's sparse checkout lists
     each lib file by name, so a new lib file must be added there, and to

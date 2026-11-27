@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by release-merge-lib.sh: the helpers that say how a merge attempt ended.
+# Sourced by release-merge-lib.sh: the helpers that say how a failed or refused merge ended.
 
 # release_merge_lost_race <repo> <number> <sha>: after a failed merge, succeeds (and says why) when
 # the other trigger got there first: the PR is no longer open, or its head moved off <sha>. The

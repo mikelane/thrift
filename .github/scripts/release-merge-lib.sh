@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
 
-# The CI-run lookups and the sweep, and the merge-outcome helpers, live beside this file. The merge
+# The CI-run lookups and the sweep, and the merge-failure helpers, live beside this file. The merge
 # job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=.github/scripts/release-merge-ci-lookup.sh
 source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
-# shellcheck source=.github/scripts/release-merge-outcome.sh
-source "$release_merge_lib_dir/release-merge-outcome.sh"
+# shellcheck source=.github/scripts/release-merge-failure.sh
+source "$release_merge_lib_dir/release-merge-failure.sh"
 
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
