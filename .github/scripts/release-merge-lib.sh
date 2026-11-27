@@ -159,7 +159,7 @@ release_merge_fetch_pr() {
     || release_merge_fail "$number" "cannot fetch the changed files (at $tested_sha)" || return 1
   release_merge_changed_files <"$raw" >"$files" \
     || release_merge_fail "$number" "cannot read the changed files (at $tested_sha)" || return 1
-  release_merge_set_plugin_label "$files"
+  release_merge_set_plugin_label "$files" || return 1
 
   listed=$(jq -s '[.[][] | .filename] | length' "$raw") \
     || release_merge_fail "$number" "cannot count the changed files (at $tested_sha)" || return 1
@@ -186,7 +186,7 @@ release_merge_check_gate() {
     release_merge_replay_stderr "$gate_stderr"
     return 1
   fi
-  release_merge_replay_stderr "$gate_stderr"
+  release_merge_replay_stderr "$gate_stderr" || return 1
   release_merge_record_problem "$3" "$1" "$2" || return 1
 }
 

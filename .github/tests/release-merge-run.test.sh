@@ -226,4 +226,17 @@ test_a_ci_triggered_run_merges_when_no_temp_file_fails() {
   assert_file_has "$TEST_DIR/merge-calls" "pr merge 111 "
 }
 
+# The CI path runs the merge step without `||`, so set -e stops it; the helpers it calls under
+# `|| return 1` lose that, and each step that can fail must return on its own.
+test_a_ci_triggered_run_does_not_merge_when_the_gate_stderr_cannot_be_replayed() {
+  stage_release_pr 111 "$SHA_A" handoff success
+  mkdir "$TEST_DIR/failing-cat"
+  printf '%s\n' '#!/bin/bash' 'case "$1" in */gate-stderr.*) exit 1;; esac' 'exec /bin/cat "$@"' >"$TEST_DIR/failing-cat/cat"
+  chmod +x "$TEST_DIR/failing-cat/cat"
+  PATH="$TEST_DIR/failing-cat:$PATH" TRIGGER=CI BRANCH=$RELEASE_BRANCH CI_TESTED_SHA="$SHA_A" CI_RUN_ID=211 \
+    run_merge_step release_merge_run
+  assert_exit_code 1
+  assert_no_file "$TEST_DIR/merge-calls"
+}
+
 run_tests "$@"
