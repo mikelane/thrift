@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/canary-report-lib.sh"
 source "$RELEASE_MERGE_LIB"
 
 REPO=mikelane/thrift
-BRANCH=release-please--branches--main--components--handoff
+BRANCH=release-please--branches--main
 
 # allowlist_for <config-json>: the allowlist the gate derives from that config.
 allowlist_for() {

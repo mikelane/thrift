@@ -224,7 +224,7 @@ test_the_pr_lookup_sends_a_get_request_so_gh_does_not_create_a_pull_request() {
     '[[ "${method:-GET}" == GET ]] || { echo "gh would send a $method and create a pull request" >&2; exit 1; }' \
     'echo 42' >"$dir/gh"
   chmod +x "$dir/gh"
-  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane release-please--branches--main--components--handoff main 2>&1)
+  got=$(PATH="$dir:$PATH" release_merge_open_pr_number "$REPO" mikelane release-please--branches--main main 2>&1)
   [[ "$got" == 42 ]] || fail "got [$got]"
 }
 
@@ -309,7 +309,7 @@ test_another_open_pr_from_the_release_branch_blocks_the_merge() {
   local got
   write_pulls "$(open_pr 111 "$SHA")" "$(open_pr 999 "$SHA" '.base.ref = "old-feature"')"
   got=$(gate_problems .)
-  [[ "$got" == 'another open PR shares the branch release-please--branches--main--components--handoff: #999' ]] \
+  [[ "$got" == 'another open PR shares the branch release-please--branches--main: #999' ]] \
     || fail "got [$got]"
 }
 
@@ -327,7 +327,7 @@ test_a_failed_open_pr_lookup_fails_the_gate_instead_of_reading_as_a_refusal() {
   status=$?
   [[ "$status" != 0 ]] || fail 'a failed PR list returned 0, which reads as "no problems" or a refusal'
   [[ -z "$got" ]] || fail "printed a problem [$got], which the caller reads as a refusal"
-  assert_file_has "$TEST_DIR/err" 'cannot list the open PRs from release-please--branches--main--components--handoff'
+  assert_file_has "$TEST_DIR/err" 'cannot list the open PRs from release-please--branches--main'
 }
 
 test_an_open_pr_from_a_forks_branch_of_the_same_name_is_not_a_sibling() {
