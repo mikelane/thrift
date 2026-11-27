@@ -17,10 +17,9 @@
 # SAFETY: a base branch's own ci.yml could write any record it likes. Only someone with write
 # access can create that branch, and the gate's author, SHA and file-allowlist checks still apply.
 release_merge_run_record_verdict() {
-  local artifact_id record record_path zip_path byte_count nul_free_count read_status=0
+  local artifact_id
   release_merge_run_record_detail=
   release_merge_run_record_named=
-  record=
   if [[ -z "$2" ]]; then
     release_merge_run_record_detail="is unknown (no run id)"
     return 1
@@ -40,10 +39,26 @@ release_merge_run_record_verdict() {
     release_merge_run_record_detail="has no pr-record artifact"
     return 3
   fi
+  release_merge_read_run_record "$1" "$2" "$artifact_id" || return $?
+  if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$release_merge_run_record" >/dev/null; then
+    return 0
+  fi
+  release_merge_run_record_named=$release_merge_run_record
+  release_merge_run_record_detail="has a pr-record naming $release_merge_run_record"
+  return 1
+}
+
+# release_merge_read_run_record <repo> <run-id> <artifact-id>: downloads the pr-record artifact
+# <artifact-id> of CI run <run-id> and sets release_merge_run_record to its {number, base} object.
+# Returns 0 when it read one, 1 when the record is unreadable and 2 when a lookup failed (a temp file
+# or the download); both failures set release_merge_run_record_detail, as the verdict documents.
+release_merge_read_run_record() {
+  local zip_path record_path
+  release_merge_run_record=
   zip_path=$(mktemp "${work_dir:-${TMPDIR:-/tmp}}/pr-record.XXXXXX") || { release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"; return 2; }
-  GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$artifact_id/zip" >"$zip_path" || {
+  GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$3/zip" >"$zip_path" || {
     rm -f "$zip_path"
-    release_merge_run_record_detail="cannot download the pr-record (artifact $artifact_id) of CI run $2"
+    release_merge_run_record_detail="cannot download the pr-record (artifact $3) of CI run $2"
     return 2
   }
   record_path=$(mktemp "${work_dir:-${TMPDIR:-/tmp}}/pr-record.XXXXXX") || {
@@ -51,34 +66,41 @@ release_merge_run_record_verdict() {
     release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"
     return 2
   }
+  release_merge_run_record=$(release_merge_parse_record "$zip_path" "$record_path") || release_merge_run_record=
+  rm -f "$zip_path" "$record_path"
+  [[ -n "$release_merge_run_record" ]] || { release_merge_run_record_detail="has an unreadable pr-record"; return 1; }
+}
+
+# release_merge_parse_record <zip> <scratch-file>: prints the {number, base} object that the pr-record.json
+# in <zip> holds, using <scratch-file> to measure it, and returns 1 when the record is unreadable.
+release_merge_parse_record() {
+  local byte_count nul_free_count record
   # pipefail here, whatever the caller set: a failed unzip must not hide behind head's success.
   # One byte past the limit tells a record that fits from one that was cut. The bytes go to a file
   # and are counted there: a bash string would drop NUL bytes and under-measure the record.
-  (set -o pipefail; unzip -p "$zip_path" pr-record.json 2>/dev/null | head -c 4097 >"$record_path") || read_status=1
-  rm -f "$zip_path"
-  if (( read_status == 0 )); then
-    byte_count=$(LC_ALL=C wc -c <"$record_path") || read_status=1
-    nul_free_count=$(LC_ALL=C tr -d '\000' <"$record_path" | LC_ALL=C wc -c) || read_status=1
-    (( byte_count <= 4096 && byte_count == nul_free_count )) || read_status=1
-  fi
-  if (( read_status == 0 )); then
-    record=$(jq -sc 'if length == 1 then .[0] else error("not a record") end
-                     | if type == "object" and (.number | type) == "number" and (.base | type) == "string"
-                       then {number, base} else error("not a record") end' "$record_path" 2>/dev/null) || read_status=1
-  fi
-  rm -f "$record_path"
+  (set -o pipefail; unzip -p "$1" pr-record.json 2>/dev/null | head -c 4097 >"$2") || return 1
+  byte_count=$(LC_ALL=C wc -c <"$2") || return 1
+  nul_free_count=$(LC_ALL=C tr -d '\000' <"$2" | LC_ALL=C wc -c) || return 1
+  (( byte_count <= 4096 && byte_count == nul_free_count )) || return 1
+  record=$(jq -sc 'if length == 1 then .[0] else error("not a record") end
+                   | if type == "object" and (.number | type) == "number" and (.base | type) == "string"
+                     then {number, base} else error("not a record") end' "$2" 2>/dev/null) || return 1
   # jq given only whitespace prints nothing and exits 0, so an empty record is unreadable too.
-  [[ -n "$record" ]] || read_status=1
-  if (( read_status != 0 )); then
-    release_merge_run_record_detail="has an unreadable pr-record"
-    return 1
-  fi
-  if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$record" >/dev/null; then
-    return 0
-  fi
-  release_merge_run_record_named=$record
-  release_merge_run_record_detail="has a pr-record naming $record"
-  return 1
+  [[ -n "$record" ]] || return 1
+  echo "$record"
+}
+
+# release_merge_ci_candidate_runs <repo> <head-ref>: reads the runs API response on stdin and prints
+# "<id> <conclusion>" for each CI run that could be the PR's, newest first (`running` for a run with
+# no conclusion yet).
+release_merge_ci_candidate_runs() {
+  jq -rs --arg repo "$1" --arg ref "$2" '
+    [.[].workflow_runs[]
+     | select(.path == ".github/workflows/ci.yml"
+              and .head_repository.full_name == $repo
+              and .head_branch == $ref)]
+    | sort_by(.created_at, .id) | reverse | .[]
+    | "\(.id) \(if .conclusion == null then "running" else .conclusion end)"'
 }
 
 # release_merge_ci_outcome <repo> <sha> <head-ref> <number> <base>: reports, as its return code,
@@ -110,13 +132,7 @@ release_merge_ci_outcome() {
   release_merge_ci_decoy_runs=
   release_merge_run_record_detail=
   runs=$(GH_TOKEN=${RUNS_TOKEN-} gh api --paginate --method GET "repos/$1/actions/runs?head_sha=$2&event=pull_request&per_page=100") || return 2
-  candidate_runs=$(jq -rs --arg repo "$1" --arg ref "$3" '
-    [.[].workflow_runs[]
-     | select(.path == ".github/workflows/ci.yml"
-              and .head_repository.full_name == $repo
-              and .head_branch == $ref)]
-    | sort_by(.created_at, .id) | reverse | .[]
-    | "\(.id) \(if .conclusion == null then "running" else .conclusion end)"' <<<"$runs") || return 2
+  candidate_runs=$(release_merge_ci_candidate_runs "$1" "$3" <<<"$runs") || return 2
   release_merge_ci_conclusion=none
   # The list comes in on fd 3, so nothing the record lookup runs (gh, unzip) can read it from stdin.
   while read -r run_id run_conclusion <&3; do
