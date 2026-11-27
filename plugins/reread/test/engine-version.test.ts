@@ -21,6 +21,8 @@ const isUnsupportedEngineCases = [
   ['2.1.333-dev', true],
   ['2.1.100-dev', true],
   [' 2.1.332', true],
+  ['2.2.0-dev', true],
+  ['2.1.308 ', true],
   [undefined, true],
   ['', true],
   ['2.1', true],

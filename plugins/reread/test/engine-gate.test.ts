@@ -54,39 +54,32 @@ describe('engineInfo: an engine older than the minimum', () => {
 })
 
 describe('engineInfo: an engine at or after the minimum', () => {
-  test('It logs no untested_engine record on the default engine', ACT, async ($, on) => {
+  test("It logs no untested_engine record on the harness's default engine", ACT, async ($, on) => {
     const world = install($, on)
     putFile(world, '/work/a.ts', SEVEN_LINES)
     await read($, '/work/a.ts')
     expect(world.records.some(record => record.action === 'untested_engine')).toBe(false)
   })
 
-  test('It answers a repeat with a stub on the minimum engine', ACT, async ($, on) => {
-    const world = install($, on)
-    world.version = { version: '2.1.308', base: '2.1.308' }
-    putFile(world, '/work/a.ts', SEVEN_LINES)
-    await read($, '/work/a.ts')
-    const second = await read($, '/work/a.ts')
-    expect([isStub(second), world.records.some(record => record.action === 'untested_engine')]).toEqual([true, false])
-  })
+  for (const version of ['2.1.308', '2.1.333']) {
+    test(`It answers a repeat with a stub on ${version}`, ACT, async ($, on) => {
+      const world = install($, on)
+      world.version = { version, base: version }
+      putFile(world, '/work/a.ts', SEVEN_LINES)
+      await read($, '/work/a.ts')
+      const second = await read($, '/work/a.ts')
+      expect([isStub(second), world.records.some(record => record.action === 'untested_engine')]).toEqual([true, false])
+    })
 
-  test('It answers a repeat with a stub on a release newer than any tested', ACT, async ($, on) => {
-    const world = install($, on)
-    world.version = { version: '2.1.333', base: '2.1.333' }
-    putFile(world, '/work/a.ts', SEVEN_LINES)
-    await read($, '/work/a.ts')
-    const second = await read($, '/work/a.ts')
-    expect([isStub(second), world.records.some(record => record.action === 'untested_engine')]).toEqual([true, false])
-  })
-
-  test('It runs in the configured mode on a newer release', ACT, async ($, on) => {
-    const world = install($, on)
-    world.version = { version: '2.1.333', base: '2.1.333' }
-    putFile(world, '/work/a.ts', SEVEN_LINES)
-    await read($, '/work/a.ts')
-    await read($, '/work/a.ts')
-    expect([triggerValues(world).setting, triggerValues(world).effective_mode, lastRecord(world).mode]).toEqual(['act', 'act', 'active'])
-  })
+    test(`It records effective_mode act and mode active on ${version}`, ACT, async ($, on) => {
+      const world = install($, on)
+      world.version = { version, base: version }
+      putFile(world, '/work/a.ts', SEVEN_LINES)
+      await read($, '/work/a.ts')
+      await read($, '/work/a.ts')
+      expect([triggerValues(world).setting, triggerValues(world).effective_mode, lastRecord(world).mode]).toEqual(['act', 'act', 'active'])
+    })
+  }
 })
 
 describe('engineInfo: the engine version', () => {
