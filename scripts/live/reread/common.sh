@@ -3,8 +3,8 @@
 
 # reread_prepare <read-mode>: copies the plugin into the run directory, so the repo is never
 # touched, and writes the settings file that sets readMode for the run. The copy is the plugin as it
-# stands: reread has no thresholds to lower, and the tested-through release is the constant under
-# test.
+# stands: reread has no thresholds to lower, and the minimum-engine constant (MINIMUM_PARTS) is
+# what is under test.
 reread_prepare() {
   local read_mode=$1
   local copy="$LIVE_RUN/plugin"
@@ -75,8 +75,8 @@ reread_show_step_records() {
 }
 
 # Every record of the run is reread's, written in active mode with readMode ask, by the engine the
-# harness started. A plugin held at off by an untested build writes mode shadow and effective_mode
-# off.
+# harness started. A plugin held at off by a build older than 2.1.308 or not a release writes mode
+# shadow and effective_mode off.
 reread_all_records_are_active_ask() {
   [[ -f "$LIVE_DECISIONS" ]] || return 1
   jq -s --arg engine "$LIVE_ENGINE_VERSION" \

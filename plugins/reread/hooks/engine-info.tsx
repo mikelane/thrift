@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { ReadMode } from '../types'
 import { debug } from './engine-log'
-import { isUntestedEngine } from './engine-version'
+import { isUnsupportedEngine } from './engine-version'
 import type { RecordSetting } from './decision-record'
 import { writeRecord } from './record-writer'
 import type { SessionState } from './session-state'
@@ -21,17 +21,18 @@ async function readVersion($: EngineInterface) {
 
 async function settle($: EngineInterface, setting: ReadMode): Promise<EngineInfo> {
   const { engineVersion, base } = await readVersion($)
-  const isUntested = isUntestedEngine(base)
-  const engine: EngineInfo = { engineVersion, setting, effectiveMode: isUntested ? 'off' : setting }
-  if (isUntested) {
-    debug($, `engine ${engineVersion} is not a release at or before the one reread was tested through, so it runs as off`)
+  const isUnsupported = isUnsupportedEngine(base)
+  const engine: EngineInfo = { engineVersion, setting, effectiveMode: isUnsupported ? 'off' : setting }
+  if (isUnsupported) {
+    debug($, `engine ${engineVersion} is older than the minimum reread runs on, or is not a release, so it runs as off`)
+    // `untested_engine` is the logged name for an unsupported build; it is kept so earlier logs stay comparable.
     await writeRecord($, engine, { decision: 'untested_engine', reason: 'untested_engine', isSubagent: false })
   }
   return engine
 }
 
 // The engine is read on first use and kept: no session.start follows a /clear, and the plugin can be started again mid-session.
-// A plugin on an engine newer than the one it was tested through runs as off.
+// A plugin on an engine older than the minimum it was verified on, or on a build that is not a release, runs as off.
 export function engineInfo($: EngineInterface, state: SessionState): Promise<EngineInfo> {
   state.engine ??= settle($, state.setting)
   return state.engine

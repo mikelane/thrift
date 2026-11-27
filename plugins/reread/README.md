@@ -10,9 +10,9 @@ Success means fewer bytes of repeat file contents entering the context, measured
 `bytes_saved` summed per session in `decisions.jsonl` against the `bytes_would_save` baseline that
 `off` mode logs.
 
-> **Status:** early. The tests pass against Claude Code 2.1.332, and the plugin is tested through
-> that release. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 and
-> 2.1.332 in the terminal CLI; see [What has been verified live](#what-has-been-verified-live).
+> **Status:** early. The plugin runs on Claude Code 2.1.308 and newer, and the tests pass against
+> 2.1.332. Live checks ran in `ask` mode on 2.1.308 in the Desktop app and on 2.1.330 and 2.1.332 in
+> the terminal CLI; see [What has been verified live](#what-has-been-verified-live).
 
 ## Install
 
@@ -124,7 +124,7 @@ log and never touches the turn. Nothing from the log is written into the session
 
 The plugin writes one record per `Read` it evaluates (passes included, so you can compute a rate),
 one per invalidation that dropped at least one read, and one `untested_engine` record per session on
-a build it was not tested through.
+a build older than 2.1.308 or not a release.
 
 ```json
 {"ts":"2026-10-26T20:49:10.438Z","session_id":"abc","component":"reread","mode":"active","action":"dedupe","engine_version":"2.1.311","trigger_values":{"decision":"dedupe","reason":"exact_repeat","bytes_saved":6520,"gross_bytes":6910,"stub_bytes":390,"lines":120,"range_kind":"full","turns_since_read":3,"is_subagent":false,"path_hash":"3f2a9c1d7b0e4a58","effective_mode":"act","setting":"act"}}
@@ -135,11 +135,11 @@ a build it was not tested through.
 | `ts` | ISO 8601 UTC |
 | `session_id` | The session the decision is about. An invalidation at the end of a session carries the id of the session that ended. |
 | `component` | Always `reread` |
-| `mode` | `shadow` only when `action` is `none`, otherwise `active`. A plugin in `off`, or held in `off` by an untested build, writes `none` and `shadow`. |
+| `mode` | `shadow` only when `action` is `none`, otherwise `active`. A plugin in `off`, or held in `off` by an unsupported build, writes `none` and `shadow`. |
 | `action` | `dedupe` (answered with a stub), `pass` (let through), `override` (let through because the model asked again after a stub), `invalidate` (dropped tracked reads), `untested_engine`, or `none` (in `off`, whatever the logic decided) |
 | `engine_version` | The Claude Code release (`base`), or the full version when there is no `base`, or `unknown` when it could not be read. |
 | `trigger_values.decision` | What the logic decided: `dedupe`, `pass`, `override`, `invalidate`, or `untested_engine`. In `off` this is what `action` would have been. |
-| `trigger_values.reason` | Why the decision came out as it did: `first_read`, `exact_repeat` (the same request again), `inside_full_read` (a range inside an earlier read of the whole file), `changed` (size, modified time or hash differ, or the file changed during the read), `different_range` (the file was read, but no earlier read covers this range), `not_text` (an image, PDF, notebook, page images or other non-text result), `pdf_pages` (a `pages` read), `error_result` (the tool refused or failed), `token_cap_truncated` (Claude Code cut the read short at its token cap, so it is tracked as partial), `not_in_context` (the original result is not in the conversation, is there as an error, no longer begins with the text the model read, or the conversation could not be read), `plugin_call` (another plugin raised the read), `override_after_stub` (the model asked again after a stub), `stub_not_smaller` (a stub would not have been smaller, in UTF-8 bytes, than the text it replaces, so the read passed), `core_dedup` (Claude Code answered with its own `file_unchanged`), `unreadable` (the file could not be statted, read or hashed, or tracking it failed), `untested_engine` (the build is newer than the plugin was tested through, or is not a release), `compaction`, `clear` (the session ended), `edit` (a file-editing tool ran), or `bash` (a Bash command ran) |
+| `trigger_values.reason` | Why the decision came out as it did: `first_read`, `exact_repeat` (the same request again), `inside_full_read` (a range inside an earlier read of the whole file), `changed` (size, modified time or hash differ, or the file changed during the read), `different_range` (the file was read, but no earlier read covers this range), `not_text` (an image, PDF, notebook, page images or other non-text result), `pdf_pages` (a `pages` read), `error_result` (the tool refused or failed), `token_cap_truncated` (Claude Code cut the read short at its token cap, so it is tracked as partial), `not_in_context` (the original result is not in the conversation, is there as an error, no longer begins with the text the model read, or the conversation could not be read), `plugin_call` (another plugin raised the read), `override_after_stub` (the model asked again after a stub), `stub_not_smaller` (a stub would not have been smaller, in UTF-8 bytes, than the text it replaces, so the read passed), `core_dedup` (Claude Code answered with its own `file_unchanged`), `unreadable` (the file could not be statted, read or hashed, or tracking it failed), `untested_engine` (the build is older than 2.1.308, or is not a release), `compaction`, `clear` (the session ended), `edit` (a file-editing tool ran), or `bash` (a Bash command ran) |
 | `trigger_values.bytes_saved` | `act` and `ask` only, on a `dedupe`: the net bytes the stub kept out of the context, `gross_bytes - stub_bytes`. Always positive: a stub that would not be smaller is not sent. |
 | `trigger_values.bytes_would_save` | `off` only, on a `dedupe`: the same net figure, for the saving a stub would have made |
 | `trigger_values.gross_bytes` | On a `dedupe` or a `stub_not_smaller` pass: the UTF-8 bytes of the text the model read the first time, line numbers included. For a range inside a full read, the bytes of those lines in the file's own text, which leaves out the line-number prefixes, so it is a lower bound. |
@@ -150,7 +150,7 @@ a build it was not tested through.
 | `trigger_values.is_subagent` | Whether the read, or the loop that was invalidated, was a subagent's or teammate's |
 | `trigger_values.path_hash` | The first 16 hex digits of a SHA-256 over a random salt and the file's real path. The salt is made in memory when the plugin starts and again at each session end, and is never written down, so the same file hashes differently in different sessions and the value cannot be looked up against a list of paths. Absent where no path was resolved. |
 | `trigger_values.dropped` | On an `invalidate`: how many tracked reads were dropped |
-| `trigger_values.effective_mode` | The mode the plugin ran in: `off`, `ask` or `act`. It equals `setting` unless an untested build held the plugin at `off`. |
+| `trigger_values.effective_mode` | The mode the plugin ran in: `off`, `ask` or `act`. It equals `setting` unless a build older than 2.1.308, or one that is not a release, held the plugin at `off`. |
 | `trigger_values.setting` | The configured `readMode` |
 
 To see whether it helped, sum `bytes_saved` per `session_id` after switching to `act`, and compare it
@@ -161,12 +161,22 @@ first.
 ## Compatibility
 
 The plugin API is early access and changes between Claude Code releases, so an update can break a
-plugin without any error. The plugin was tested through Claude Code 2.1.332. On the first `Read` of a
-session it reads `$.session.version()`. If the `base` is missing, is not exactly `MAJOR.MINOR.PATCH`
-(a development build such as `2.1.332-dev`), or names a release newer than 2.1.332, it runs as `off`
-for the rest of the plugin's life and writes one `untested_engine` record. It says nothing in the
-session. Every record carries `engine_version`, so a change in behavior shows up as a split between
-versions.
+plugin without any error. The plugin runs on Claude Code 2.1.308 and newer, the oldest release it
+was verified live on. On the first `Read` of a session it reads `$.session.version()`. If the `base`
+is missing, is not exactly `MAJOR.MINOR.PATCH` (a development build such as `2.1.332-dev`), or names
+a release older than 2.1.308, it runs as `off` for the rest of the plugin's life and writes one
+`untested_engine` record. It says nothing in the session. The record keeps the name
+`untested_engine` so earlier logs stay comparable.
+
+A newer release runs in the mode you set. There is no version cap, because the per-read checks
+already fall back to an unchanged read when what `Read` returns no longer fits a stub: the earlier
+result must still be in context and begin with the text the model read (`not_in_context`), the
+result must be text and not an error (`not_text`, `error_result`), the stub must be smaller
+(`stub_not_smaller`), and Claude Code's own `file_unchanged` is left alone (`core_dedup`). CI's
+`latest` channel runs the tests against the newest release on pull requests into `main`, on pushes
+to `main`, and every Monday. It never blocks a change, and only the Monday run opens an issue when
+the tests fail. Every record carries `engine_version`, so a change in behavior shows up as a split
+between versions.
 
 State lives in memory. If the engine starts the plugin again mid-session (a change in `/config` did
 on 2.1.299), the tracked reads are lost and the plugin starts again from empty. That is safe: it only
@@ -211,7 +221,7 @@ means fewer stubs until the files are read once more.
 ## What has been verified live
 
 The testing-kit tests cover every decision, every reason, both loops, every invalidation and the
-log. Two live checks ran on top of them: the terminal CLI on 2.1.332 (the current one) and on 2.1.330 (both below), and
+log. Two live checks ran on top of them: the terminal CLI on 2.1.332 (the newest one checked) and on 2.1.330 (both below), and
 before them the Code tab of the Claude Desktop app, with `engine_version` 2.1.308 in every record. The plugin was loaded from branch head `d91c138`, with
 `readMode` set to `ask`. The main probe file had 80 lines (`Read` showed 81, the last one empty).
 Every step ran in one user turn, and every record had `mode: active` and `effective_mode: ask`.
