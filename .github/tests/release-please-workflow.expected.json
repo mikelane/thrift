@@ -1,0 +1,45 @@
+{
+  "concurrency": {
+    "cancel-in-progress": false,
+    "group": "release-please"
+  },
+  "jobs": {
+    "release-please": {
+      "environment": "release",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "id": "app-token",
+          "name": "Mint a short-lived App token",
+          "uses": "actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc",
+          "with": {
+            "client-id": "${{ vars.RELEASE_APP_ID }}",
+            "permission-contents": "write",
+            "permission-issues": "write",
+            "permission-pull-requests": "write",
+            "private-key": "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"
+          }
+        },
+        {
+          "name": "Open or update the release PR",
+          "uses": "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7",
+          "with": {
+            "config-file": "release-please-config.json",
+            "manifest-file": ".release-please-manifest.json",
+            "token": "${{ steps.app-token.outputs.token }}"
+          }
+        }
+      ],
+      "timeout-minutes": 10
+    }
+  },
+  "name": "Release Please",
+  "permissions": {},
+  "true": {
+    "push": {
+      "branches": [
+        "main"
+      ]
+    }
+  }
+}

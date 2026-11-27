@@ -16,8 +16,8 @@ specific to this repo.
     - `jq`
     - `openssl`
     - `dash`: three live-harness tests run the session command under a POSIX `sh`.
-    - `ruby`: the release-merge workflow test parses `release-merge.yml` with Psych and compares
-      the merge job as data. `ubuntu-latest` has Ruby.
+    - `ruby`: the release-merge and release-please workflow tests parse `release-merge.yml` and
+      `release-please.yml` with Psych and compare them as data. `ubuntu-latest` has Ruby.
     - `python3`: the same test builds its workflow variants with it, and the release-merge stubs
       build the `pr-record` zips with it.
     - `unzip`: the release-merge gate reads each CI run's `pr-record` artifact with it, in the
@@ -114,10 +114,14 @@ specific to this repo.
     release-please writes or with the PR the workflow should merge.
   - Running that family: the name fragment `canary-report.sh` takes matches test *function* names,
     so `release_merge` matches almost nothing. Run the `release-merge-*.test.sh` files directly.
-  - The workflow fixture: the workflow test compares the whole parsed `release-merge.yml` with
-    `.github/tests/release-merge-workflow.expected.json`, so any change to the workflow must update
-    that fixture in the same PR. Psych reads the YAML key `on` as `true`, so the fixture has a
-    `"true"` key where the triggers are.
+  - The workflow fixtures: each release workflow has a test that compares the whole parsed file with a
+    fixture, so any change to the workflow must update its fixture in the same PR.
+    `release-merge-workflow.test.sh` compares `release-merge.yml` with
+    `.github/tests/release-merge-workflow.expected.json`, and `release-please-workflow.test.sh`
+    compares `release-please.yml` (its action pins, App-token inputs and `release` environment) with
+    `.github/tests/release-please-workflow.expected.json`. Psych reads the YAML key `on` as `true`, so
+    each fixture has a `"true"` key where the triggers are. Each test file's header gives the command
+    that regenerates its fixture.
   - The sweep: the workflow has a second trigger, the Release Please workflow completing on a push
     to `main`. A commit that touches no plugin path leaves the release PR alone, so CI never
     reruns on it. That run sweeps every open `release-please--*` PR whose latest `CI` run at its
