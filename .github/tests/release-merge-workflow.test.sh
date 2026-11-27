@@ -110,14 +110,20 @@ test_the_lib_loads_from_a_checkout_of_only_the_sparse_checkout_paths() {
     || fail "sourcing the lib from only the sparse checkout paths failed: $got"
 }
 
-# run_sparse_load_check_with_lib_line <line>: copies the tracked .github tree into $TEST_DIR/repo, adds a
-# helper.sh sibling that no sparse checkout lists, inserts <line> after the lib's self-location line,
-# and runs the sparse-checkout load test on the copy.
-run_sparse_load_check_with_lib_line() {
-  local repo=$TEST_DIR/repo lib
+# copy_repo_with_unlisted_helper: copies the tracked .github tree into $TEST_DIR/repo and adds a
+# helper.sh sibling that no sparse checkout lists.
+copy_repo_with_unlisted_helper() {
+  local repo=$TEST_DIR/repo
   mkdir -p "$repo"
   (cd "$REPO_ROOT" && /usr/bin/git ls-files -z .github release-please-config.json | xargs -0 tar cf -) | tar xf - -C "$repo"
   echo 'helper_fn() { :; }' >"$repo/.github/scripts/helper.sh"
+}
+
+# run_sparse_load_check_with_lib_line <line>: on the copy from copy_repo_with_unlisted_helper, inserts
+# <line> after the lib's self-location line and runs the sparse-checkout load test.
+run_sparse_load_check_with_lib_line() {
+  local repo=$TEST_DIR/repo lib
+  copy_repo_with_unlisted_helper
   lib=$repo/.github/scripts/release-merge-lib.sh
   awk -v line="$1" '{print} /^release_merge_lib_dir=/{print line}' "$lib" >"$lib.new" && mv "$lib.new" "$lib"
   bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_lib_loads_from_a_checkout_of_only_the_sparse_checkout_paths >"$OUTPUT" 2>&1
@@ -139,11 +145,9 @@ test_the_sparse_load_check_fails_for_a_source_of_an_unlisted_sibling_inside_brac
 
 # Every sibling resolves from the lib's own directory, so a file there that the sparse checkout does not
 # list can be loaded from anywhere in the lib (a function body included) and would be missing in the job.
-test_the_sparse_checkout_check_fails_for_an_unlisted_file_in_the_scripts_dir() {
+test_the_scripts_dir_check_fails_for_an_unlisted_file() {
   local repo=$TEST_DIR/repo
-  mkdir -p "$repo"
-  (cd "$REPO_ROOT" && /usr/bin/git ls-files -z .github release-please-config.json | xargs -0 tar cf -) | tar xf - -C "$repo"
-  echo 'helper_fn() { :; }' >"$repo/.github/scripts/helper.sh"
+  copy_repo_with_unlisted_helper
   bash "$repo/.github/tests/release-merge-workflow.test.sh" test_the_sparse_checkout_includes_every_file_in_the_scripts_dir >"$OUTPUT" 2>&1
   # shellcheck disable=SC2034 # read by assert_exit_code in canary-report-lib.sh
   EXIT_CODE=$?
