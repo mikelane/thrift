@@ -138,10 +138,10 @@ release_merge_record_problem() {
 }
 
 # release_merge_fetch_pr <number> <tested-sha>: reads PR <number> and its changed files into temp files
-# and sets the caller's `pr` (the PR JSON), `files` (one changed path per line), `raw` (the files API
-# response) and `listed` (how many files it listed), plus the plugin label. Each failing step prints
-# an error annotation naming the PR and <tested-sha> and returns 1, including a PR response that is
-# not exactly one JSON object, which would otherwise read as refusals built from empty fields.
+# and sets the caller's `pr`, `files` and `raw` to the paths of the files holding the PR JSON, the
+# changed paths (one per line) and the files API response, `listed` to how many files it listed, and
+# the plugin label. Each failing step prints an error annotation naming the PR and <tested-sha> and
+# returns 1, including a PR response that is not exactly one JSON object.
 # shellcheck disable=SC2154,SC2034 # work_dir and REPO come from the caller; the outputs are read by it
 release_merge_fetch_pr() {
   local number=$1 tested_sha=$2

@@ -322,10 +322,10 @@ test_the_merge_command_pins_the_merge_to_the_commit_ci_tested() {
 
 REF='          ref: ${{ github.event.workflow_run.head_sha }}'
 
-# variant_workflow <python-expr>: writes the workflow, edited by the expression over `o`, to VARIANT.
+# write_variant_workflow <python-expr>: writes the workflow, edited by the expression over `o`, to VARIANT.
 # CHK, WITH, RUN_HDR, RUN_BODY, REF, PAY, DECOY_CHECKOUT and DECOY_RUN are predefined for it.
 # The <python-expr> comes only from this file's own literals, never from workflow or user input.
-variant_workflow() {
+write_variant_workflow() {
   VARIANT=$TEST_DIR/variant.yml
   python3 - "$WORKFLOW" "$VARIANT" "$1" "$REF" <<'PY'
 import sys
@@ -344,13 +344,13 @@ PY
 
 # refuses_variant <python-expr> <what the variant does>: fails the test when the pinned check passes.
 refuses_variant() {
-  variant_workflow "$1"
+  write_variant_workflow "$1"
   workflow_is_pinned "$VARIANT" && fail "the check passed a workflow where $2"
   return 0
 }
 
 test_the_unedited_workflow_is_what_the_variants_start_from() {
-  variant_workflow 'o'
+  write_variant_workflow 'o'
   workflow_is_pinned "$VARIANT" || fail 'the unedited workflow failed the check'
 }
 

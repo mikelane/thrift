@@ -12,12 +12,13 @@
 # download, a temp file, or no unzip), which the caller must not read as "does not count", and
 # sets release_merge_run_record_detail to a whole phrase naming the lookup and the run. Reads with
 # $RUNS_TOKEN, as release_merge_ci_outcome does.
-# Sets release_merge_run_record_named to the record when it names another PR or base, and to nothing
-# otherwise.
+# Sets release_merge_run_record_detail (see above) and release_merge_run_record_named, the record
+# when it names another PR or base and nothing otherwise. The record itself is the local
+# release_merge_run_record_json, which release_merge_read_run_record fills in.
 # SAFETY: a base branch's own ci.yml could write any record it likes. Only someone with write
 # access can create that branch, and the gate's author, SHA and file-allowlist checks still apply.
 release_merge_run_record_verdict() {
-  local artifact_id
+  local artifact_id release_merge_run_record_json
   release_merge_run_record_detail=
   release_merge_run_record_named=
   if [[ -z "$2" ]]; then
@@ -40,21 +41,21 @@ release_merge_run_record_verdict() {
     return 3
   fi
   release_merge_read_run_record "$1" "$2" "$artifact_id" || return $?
-  if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$release_merge_run_record" >/dev/null; then
+  if jq -e --argjson number "$3" --arg base "$4" '.number == $number and .base == $base' <<<"$release_merge_run_record_json" >/dev/null; then
     return 0
   fi
-  release_merge_run_record_named=$release_merge_run_record
-  release_merge_run_record_detail="has a pr-record naming $release_merge_run_record"
+  release_merge_run_record_named=$release_merge_run_record_json
+  release_merge_run_record_detail="has a pr-record naming $release_merge_run_record_json"
   return 1
 }
 
 # release_merge_read_run_record <repo> <run-id> <artifact-id>: downloads the pr-record artifact
-# <artifact-id> of CI run <run-id> and sets release_merge_run_record to its {number, base} object.
+# <artifact-id> of CI run <run-id> and sets release_merge_run_record_json to its {number, base} object.
 # Returns 0 when it read one, 1 when the record is unreadable and 2 when a lookup failed (a temp file
 # or the download); both failures set release_merge_run_record_detail, as the verdict documents.
 release_merge_read_run_record() {
   local zip_path record_path
-  release_merge_run_record=
+  release_merge_run_record_json=
   zip_path=$(mktemp "${work_dir:-${TMPDIR:-/tmp}}/pr-record.XXXXXX") || { release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"; return 2; }
   GH_TOKEN=${RUNS_TOKEN-} gh api "repos/$1/actions/artifacts/$3/zip" >"$zip_path" || {
     rm -f "$zip_path"
@@ -66,14 +67,14 @@ release_merge_read_run_record() {
     release_merge_run_record_detail="cannot create a temp file for the pr-record of CI run $2"
     return 2
   }
-  release_merge_run_record=$(release_merge_parse_record "$zip_path" "$record_path") || release_merge_run_record=
+  release_merge_run_record_json=$(release_merge_parse_run_record "$zip_path" "$record_path") || release_merge_run_record_json=
   rm -f "$zip_path" "$record_path"
-  [[ -n "$release_merge_run_record" ]] || { release_merge_run_record_detail="has an unreadable pr-record"; return 1; }
+  [[ -n "$release_merge_run_record_json" ]] || { release_merge_run_record_detail="has an unreadable pr-record"; return 1; }
 }
 
-# release_merge_parse_record <zip> <scratch-file>: prints the {number, base} object that the pr-record.json
+# release_merge_parse_run_record <zip> <scratch-file>: prints the {number, base} object that the pr-record.json
 # in <zip> holds, using <scratch-file> to measure it, and returns 1 when the record is unreadable.
-release_merge_parse_record() {
+release_merge_parse_run_record() {
   local byte_count nul_free_count record
   # pipefail here, whatever the caller set: a failed unzip must not hide behind head's success.
   # One byte past the limit tells a record that fits from one that was cut. The bytes go to a file
