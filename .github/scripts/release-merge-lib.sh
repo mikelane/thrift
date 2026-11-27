@@ -209,7 +209,7 @@ release_merge_pr_if_gate_passes() {
   release_merge_replay_stderr "$merge_stderr"
   [[ "$did_merge" == 0 ]] || {
     echo "Merged PR #$number at $tested_sha."
-    echo "::notice title=$(release_merge_annotation_title "$number" merged)::Merged PR #$number at $tested_sha."
+    echo "::notice title=$(release_merge_annotation_title "$number" "merged")::Merged PR #$number at $tested_sha."
   }
 }
 
@@ -230,7 +230,7 @@ release_merge_triggering_run_is_latest() {
     return 0
   fi
   latest=${release_merge_ci_run_id:+run $release_merge_ci_run_id}
-  echo "::warning title=Release PR #$1 not merged::the CI run ${4:-(unknown)} that triggered this merge is not the latest CI run at $2 for this PR (latest: ${latest:-none})"
+  echo "::warning title=$(release_merge_annotation_title "$1" "not merged")::the CI run ${4:-(unknown)} that triggered this merge is not the latest CI run at $2 for this PR (latest: ${latest:-none})"
   return 1
 }
 
