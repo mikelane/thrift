@@ -175,16 +175,15 @@ test_a_missing_ci_lookup_sibling_writes_an_error_annotation_naming_the_file() {
   assert_out_lacks "the-gate-ran"
 }
 
-test_a_sibling_that_fails_while_loading_writes_an_error_annotation_naming_the_file() {
+test_a_sibling_that_fails_while_loading_stops_the_step_without_an_annotation() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'return 1'
   source_lib_copy || true
   assert_exit_code 1
-  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh"
+  assert_out_lacks "::error title=Release merge failed"
   assert_out_lacks "the-gate-ran"
 }
 
-# On bash 3.2 a syntax error or a failing top-level command under `set -e` exits the shell before the
-# loader's `||` runs, so no annotation is promised here; the step must still stop before the gate.
+# A sibling that fails while loading gets no annotation, on any bash, but the step must stop before the gate.
 test_a_sibling_with_a_syntax_error_stops_the_step_before_the_gate() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh 'if then'
   source_lib_copy || true
@@ -199,8 +198,8 @@ test_a_sibling_whose_top_level_command_fails_stops_the_step_before_the_gate() {
   assert_out_lacks "the-gate-ran"
 }
 
-# Under `[[ -r ]] && source`, bash 5 does not apply set -e inside the sourced file, so a failing
-# command that is not the sibling's last is ignored and source returns 0.
+# `source ... || x` and `[[ -r ]] && source` suspend set -e inside the sourced file on bash 5, so a
+# failing command that is not the sibling's last would be ignored and source would return 0.
 test_a_sibling_whose_earlier_top_level_command_fails_stops_the_step_before_the_gate() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh $'false\ntrue'
   source_lib_copy || true

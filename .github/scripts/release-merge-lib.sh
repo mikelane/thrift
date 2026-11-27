@@ -6,18 +6,22 @@
 # .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
 # release_merge_load_sibling <file>: sources <file> from this directory. Whatever goes wrong, the step
-# stops before any gate runs. The run summary also names the file (an ::error annotation) when the
-# sibling is missing or unreadable, on every bash, and when it has a syntax error or a top-level
-# command that fails, on bash 5 (the runner's). On bash 3.2 those last two exit the shell before the
-# `||` runs, so there is no annotation, only the non-zero exit. The readable check comes first because
-# bash 3.2 also exits when `source` cannot find a file.
+# stops before any gate runs, on bash 3.2 and 5 alike. Only a missing or unreadable sibling also gets
+# an ::error annotation naming the file. A sibling that fails while loading (a syntax error, a failing
+# command, an unset variable) stops the step non-zero with no annotation: `source` is a plain
+# statement so set -e stays in force inside the sibling, which `source "$file" || ...` or
+# `[[ ... ]] && source "$file"` would suspend on bash 5.
 release_merge_load_sibling() {
   local file=$release_merge_lib_dir/$1
+  if [[ ! -r "$file" ]]; then
+    echo "::error title=Release merge failed::cannot load $file"
+    return 1
+  fi
   # shellcheck disable=SC1090 # the two siblings are named by the calls below
-  [[ -r "$file" ]] && source "$file" || { echo "::error title=Release merge failed::cannot load $file"; return 1; }
+  source "$file"
 }
-release_merge_load_sibling release-merge-ci-lookup.sh || return 1
-release_merge_load_sibling release-merge-failure.sh || return 1
+release_merge_load_sibling release-merge-ci-lookup.sh
+release_merge_load_sibling release-merge-failure.sh
 
 # release_merge_allowlist <config>: prints each file a release PR may change: the manifest, and for
 # every package in release-please-config.json its changelog, its version file and its extra-files.
