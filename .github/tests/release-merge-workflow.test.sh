@@ -111,6 +111,15 @@ test_the_lib_sources_its_siblings_from_its_own_directory_when_cdpath_is_set() {
   [[ "$got" == "$REPO_ROOT/$(dirname "$sourced")" ]] || fail "with CDPATH set, the lib resolved its directory as: $got"
 }
 
+# Without set -e, a failed cd must stop the source with a non-zero status, not go on to source
+# /release-merge-ci-lookup.sh from the root directory. A `cd` function makes the cd fail.
+test_the_lib_stops_sourcing_when_it_cannot_enter_its_own_directory_without_set_e() {
+  local sourced got
+  sourced=$(merge_step_script | sed -n 's/^source //p')
+  got=$(cd "$REPO_ROOT" && "$BASH" -c 'cd() { return 1; }; source "$1"; printf "status=%s" "$?"' _ "$sourced" 2>&1)
+  [[ "$got" == "status=1" ]] || fail "expected the source to stop with status 1 and no output, got: $got"
+}
+
 test_the_lib_defines_its_sibling_functions_when_cdpath_lists_the_current_directory() {
   local sourced
   sourced=$(merge_step_script | sed -n 's/^source //p')
