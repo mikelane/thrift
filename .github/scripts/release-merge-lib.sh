@@ -2,7 +2,8 @@
 # Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
 
 # The CI-run lookups and the sweep, and the merge-failure helpers, live beside this file. The merge
-# job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml too.
+# job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml and to
+# .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
 # shellcheck source=.github/scripts/release-merge-ci-lookup.sh
 source "$release_merge_lib_dir/release-merge-ci-lookup.sh"
