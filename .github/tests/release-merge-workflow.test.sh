@@ -151,13 +151,13 @@ test_the_sparse_checkout_check_fails_for_an_unlisted_file_in_the_scripts_dir() {
   assert_out_has "the sparse checkout omits .github/scripts/helper.sh"
 }
 
-# A sibling the lib reaches some other way than a `release_merge_load_sibling X` line still has
-# to be fetched, so every release-merge-*.sh beside the lib must be in the sparse checkout.
-test_the_sparse_checkout_includes_every_release_merge_script_on_disk() {
+# Every sibling resolves from the lib's own directory, wherever in the lib it is loaded, so every file in
+# that directory must be in the sparse checkout, not only the release-merge-*.sh ones.
+test_the_sparse_checkout_includes_every_file_in_the_scripts_dir() {
   local lib_dir on_disk missing
   lib_dir=$(dirname "$(merge_step_script | sed -n 's/^source //p')")
-  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/release-merge-*.sh)
-  [[ -n "$on_disk" ]] || fail "no release-merge-*.sh files under $lib_dir"
+  on_disk=$(cd "$REPO_ROOT" && ls "$lib_dir"/*)
+  [[ -n "$on_disk" ]] || fail "no files under $lib_dir"
   missing=$(comm -23 <(printf '%s\n' "$on_disk" | sort) <(sparse_checkout_paths | sort))
   [[ -z "$missing" ]] || fail "the sparse checkout omits $missing"
 }

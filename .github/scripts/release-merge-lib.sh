@@ -2,8 +2,8 @@
 # Sourced by the release-merge*.test.sh files and by the merge step of .github/workflows/release-merge.yml.
 
 # The CI-run lookups and the sweep, and the merge-failure helpers, live beside this file. The merge
-# job sparse-checks-out each file by name, so a new lib file must be added to release-merge.yml and to
-# .github/tests/release-merge-workflow.expected.json too.
+# job sparse-checks-out each file by name, so any new file in this directory must be added to
+# release-merge.yml and to .github/tests/release-merge-workflow.expected.json too.
 release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 1
 # release_merge_load_sibling <file>: sources <file> from this directory. Whatever goes wrong, the step
 # stops before any gate runs, on bash 3.2 and 5 alike. Only a missing or unreadable sibling also gets

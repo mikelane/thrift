@@ -100,7 +100,7 @@ specific to this repo.
     lookups, and the sweep) and `release-merge-failure.sh` (the helpers that say how a merge
     attempt ended). The workflow step only sources `release-merge-lib.sh`, which sources the other
     two from its own directory, and calls `release_merge_run`. The merge job's sparse checkout lists
-    each lib file by name, so a new lib file must be added there, and to
+    each file in that directory by name, so any new file there must be added to the list, and to
     `release-merge-workflow.expected.json`, or the step cannot source it. The tests find the lib
     through `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh`
     files are split by subject (gate, sweep, record-check, step, ci-path, run, workflow,
