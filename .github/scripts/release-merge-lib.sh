@@ -14,7 +14,7 @@ release_merge_lib_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && p
 release_merge_load_sibling() {
   local file=$release_merge_lib_dir/$1
   if [[ ! -r "$file" ]]; then
-    echo "::error title=Release merge failed::cannot load $file"
+    echo "::error title=Release merge failed::cannot load $file: missing or unreadable (is it in the merge job's sparse checkout?)"
     return 1
   fi
   # shellcheck disable=SC1090 # the two siblings are named by the calls below

@@ -184,7 +184,7 @@ test_a_missing_failure_sibling_writes_an_error_annotation_naming_the_file() {
   copy_lib_with_bad_sibling release-merge-failure.sh missing
   source_lib_copy || true
   assert_exit_code 1
-  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-failure.sh: missing or unreadable (is it in the merge job\'s sparse checkout?)"
+  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-failure.sh: missing or unreadable (is it in the merge job's sparse checkout?)"
   assert_out_lacks "the-gate-ran"
 }
 
@@ -192,7 +192,7 @@ test_a_missing_ci_lookup_sibling_writes_an_error_annotation_naming_the_file() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh missing
   source_lib_copy || true
   assert_exit_code 1
-  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh: missing or unreadable (is it in the merge job\'s sparse checkout?)"
+  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh: missing or unreadable (is it in the merge job's sparse checkout?)"
   assert_out_lacks "the-gate-ran"
 }
 
@@ -211,7 +211,7 @@ test_an_unreadable_sibling_writes_an_error_annotation_naming_the_file() {
 test_a_missing_sibling_stops_sourcing_the_lib_without_set_e() {
   copy_lib_with_bad_sibling release-merge-ci-lookup.sh missing
   "$BASH" -c 'source "$1"; printf "status=%s\n" "$?"' _ "$TEST_DIR/lib/release-merge-lib.sh" >"$OUTPUT" 2>&1
-  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh: missing or unreadable (is it in the merge job\'s sparse checkout?)"
+  assert_out_has "::error title=Release merge failed::cannot load $TEST_DIR/lib/release-merge-ci-lookup.sh: missing or unreadable (is it in the merge job's sparse checkout?)"
   assert_out_has "status=1"
 }
 
