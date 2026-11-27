@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.5](https://github.com/mikelane/thrift/compare/reread-v1.0.4...reread-v1.0.5) (2026-11-27)
+
+
+### Bug Fixes
+
+* **reread:** replace the Claude Code version ceiling with a minimum version ([#226](https://github.com/mikelane/thrift/issues/226)) ([3106463](https://github.com/mikelane/thrift/commit/310646397f83feced71a2bbedfa54b07b3fa324b))
+
 ## [1.0.4](https://github.com/mikelane/thrift/compare/reread-v1.0.3...reread-v1.0.4) (2026-11-27)
 
 
