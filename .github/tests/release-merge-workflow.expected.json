@@ -27,7 +27,7 @@
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
             "persist-credentials": false,
-            "sparse-checkout": ".github/scripts/release-merge-lib.sh\nrelease-please-config.json\n",
+            "sparse-checkout": ".github/scripts/release-merge-lib.sh\n.github/scripts/release-merge-ci-lookup.sh\n.github/scripts/release-merge-outcome.sh\nrelease-please-config.json\n",
             "sparse-checkout-cone-mode": false,
             "token": "${{ steps.app-token.outputs.token }}"
           }
