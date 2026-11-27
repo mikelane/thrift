@@ -41,13 +41,19 @@ specific to this repo.
     `plugin.json`; versions, changelogs and tags (`<name>-vX.Y.Z`, with a GitHub release each) stay
     per plugin. Never edit a plugin's `CHANGELOG.md` or the `version` in its `plugin.json` by hand.
     A commit that touches no plugin path (`scripts/`, `.github/`, root docs) releases nothing.
-  - Which plugins a release-merge annotation covers: annotation titles name the PR number
-    (`Release PR #N not merged`), never a plugin; two failures name no PR, `Release PR sweep failed`
-    and `Release merge failed`. The combined PR's title names no plugin either, so a refused or
-    failed merge holds every plugin in the PR. The PR body (one section per plugin) or its changed
-    `plugins/<name>/` files say which. A refusal for a file outside the allowlist names that file
-    (`plugins/<name>/... is not a file a release PR changes`). #215 tracks naming the plugins in
-    annotations.
+  - Which plugins a release-merge annotation covers: the gate's annotations name the plugins the
+    PR changes, taken from the `plugins/<name>/` paths in its file list, sorted and unique, in
+    parentheses after the number: `Release PR #N (handoff%2C meter) not merged`. The `%2C` is an
+    escaped comma (the runner shows it as ", "); a name's `%`, `,` and `:` are escaped too, and a
+    PR with no `plugins/` path names none. This covers the merged notice, the closed-without-merging
+    notice, and the refusal warnings and failure errors that come after the file list is read
+    (`release_merge_set_plugin_label`). Annotations raised before that name only the number: the
+    sweep's (`CI concluded failure`, `cannot read the CI runs`, skipped decoy runs), the CI path's
+    "not the latest CI run" warning, and the errors for a PR or file list that could not be fetched
+    (the sweep has no file list without an extra API call per PR). Two failures name no PR,
+    `Release PR sweep failed` and `Release merge failed`; the latter is also what a lib sibling that
+    fails to load writes, naming the file. A refusal for a file outside the allowlist names that file
+    (`plugins/<name>/... is not a file a release PR changes`).
   - New plugin: it gets its config package and manifest entry in the same PR that adds it to
     `marketplace.json`. `.github/tests/release-config.test.sh` fails when either is missing, when
     the component is not the marketplace name, or when a manifest version differs from
@@ -96,7 +102,7 @@ specific to this repo.
     `release-merge-workflow.expected.json`, or the step cannot source it. The tests find the lib
     through `RELEASE_MERGE_LIB`, defined in `canary-report-lib.sh`. The `release-merge-*.test.sh`
     files are split by subject (gate, sweep, record-check, step, ci-path, run, workflow,
-    unparsed-pr, adversarial) and run the lib against the stub `gh` in `release-merge-stubs-lib.sh`;
+    unparsed-pr, annotation-plugins, adversarial) and run the lib against the stub `gh` in `release-merge-stubs-lib.sh`;
     the step, ci-path, run and unparsed-pr files share `release-merge-step-lib.sh`.
     `release-merge-adversarial.test.sh` holds cases where the gate disagrees with what
     release-please writes or with the PR the workflow should merge.
