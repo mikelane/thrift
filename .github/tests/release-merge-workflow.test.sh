@@ -104,10 +104,10 @@ test_the_sparse_checkout_includes_every_file_the_lib_sources() {
 test_the_lib_sources_its_siblings_from_its_own_directory_when_cdpath_is_set() {
   local sourced decoy got
   sourced=$(merge_step_script | sed -n 's/^source //p')
-  decoy=$(mktemp -d)
-  mkdir -p "$decoy/$(dirname "$sourced")"
+  # Under the per-test TEST_DIR, which the harness's EXIT trap removes, so no decoy outlives the run.
+  decoy=$TEST_DIR/cdpath-decoy
+  mkdir -p "$decoy/$(dirname "$sourced")" || { fail "could not make the CDPATH decoy under $decoy"; return; }
   got=$(cd "$REPO_ROOT" && CDPATH="$decoy" "$BASH" -c 'set -euo pipefail; source "$1"; printf %s "$release_merge_lib_dir"' _ "$sourced" 2>&1)
-  rm -rf "$decoy"
   [[ "$got" == "$REPO_ROOT/$(dirname "$sourced")" ]] || fail "with CDPATH set, the lib resolved its directory as: $got"
 }
 
